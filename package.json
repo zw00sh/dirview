@@ -35,7 +35,8 @@
   },
   "activationEvents": [
     "onView:dirview.sidebar",
-    "onView:dirview.languages"
+    "onView:dirview.languages",
+    "onStartupFinished"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -199,6 +200,11 @@
           "type": "number",
           "default": 3,
           "description": "Maximum files shown per directory before truncation. Set to 0 to disable."
+        },
+        "dirview.openTabOnStartup": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically open the Breakdown editor tab when a folder is opened."
         }
       }
     }
