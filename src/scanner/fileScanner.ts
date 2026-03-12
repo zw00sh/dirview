@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
-import { DirNode, FileNode, FileTypeStats } from './types';
+import { DirNode, FileNode } from './types';
 import { IgnoreFilter } from './ignoreFilter';
 import { getLangInfo } from '../language/languageMap';
 import { VCS_DIRS } from './constants';
+import { parallelMap } from './concurrency';
 
 export interface ScanResult {
   roots: DirNode[];
@@ -45,7 +46,11 @@ async function scanDir(
   if (visitedPaths.has(fsPath)) {
     return emptyNode(name, relPath);
   }
-  visitedPaths.add(fsPath);
+
+  // Each level gets its own copy of the visited set so parallel sibling branches
+  // don't interfere with each other's cycle detection.
+  const myVisited = new Set(visitedPaths);
+  myVisited.add(fsPath);
 
   const node: DirNode = {
     name,
@@ -68,7 +73,9 @@ async function scanDir(
     return node;
   }
 
-  const typeCounts = new Map<string, { color: string; count: number }>();
+  // Pass 1: classify and filter entries sequentially (filter may do async gitignore loads)
+  const pendingDirs: { entryName: string; entryRelPath: string; entryUri: vscode.Uri }[] = [];
+  const pendingFiles: { entryName: string; entryUri: vscode.Uri }[] = [];
 
   for (const [entryName, fileType] of entries) {
     const entryRelPath = relPath ? `${relPath}/${entryName}` : entryName;
@@ -78,65 +85,77 @@ async function scanDir(
     const isDir = (fileType & vscode.FileType.Directory) !== 0;
     const isFile = (fileType & vscode.FileType.File) !== 0;
 
-    // isDir covers both real directories and symlinks-to-directories (VSCode sets both bits).
-    // The isSymlink && !isFile branch catches edge cases (e.g. symlinks to dirs on some platforms).
     if (isDir || (isSymlink && !isFile)) {
-      if (VCS_DIRS.has(entryName)) {
-        continue;
-      }
-
+      if (VCS_DIRS.has(entryName)) { continue; }
       const exclude = await filter.shouldExcludeDir(entryName, entryRelPath, dirUri);
-      if (exclude) {
-        continue;
-      }
-
-      const child = await scanDir(entryUri, entryName, entryRelPath, filter, visitedPaths, depth + 1, maxDepth);
-      node.children.push(child);
-      node.totalFiles += child.totalFiles;
-      node.sizeBytes += child.sizeBytes;
-
-      for (const s of child.stats) {
-        const existing = typeCounts.get(s.name);
-        if (existing) {
-          existing.count += s.count;
-        } else {
-          typeCounts.set(s.name, { color: s.color, count: s.count });
-        }
-      }
+      if (exclude) { continue; }
+      pendingDirs.push({ entryName, entryRelPath, entryUri });
     } else if (isFile || isSymlink) {
       const exclude = await filter.shouldExcludeFile(entryName, entryRelPath, dirUri);
-      if (exclude) {
-        continue;
+      if (exclude) { continue; }
+      pendingFiles.push({ entryName, entryUri });
+    }
+  }
+
+  // Pass 2a: scan subdirectories in parallel (each gets its own copy of visitedPaths)
+  const childResults = await parallelMap(
+    pendingDirs,
+    ({ entryName, entryRelPath, entryUri }) =>
+      scanDir(entryUri, entryName, entryRelPath, filter, myVisited, depth + 1, maxDepth),
+    20
+  );
+
+  const typeCounts = new Map<string, { color: string; count: number }>();
+
+  for (const child of childResults) {
+    node.children.push(child);
+    node.totalFiles += child.totalFiles;
+    node.sizeBytes += child.sizeBytes;
+    for (const s of child.stats) {
+      const existing = typeCounts.get(s.name);
+      if (existing) {
+        existing.count += s.count;
+      } else {
+        typeCounts.set(s.name, { color: s.color, count: s.count });
       }
+    }
+  }
 
-      const lang = getLangInfo(entryName);
-      node.totalFiles++;
-
-      // Get file size
-      let sizeBytes = 0;
+  // Pass 2b: stat all files in parallel
+  const fileSizes = await parallelMap(
+    pendingFiles,
+    async ({ entryUri }) => {
       try {
         const stat = await vscode.workspace.fs.stat(entryUri);
-        sizeBytes = stat.size;
+        return stat.size;
       } catch {
-        // ignore stat errors
+        return 0;
       }
-      node.sizeBytes += sizeBytes;
+    },
+    50
+  );
 
-      const fileNode: FileNode = {
-        name: entryName,
-        path: entryUri.fsPath,
-        langName: lang.name,
-        langColor: lang.color,
-        sizeBytes,
-      };
-      node.files.push(fileNode);
+  for (let i = 0; i < pendingFiles.length; i++) {
+    const { entryName, entryUri } = pendingFiles[i];
+    const sizeBytes = fileSizes[i];
+    const lang = getLangInfo(entryName);
+    node.totalFiles++;
+    node.sizeBytes += sizeBytes;
 
-      const existing = typeCounts.get(lang.name);
-      if (existing) {
-        existing.count++;
-      } else {
-        typeCounts.set(lang.name, { color: lang.color, count: 1 });
-      }
+    const fileNode: FileNode = {
+      name: entryName,
+      path: entryUri.fsPath,
+      langName: lang.name,
+      langColor: lang.color,
+      sizeBytes,
+    };
+    node.files.push(fileNode);
+
+    const existing = typeCounts.get(lang.name);
+    if (existing) {
+      existing.count++;
+    } else {
+      typeCounts.set(lang.name, { color: lang.color, count: 1 });
     }
   }
 
@@ -148,7 +167,6 @@ async function scanDir(
   node.children.sort((a, b) => a.name.localeCompare(b.name));
   node.files.sort((a, b) => a.name.localeCompare(b.name));
 
-  visitedPaths.delete(fsPath);
   return node;
 }
 

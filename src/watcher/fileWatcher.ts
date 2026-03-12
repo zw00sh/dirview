@@ -14,7 +14,6 @@ export class FileWatcher {
     this.watcher = vscode.workspace.createFileSystemWatcher('**/*');
     this.watcher.onDidCreate(() => this.trigger());
     this.watcher.onDidDelete(() => this.trigger());
-    this.watcher.onDidChange(() => this.trigger());
   }
 
   updateAutoRescan(totalFiles: number): void {

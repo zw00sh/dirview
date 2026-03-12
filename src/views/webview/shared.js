@@ -51,7 +51,13 @@
     return copy;
   }
 
+  // Simple reference-equality cache: avoids redundant full-tree walks on filter/sort/expand.
+  let _maxMetricCache = { roots: null, sortMode: null, value: 1 };
+
   function computeMaxMetric(roots, sortMode) {
+    if (_maxMetricCache.roots === roots && _maxMetricCache.sortMode === sortMode) {
+      return _maxMetricCache.value;
+    }
     let max = 0;
     function walk(node) {
       const val = sortMode === 'size' ? node.sizeBytes : node.totalFiles;
@@ -62,7 +68,9 @@
     for (const r of roots) {
       for (const c of r.children) { walk(c); }
     }
-    return max || 1;
+    const value = max || 1;
+    _maxMetricCache = { roots, sortMode, value };
+    return value;
   }
 
   // Groups consecutive empty-dir siblings (totalFiles === 0) into {type:'emptyGroup', nodes:[]}
@@ -129,6 +137,23 @@
     const { vscode, root, tooltip } = deps;
     const opts = deps.options || {};
 
+    // Delegated mouseenter/mouseleave for indent guide hover highlighting.
+    // Using capture phase so mouseenter/mouseleave fire for all descendants.
+    root.addEventListener('mouseenter', (e) => {
+      const guide = e.target.closest('.indent-guide[data-guide-path]');
+      if (!guide) { return; }
+      const path = guide.dataset.guidePath;
+      document.querySelectorAll(`.indent-guide[data-guide-path="${CSS.escape(path)}"]`)
+        .forEach(el => el.classList.add('hovered'));
+    }, true);
+    root.addEventListener('mouseleave', (e) => {
+      const guide = e.target.closest('.indent-guide[data-guide-path]');
+      if (!guide) { return; }
+      const path = guide.dataset.guidePath;
+      document.querySelectorAll(`.indent-guide[data-guide-path="${CSS.escape(path)}"]`)
+        .forEach(el => el.classList.remove('hovered'));
+    }, true);
+
     function dirMatchesFilter(node) {
       if (state.activeFilters.size === 0) { return true; }
       return node.stats.some(s => state.activeFilters.has(s.name) && s.count > 0);
@@ -143,14 +168,6 @@
         const ancestor = ancestors[i];
         if (ancestor) {
           guide.dataset.guidePath = ancestor.path;
-          guide.addEventListener('mouseenter', () => {
-            document.querySelectorAll(`.indent-guide[data-guide-path="${CSS.escape(ancestor.path)}"]`)
-              .forEach(el => el.classList.add('hovered'));
-          });
-          guide.addEventListener('mouseleave', () => {
-            document.querySelectorAll(`.indent-guide[data-guide-path="${CSS.escape(ancestor.path)}"]`)
-              .forEach(el => el.classList.remove('hovered'));
-          });
           guide.addEventListener('click', (e) => {
             e.stopPropagation();
             if (state.activeFilters.size > 0) { return; }
@@ -318,18 +335,17 @@
 
     function renderDirNode(node, depth, maxMetric, ancestors, clientWidth) {
       const li = document.createElement('li');
-      // Shared timer for click/dblclick disambiguation
-      let clickTimer = null;
 
-      // Compact folders: collapse chain of dirs with exactly 1 child dir and 0 files
+      // Compact folders: collapse chain of dirs with exactly 1 child dir and 0 files.
+      // Skip sortDirs inside the loop — single-child arrays don't need sorting.
       let displayNode = node;
       let displayName = node.name;
       while (true) {
-        const sorted = sortDirs(displayNode.children, state.currentSortMode);
+        const children = displayNode.children;
         const files = displayNode.files || [];
         const vChildren = state.activeFilters.size > 0
-          ? sorted.filter(c => dirMatchesFilter(c))
-          : sorted;
+          ? children.filter(c => dirMatchesFilter(c))
+          : children;
         const vFiles = state.activeFilters.size > 0
           ? files.filter(f => state.activeFilters.has(f.langName))
           : files;
@@ -517,28 +533,26 @@
           childrenEl.appendChild(renderTruncatedRow(hiddenFiles, depth + 1, nextAncestors, displayNode.path, childrenEl));
         }
 
-        // Use a timer to disambiguate single-click (expand/collapse) from double-click (drill in)
-        row.addEventListener('click', () => {
-          if (clickTimer !== null) return; // second click of a dblclick sequence — ignore
-          clickTimer = setTimeout(() => {
-            clickTimer = null;
-            const nowExpanded = !state.expanded.get(displayNode.path);
-            state.expanded.set(displayNode.path, nowExpanded);
+        // Use e.detail to distinguish single-click (expand/collapse) from double-click (drill in)
+        // without any artificial delay.
+        row.addEventListener('click', (e) => {
+          if (e.detail >= 2) { return; } // dblclick handler takes it
+          const nowExpanded = !state.expanded.get(displayNode.path);
+          state.expanded.set(displayNode.path, nowExpanded);
 
-            // Reset truncation when collapsing so it re-truncates on next expand
-            if (!nowExpanded && state.truncationExpanded.has(displayNode.path)) {
-              state.truncationExpanded.delete(displayNode.path);
-              state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
-              return;
-            }
+          // Reset truncation when collapsing so it re-truncates on next expand
+          if (!nowExpanded && state.truncationExpanded.has(displayNode.path)) {
+            state.truncationExpanded.delete(displayNode.path);
+            state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+            return;
+          }
 
-            chevron.className = 'chevron' + (nowExpanded ? ' open' : '');
-            childrenEl.className = 'children' + (nowExpanded ? ' open' : '');
+          chevron.className = 'chevron' + (nowExpanded ? ' open' : '');
+          childrenEl.className = 'children' + (nowExpanded ? ' open' : '');
 
-            if (deps.onExpandChanged) {
-              deps.onExpandChanged([...state.expanded.values()].some(v => v));
-            }
-          }, 250);
+          if (deps.onExpandChanged) {
+            deps.onExpandChanged([...state.expanded.values()].some(v => v));
+          }
         });
 
         li.appendChild(childrenEl);
@@ -546,10 +560,6 @@
 
       // Double-click anywhere on the row to drill into this directory
       row.addEventListener('dblclick', () => {
-        if (clickTimer !== null) {
-          clearTimeout(clickTimer);
-          clickTimer = null;
-        }
         state.drillStack.push(displayNode.path);
         state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
       });

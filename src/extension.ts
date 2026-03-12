@@ -47,8 +47,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   let watcher: FileWatcher | undefined;
+  let scanInProgress = false;
+  let scanQueued = false;
 
   async function doScan(): Promise<void> {
+    if (scanInProgress) {
+      scanQueued = true;
+      return;
+    }
+    scanInProgress = true;
     try {
       sidebarProvider.showScanning();
       tabProvider.showScanning();
@@ -62,6 +69,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       sidebarProvider.showError(message);
+    } finally {
+      scanInProgress = false;
+      if (scanQueued) {
+        scanQueued = false;
+        doScan();
+      }
     }
   }
 

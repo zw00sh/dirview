@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
 import ignore, { Ignore } from 'ignore';
-import { minimatch } from 'minimatch';
+import { Minimatch } from 'minimatch';
 import { VCS_DIRS } from './constants';
 
 export class IgnoreFilter {
   private rootIgnore: Ignore;
-  private filesExcludePatterns: string[];
+  private filesExcludePatterns: Minimatch[];
   private showIgnored: boolean;
   private rootUri: vscode.Uri;
   private dirIgnoreCache = new Map<string, Ignore>();
@@ -25,7 +25,7 @@ export class IgnoreFilter {
       const exclude = config.get<Record<string, boolean>>('exclude') ?? {};
       this.filesExcludePatterns = Object.entries(exclude)
         .filter(([, enabled]) => enabled)
-        .map(([pattern]) => pattern);
+        .map(([pattern]) => new Minimatch(pattern, { dot: true, matchBase: true }));
     }
   }
 
@@ -49,7 +49,7 @@ export class IgnoreFilter {
   }
 
   private isFilesExcluded(relPath: string): boolean {
-    return this.filesExcludePatterns.some(p => minimatch(relPath, p, { dot: true, matchBase: true }));
+    return this.filesExcludePatterns.some(m => m.match(relPath));
   }
 
   async shouldExcludeDir(name: string, relPath: string, parentUri: vscode.Uri): Promise<boolean> {
