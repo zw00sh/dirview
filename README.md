@@ -1,6 +1,6 @@
 # Directory Breakdown
 
-Visualize per-directory file type composition as GitHub-style colored proportional bars — right inside VSCode.
+Visualize per-directory file type composition as GitHub-style colored proportional bars. Unashamedly vibe coded, but it works.
 
 ![Directory Breakdown screenshot](media/screenshot.png)
 

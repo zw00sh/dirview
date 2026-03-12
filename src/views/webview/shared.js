@@ -351,6 +351,17 @@
       return compactedNode(node).path;
     }
 
+    // Returns true if any of node's children (recursively) are expanded.
+    // Must live inside createRenderer to access compactedNode.
+    function hasExpandedDescendant(state, node) {
+      for (const child of (node.children || [])) {
+        const cn = compactedNode(child);
+        if (state.expanded.get(cn.path)) return true;
+        if (hasExpandedDescendant(state, cn)) return true;
+      }
+      return false;
+    }
+
     function renderDirNode(node, depth, maxMetric, ancestors, clientWidth) {
       const li = document.createElement('li');
 
@@ -510,6 +521,20 @@
       }
 
       // Hover action buttons — overlay on the right (sidebar) or inline after name (tab)
+      //
+      // Expand uses 3-tier progressive escalation:
+      //   1. Target is collapsed → expand target only
+      //   2. Target is expanded, not all direct children expanded → expand all direct children
+      //   3. Target is expanded, all direct children expanded → recursively expand entire subtree
+      //
+      // Collapse mirrors expand with 3-tier progressive de-escalation:
+      //   1. Any descendant beyond direct children is expanded → collapse those deeper descendants
+      //      (direct children stay expanded, giving the user a "flatten to one level" step)
+      //   2. Some/all direct children are expanded (no deeper) → collapse all direct children
+      //   3. No children are expanded → collapse target itself
+      //
+      // This design lets the user incrementally drill deeper with repeated expand clicks,
+      // and incrementally retreat with repeated collapse clicks, without jarring jumps.
       const actionsEl = document.createElement('div');
       actionsEl.className = opts.inlineActions ? 'dir-actions dir-actions-inline' : 'dir-actions dir-actions-overlay';
       if (displayNode.children.length > 0) {
@@ -520,17 +545,23 @@
         expandBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           tooltip.style.display = 'none';
-          state.expanded.set(displayNode.path, true);
-          const allDirectChildrenExpanded = displayNode.children.every(child => {
-            const cn = compactedNode(child);
-            // A child with no sub-directories can't be expanded further — treat as trivially expanded
-            return cn.children.length === 0 || state.expanded.get(cn.path);
-          });
-          if (allDirectChildrenExpanded) {
-            walkExpand(state, displayNode.children);
+          const isExpanded = state.expanded.get(displayNode.path);
+          if (!isExpanded) {
+            // Tier 1: target is collapsed → expand it
+            state.expanded.set(displayNode.path, true);
           } else {
-            for (const child of displayNode.children) {
-              state.expanded.set(compactedPath(child), true);
+            const allDirectChildrenExpanded = displayNode.children.every(child => {
+              const cn = compactedNode(child);
+              return cn.children.length === 0 || state.expanded.get(cn.path);
+            });
+            if (allDirectChildrenExpanded) {
+              // Tier 3: all children already expanded → recursively expand entire subtree
+              walkExpand(state, displayNode.children);
+            } else {
+              // Tier 2: some/no children expanded → expand all direct children
+              for (const child of displayNode.children) {
+                state.expanded.set(compactedPath(child), true);
+              }
             }
           }
           state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
@@ -544,14 +575,34 @@
         collapseBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           tooltip.style.display = 'none';
-          const allAlreadyCollapsed = displayNode.children.every(
-            child => !state.expanded.get(compactedPath(child))
-          );
-          if (allAlreadyCollapsed) {
-            state.expanded.set(displayNode.path, false);
+          if (!state.expanded.get(displayNode.path)) {
+            // Target is already collapsed — nothing to do
+            return;
           }
-          for (const child of displayNode.children) {
-            state.expanded.set(compactedPath(child), false);
+          const anyChildExpanded = displayNode.children.some(
+            child => state.expanded.get(compactedPath(child))
+          );
+          if (anyChildExpanded) {
+            // Check if any descendant *beyond* direct children is expanded
+            const anyDeeperExpanded = displayNode.children.some(child => {
+              const cn = compactedNode(child);
+              return hasExpandedDescendant(state, cn);
+            });
+            if (anyDeeperExpanded) {
+              // Tier 1: deeper descendants are expanded → collapse them, keep direct children open
+              for (const child of displayNode.children) {
+                const cn = compactedNode(child);
+                walkCollapse(state, cn.children || []);
+              }
+            } else {
+              // Tier 2: only direct children are expanded (no deeper) → collapse all children
+              for (const child of displayNode.children) {
+                state.expanded.set(compactedPath(child), false);
+              }
+            }
+          } else {
+            // Tier 3: no children expanded → collapse target itself
+            state.expanded.set(displayNode.path, false);
           }
           state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
         });
@@ -859,6 +910,7 @@
       walkCollapse(state, n.children || []);
     }
   }
+
 
   // Renders the root-level tree rows into treeEl. Shared between sidebar and tab views.
   // Requires state.lastRoots to be set. Handles drill-down via state.drillStack.
