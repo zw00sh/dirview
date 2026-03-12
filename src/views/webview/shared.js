@@ -47,12 +47,7 @@
 
   function sortFiles(files, mode) {
     const copy = files.slice();
-    if (mode === 'name') {
-      copy.sort((a, b) => a.name.localeCompare(b.name));
-    } else {
-      // 'files' and 'size' both sort files by sizeBytes desc
-      copy.sort((a, b) => b.sizeBytes - a.sizeBytes);
-    }
+    copy.sort((a, b) => a.name.localeCompare(b.name));
     return copy;
   }
 
@@ -769,7 +764,6 @@
   function walkExpand(state, nodes) {
     for (const n of nodes) {
       state.expanded.set(n.path, true);
-      state.emptyGroupExpanded.add(n.path);
       walkExpand(state, n.children || []);
     }
   }
