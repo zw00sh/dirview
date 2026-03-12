@@ -10,6 +10,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   onExpandChanged?: (hasAny: boolean) => void;
   onRefresh?: () => void;
+  onOpenDirInTab?: (dirPath: string) => void;
 
   constructor(extensionUri: vscode.Uri) {
     this.extensionUri = extensionUri;
@@ -42,6 +43,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         vscode.commands.executeCommand('vscode.open', vscode.Uri.file(message.path));
       } else if (message.command === 'expandChanged') {
         this.onExpandChanged?.(message.hasAny ?? false);
+      } else if (message.command === 'openDirInTab' && message.path) {
+        this.onOpenDirInTab?.(message.path);
       }
     });
 

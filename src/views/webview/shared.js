@@ -17,6 +17,8 @@
   const SVG_EXPAND_ALL = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M15 6v5c0 2.21-1.79 4-4 4H6c-.74 0-1.38-.4-1.73-1H11c1.65 0 3-1.35 3-3V4.27c.6.35 1 .99 1 1.73Zm-4 7H4c-1.103 0-2-.897-2-2V4c0-1.103.897-2 2-2h7c1.103 0 2 .897 2 2v7c0 1.103-.897 2-2 2Zm-7-1h7c.551 0 1-.448 1-1V4c0-.551-.449-1-1-1H4c-.551 0-1 .449-1 1v7c0 .552.449 1 1 1Zm5.5-5H8V5.5a.5.5 0 0 0-1 0V7H5.5a.5.5 0 0 0 0 1H7v1.5a.5.5 0 0 0 1 0V8h1.5a.5.5 0 0 0 0-1Z"/></svg>';
   const SVG_COLLAPSE_ALL = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M14 4.27c.6.35 1 .99 1 1.73v5c0 2.21-1.79 4-4 4H6c-.74 0-1.38-.4-1.73-1H11c1.65 0 3-1.35 3-3V4.27ZM9.5 7a.5.5 0 0 1 0 1h-4a.5.5 0 0 1 0-1h4Z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M11 2c1.103 0 2 .897 2 2v7c0 1.103-.897 2-2 2H4c-1.103 0-2-.897-2-2V4c0-1.103.897-2 2-2h7ZM4 3c-.551 0-1 .449-1 1v7c0 .552.449 1 1 1h7c.551 0 1-.448 1-1V4c0-.551-.449-1-1-1H4Z"/></svg>';
   const SVG_TARGET = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM1 8a7 7 0 1 1 14 0A7 7 0 0 1 1 8zm7-3a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM4 8a4 4 0 1 1 8 0 4 4 0 0 1-8 0zm4-1a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>';
+  // Open-in-tab icon: box with arrow indicating "open in a new editor tab"
+  const SVG_OPEN_IN_TAB = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M3 3h4v1H4v8h8V8h1v4.5l-.5.5h-9l-.5-.5v-9L3 3zm8-1h3.5l.5.5v3.5h-1V3.707L9.854 7.854 9.146 7.146 13.293 3H11V2z"/></svg>';
 
   function escHtml(str) {
     return str
@@ -536,7 +538,7 @@
       // This design lets the user incrementally drill deeper with repeated expand clicks,
       // and incrementally retreat with repeated collapse clicks, without jarring jumps.
       const actionsEl = document.createElement('div');
-      actionsEl.className = opts.inlineActions ? 'dir-actions dir-actions-inline' : 'dir-actions dir-actions-overlay';
+      actionsEl.className = 'dir-actions';
       if (displayNode.children.length > 0) {
         const expandBtn = document.createElement('button');
         expandBtn.className = 'dir-action-btn';
@@ -610,20 +612,15 @@
       }
       const focusBtn = document.createElement('button');
       focusBtn.className = 'dir-action-btn';
-      focusBtn.innerHTML = SVG_TARGET;
-      focusBtn.title = 'Drill into directory';
+      focusBtn.innerHTML = SVG_OPEN_IN_TAB;
+      focusBtn.title = 'Open in new tab';
       focusBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         tooltip.style.display = 'none';
-        state.drillStack.push(displayNode.path);
-        state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+        vscode.postMessage({ command: 'openDirInTab', path: displayNode.path });
       });
       actionsEl.appendChild(focusBtn);
-      if (opts.inlineActions) {
-        row.insertBefore(actionsEl, barSpacer);
-      } else {
-        row.appendChild(actionsEl);
-      }
+      row.insertBefore(actionsEl, barSpacer);
 
       li.appendChild(row);
 
@@ -693,110 +690,7 @@
       return li;
     }
 
-    // Renders the "back" header row shown when drilled into a directory.
-    function renderBackRow(drillNode, clientWidth) {
-      const li = document.createElement('li');
-      li.className = 'drill-back-li';
-      const row = document.createElement('div');
-      row.className = 'dir-row drill-back-row';
-
-      // Match the indent-guides structure of depth-0 child rows (tab view has skipDepthZeroGuides=false)
-      if (!opts.skipDepthZeroGuides) {
-        row.appendChild(renderIndentGuides(0, []));
-      }
-
-      const chevron = document.createElement('span');
-      chevron.className = 'chevron back';
-      chevron.innerHTML = SVG_CHEVRON;
-      row.appendChild(chevron);
-
-      const nameEl = document.createElement('span');
-      nameEl.className = 'dir-name';
-      nameEl.textContent = drillNode.name;
-      nameEl.title = drillNode.path || drillNode.name;
-      row.appendChild(nameEl);
-
-      const spacer = document.createElement('div');
-      spacer.className = 'bar-spacer';
-      row.appendChild(spacer);
-
-      if (drillNode.totalFiles > 0) {
-        const cw = clientWidth || root.clientWidth || opts.barFallbackWidth || 300;
-        const maxBarWidth = Math.min(cw * (opts.barFactor || 0.4), opts.barMaxWidth || 200);
-        const barWrapWidth = Math.max(maxBarWidth, opts.barMinWidth || 12);
-        const barWrap = document.createElement('div');
-        barWrap.className = 'bar-wrap';
-        barWrap.style.width = barWrapWidth + 'px';
-        const bar = document.createElement('div');
-        bar.className = 'bar';
-        const total = drillNode.totalFiles;
-        for (const s of drillNode.stats) {
-          const segPct = (s.count / total) * 100;
-          const seg = document.createElement('div');
-          seg.className = 'bar-segment';
-          seg.style.width = segPct + '%';
-          seg.style.backgroundColor = s.color;
-          bar.appendChild(seg);
-        }
-        row.addEventListener('mouseenter', () => {
-          tooltip.innerHTML = '';
-          for (const s of drillNode.stats) {
-            const segPct = (s.count / total) * 100;
-            const tRow = document.createElement('div');
-            tRow.className = 'bar-tooltip-row';
-            tRow.innerHTML =
-              `<span class="bar-tooltip-swatch" style="background:${s.color}"></span>` +
-              `<span class="bar-tooltip-name">${escHtml(s.name)}</span>` +
-              `<span class="bar-tooltip-pct">${segPct.toFixed(1).replace(/\.0$/, '')}%</span>` +
-              `<span class="bar-tooltip-count">${s.count} file${s.count !== 1 ? 's' : ''}</span>`;
-            tooltip.appendChild(tRow);
-          }
-          const rect = bar.getBoundingClientRect();
-          tooltip.style.left = rect.left + 'px';
-          tooltip.style.top = (rect.bottom + 4) + 'px';
-          tooltip.style.display = 'block';
-          const tooltipRect = tooltip.getBoundingClientRect();
-          if (tooltipRect.bottom > window.innerHeight) {
-            tooltip.style.top = (rect.top - tooltipRect.height - 4) + 'px';
-          }
-          const vpWidth = document.documentElement.clientWidth;
-          if (tooltipRect.right > vpWidth - 4) {
-            tooltip.style.left = Math.max(4, vpWidth - tooltipRect.width - 4) + 'px';
-          }
-        });
-        row.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
-        barWrap.appendChild(bar);
-        row.appendChild(barWrap);
-      }
-
-      if (!opts.hideCounts) {
-        const metaEl = document.createElement('span');
-        metaEl.className = 'file-count';
-        if (drillNode.totalFiles > 0) {
-          if (state.currentSortMode === 'size') {
-            metaEl.textContent = formatBytes(drillNode.sizeBytes);
-            metaEl.title = drillNode.totalFiles + ' files';
-          } else {
-            metaEl.textContent = String(drillNode.totalFiles);
-            metaEl.title = formatBytes(drillNode.sizeBytes);
-          }
-        } else {
-          metaEl.textContent = '—';
-          metaEl.style.opacity = '0.5';
-        }
-        row.appendChild(metaEl);
-      }
-
-      row.addEventListener('click', () => {
-        state.drillStack.pop();
-        state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
-      });
-
-      li.appendChild(row);
-      return li;
-    }
-
-    return { dirMatchesFilter, renderIndentGuides, renderFileNode, renderTruncatedRow, renderEmptyGroupNode, renderDirNode, renderBackRow };
+    return { dirMatchesFilter, renderIndentGuides, renderFileNode, renderTruncatedRow, renderEmptyGroupNode, renderDirNode };
   }
 
   // Aggregate language stats from root nodes. Shared between tab.js and languagesProvider.ts.
@@ -849,52 +743,9 @@
       lastAutoRescanEnabled: true,
       /** @type {Function|null} */
       render: null,
-      /** @type {string[]} */
-      drillStack: [],
       /** @type {string} */
       currentRootName: '',
     };
-  }
-
-  // Recursively search for a node by path in the DirNode tree.
-  function findInChildren(children, targetPath) {
-    for (const child of children) {
-      if (child.path === targetPath) return child;
-      const found = findInChildren(child.children || [], targetPath);
-      if (found) return found;
-    }
-    return null;
-  }
-
-  function findNodeByPath(roots, targetPath) {
-    for (const root of roots) {
-      if (root.path === targetPath) return root;
-      const found = findInChildren(root.children || [], targetPath);
-      if (found) return found;
-    }
-    return null;
-  }
-
-  // Returns the effective roots for rendering (respects drill stack).
-  function getDrillRoots(state) {
-    if (!state.drillStack || state.drillStack.length === 0) return state.lastRoots;
-    while (state.drillStack.length > 0) {
-      const path = state.drillStack[state.drillStack.length - 1];
-      const node = findNodeByPath(state.lastRoots, path);
-      if (node) return [node];
-      state.drillStack.pop();
-    }
-    return state.lastRoots;
-  }
-
-  // Validates drillStack against the current tree; pops stale paths.
-  function pruneDrillStack(state) {
-    if (!state.drillStack || state.drillStack.length === 0) return;
-    while (state.drillStack.length > 0) {
-      const path = state.drillStack[state.drillStack.length - 1];
-      if (findNodeByPath(state.lastRoots, path)) break;
-      state.drillStack.pop();
-    }
   }
 
   function walkExpand(state, nodes) {
@@ -913,61 +764,10 @@
 
 
   // Renders the root-level tree rows into treeEl. Shared between sidebar and tab views.
-  // Requires state.lastRoots to be set. Handles drill-down via state.drillStack.
+  // Requires state.lastRoots to be set.
   function renderRoots(renderer, state, treeEl, maxMetric, clientWidth) {
     const roots = state.lastRoots;
 
-    // Drilled view
-    if (state.drillStack && state.drillStack.length > 0) {
-      const drillNode = findNodeByPath(roots, state.drillStack[state.drillStack.length - 1]);
-      if (drillNode) {
-        // Set rootName for context menus inside drilled view
-        const drillRootName = roots.find(r => {
-          if (r.path === drillNode.path) return true;
-          return findInChildren(r.children || [], drillNode.path) !== null;
-        });
-        state.currentRootName = drillRootName ? drillRootName.name : (roots[0] ? roots[0].name : '');
-        treeEl.appendChild(renderer.renderBackRow(drillNode, clientWidth));
-
-        const sortedChildren = sortDirs(drillNode.children, state.currentSortMode);
-        const sortedFiles = sortFiles(drillNode.files || [], state.currentSortMode);
-        const visibleChildren = state.activeFilters.size > 0
-          ? sortedChildren.filter(c => renderer.dirMatchesFilter(c))
-          : sortedChildren;
-        const visibleFiles = state.activeFilters.size > 0
-          ? sortedFiles.filter(f => state.activeFilters.has(f.langName))
-          : sortedFiles;
-
-        if (state.activeFilters.size === 0 && visibleChildren.length > 0) {
-          for (const group of groupEmptyDirs(visibleChildren)) {
-            if (group.type === 'emptyGroup') {
-              if (state.emptyGroupExpanded.has(group.nodes[0].path)) {
-                for (const n of group.nodes) { treeEl.appendChild(renderer.renderDirNode(n, 0, maxMetric, [], clientWidth)); }
-              } else {
-                treeEl.appendChild(renderer.renderEmptyGroupNode(group.nodes, 0, maxMetric, []));
-              }
-            } else {
-              treeEl.appendChild(renderer.renderDirNode(group.node, 0, maxMetric, [], clientWidth));
-            }
-          }
-        } else {
-          for (const child of visibleChildren) {
-            treeEl.appendChild(renderer.renderDirNode(child, 0, maxMetric, [], clientWidth));
-          }
-        }
-        const shouldTruncate = state.truncateThreshold > 0 && visibleFiles.length > state.truncateThreshold && !state.truncationExpanded.has(drillNode.path);
-        const shownFiles = shouldTruncate ? visibleFiles.slice(0, state.truncateThreshold) : visibleFiles;
-        const hiddenFiles = shouldTruncate ? visibleFiles.slice(state.truncateThreshold) : [];
-        for (const file of shownFiles) { treeEl.appendChild(renderer.renderFileNode(file, 0, [])); }
-        if (hiddenFiles.length > 0) {
-          treeEl.appendChild(renderer.renderTruncatedRow(hiddenFiles, 0, [], drillNode.path, treeEl));
-        }
-        return;
-      }
-      // Drill target not found — fall through to normal render
-    }
-
-    // Normal (non-drilled) render
     for (const r of roots) {
       state.currentRootName = r.name;
       if (roots.length > 1) {
@@ -1034,7 +834,7 @@
 
   /**
    * Renders the tree <ul> into rootEl.
-   * Handles pruneDrillStack, computeMaxMetric, tree element creation, and renderRoots.
+   * Handles computeMaxMetric, tree element creation, and renderRoots.
    * Call after clearing rootEl and appending any pre-tree elements (e.g. rescan warning).
    * @param {object} state
    * @param {object} renderer
@@ -1042,8 +842,7 @@
    * @param {{ cssClass?: string }} [opts]
    */
   function renderTree(state, renderer, rootEl, opts) {
-    pruneDrillStack(state);
-    const maxMetric = computeMaxMetric(getDrillRoots(state), state.currentSortMode);
+    const maxMetric = computeMaxMetric(state.lastRoots, state.currentSortMode);
     const clientWidth = rootEl.clientWidth;
     const treeEl = document.createElement('ul');
     treeEl.className = 'tree' +
@@ -1104,14 +903,14 @@
         }
         case 'expandAll':
           if (state.lastRoots) {
-            walkExpand(state, getDrillRoots(state));
+            walkExpand(state, state.lastRoots);
             deps.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
             if (deps.onExpandAll) { deps.onExpandAll(); }
           }
           break;
         case 'collapseAll':
           if (state.lastRoots) {
-            walkCollapse(state, getDrillRoots(state));
+            walkCollapse(state, state.lastRoots);
             state.truncationExpanded.clear();
             state.emptyGroupExpanded.clear();
             deps.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
@@ -1128,12 +927,11 @@
 
   window.DirviewShared = {
     SVG_CHEVRON, SVG_PLUS, SVG_WARNING,
-    SVG_EYE, SVG_EYE_CLOSED, SVG_FOLD, SVG_UNFOLD, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_TARGET,
+    SVG_EYE, SVG_EYE_CLOSED, SVG_FOLD, SVG_UNFOLD, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_TARGET, SVG_OPEN_IN_TAB,
     escHtml, formatBytes, sortDirs, sortFiles, computeMaxMetric, groupEmptyDirs,
     createScanBar, createTooltip, createRenderer,
     computeStats, renderLegend, createState,
     walkExpand, walkCollapse, renderRoots,
-    findNodeByPath, getDrillRoots, pruneDrillStack,
     createRescanWarning, renderTree, createMessageHandler,
   };
 })();

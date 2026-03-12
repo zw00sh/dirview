@@ -105,7 +105,3 @@ body {
 .tab-view .file-name { flex-shrink: 1; }
 .tab-view .indent-guide { width: 16px; }
 
-/* Tab view: sticky back row uses editor background (overrides sidebar-background from style.css) */
-.tab-view .drill-back-li {
-  background: var(--vscode-editor-background);
-}

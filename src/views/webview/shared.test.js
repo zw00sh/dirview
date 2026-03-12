@@ -394,7 +394,7 @@ describe('dir hover action buttons', () => {
     expect(state.expanded.get('/r')).toBe(false);
   });
 
-  it('drill-in button pushes displayNode path to drillStack and calls render', () => {
+  it('open-in-tab button posts openDirInTab message with directory path', () => {
     const state = S.createState();
     state.render = vi.fn();
     state.lastRoots = [];
@@ -404,15 +404,27 @@ describe('dir hover action buttons', () => {
     const child2 = makeDir('/r/b', 'b', { totalFiles: 2, stats: [] });
     const parent = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 5, stats: [] });
 
-    const renderer = makeRenderer(state);
+    const postMessage = vi.fn();
+    const rootEl = document.createElement('div');
+    document.body.appendChild(rootEl);
+    const tooltipEl = document.createElement('div');
+    tooltipEl.style.display = 'none';
+    document.body.appendChild(tooltipEl);
+    const renderer = S.createRenderer(state, {
+      vscode: { postMessage },
+      root: rootEl,
+      tooltip: tooltipEl,
+      options: { skipDepthZeroGuides: false, barFactor: 0.4, barMaxWidth: 200, barFallbackWidth: 300 },
+    });
     const li = renderer.renderDirNode(parent, 0, 10, [], 300);
 
-    const focusBtn = li.querySelector('.dir-action-btn[title="Drill into directory"]');
-    expect(focusBtn).not.toBeNull();
-    focusBtn.click();
+    const openInTabBtn = li.querySelector('.dir-action-btn[title="Open in new tab"]');
+    expect(openInTabBtn).not.toBeNull();
+    openInTabBtn.click();
 
-    expect(state.drillStack).toContain('/r');
-    expect(state.render).toHaveBeenCalledOnce();
+    expect(postMessage).toHaveBeenCalledWith({ command: 'openDirInTab', path: '/r' });
+    // No re-render — just posts message to host
+    expect(state.render).not.toHaveBeenCalled();
   });
 
   it('shows all three buttons when dir has child dirs', () => {
@@ -434,10 +446,10 @@ describe('dir hover action buttons', () => {
     const titles = Array.from(btns).map(b => b.title);
     expect(titles).toContain('Expand children');
     expect(titles).toContain('Collapse children');
-    expect(titles).toContain('Drill into directory');
+    expect(titles).toContain('Open in new tab');
   });
 
-  it('shows only drill-in button when dir has no child dirs', () => {
+  it('shows only open-in-tab button when dir has no child dirs', () => {
     const state = S.createState();
     state.render = () => {};
     state.lastRoots = [];
@@ -454,7 +466,7 @@ describe('dir hover action buttons', () => {
 
     const btns = li.querySelectorAll(':scope > .dir-row .dir-action-btn');
     expect(btns).toHaveLength(1);
-    expect(btns[0].title).toBe('Drill into directory');
+    expect(btns[0].title).toBe('Open in new tab');
   });
 
   it('expand button does not trigger row click (stopPropagation)', () => {

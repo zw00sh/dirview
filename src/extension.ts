@@ -41,6 +41,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   sidebarProvider.onRefresh = () => doScan();
   tabProvider.onRefresh = () => doScan();
 
+  // Wire open-in-tab: both sidebar and tab views can open a directory in a new tab
+  sidebarProvider.onOpenDirInTab = (dirPath) => tabProvider.openForDir(dirPath);
+  tabProvider.onOpenDirInTab = (dirPath) => tabProvider.openForDir(dirPath);
+
   function getTruncateThreshold(): number {
     if (!config.truncationEnabled) { return 0; }
     return vscode.workspace.getConfiguration('dirview').get<number>('truncateThreshold', 4);

@@ -1,29 +1,74 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { DirNode } from '../scanner/types';
 import { getNonce } from './getNonce';
 
 export class TabProvider {
-  private panel: vscode.WebviewPanel | undefined;
+  // Map from directory path (relative to workspace root, '' for root) → WebviewPanel.
+  // Each entry is a separate editor tab showing that directory's subtree.
+  private panels: Map<string, vscode.WebviewPanel> = new Map();
   private extensionUri: vscode.Uri;
-  private lastUpdate: { roots: DirNode[]; autoRescanEnabled: boolean; showIgnored: boolean } | undefined;
+  // Raw scan data, stored once and used to derive per-panel subtrees on demand.
+  private lastRoots: DirNode[] | undefined;
+  private lastAutoRescanEnabled: boolean = true;
+  private lastShowIgnored: boolean = false;
 
   onFilterChange: ((langs: string[]) => void) | undefined;
   getConfiguredThreshold: (() => number) | undefined;
   onRefresh: (() => void) | undefined;
+  onOpenDirInTab: ((dirPath: string) => void) | undefined;
 
   constructor(extensionUri: vscode.Uri) {
     this.extensionUri = extensionUri;
   }
 
+  private findInChildren(children: DirNode[], targetPath: string): DirNode | undefined {
+    for (const child of children) {
+      if (child.path === targetPath) return child;
+      const found = this.findInChildren(child.children, targetPath);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  private findNodeByPath(roots: DirNode[], targetPath: string): DirNode | undefined {
+    for (const root of roots) {
+      if (root.path === targetPath) return root;
+      const found = this.findInChildren(root.children, targetPath);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  /** Returns the roots to send to the panel for a given dirPath.
+   *  For root (''), returns the full scan roots.
+   *  For a directory path, returns [node] for just that subtree.
+   *  Returns undefined if no scan data exists yet, or [] if the dir was deleted. */
+  private getRootsForDir(dirPath: string): DirNode[] | undefined {
+    if (!this.lastRoots) { return undefined; }
+    if (dirPath === '') { return this.lastRoots; }
+    const node = this.findNodeByPath(this.lastRoots, dirPath);
+    return node ? [node] : [];
+  }
+
+  /** Opens the root-level breakdown tab (or focuses it if already open). */
   openOrFocus(): void {
-    if (this.panel) {
-      this.panel.reveal();
+    this.openForDir('');
+  }
+
+  /** Opens a tab rooted at dirPath, or focuses it if already open.
+   *  dirPath is relative to workspace root; use '' for the full workspace view. */
+  openForDir(dirPath: string): void {
+    const existing = this.panels.get(dirPath);
+    if (existing) {
+      existing.reveal();
       return;
     }
 
-    this.panel = vscode.window.createWebviewPanel(
+    const title = dirPath === '' ? 'Breakdown' : path.basename(dirPath);
+    const panel = vscode.window.createWebviewPanel(
       'dirview.tab',
-      'Breakdown',
+      title,
       vscode.ViewColumn.One,
       {
         enableScripts: true,
@@ -34,13 +79,13 @@ export class TabProvider {
       }
     );
 
-    this.panel.iconPath = {
+    panel.iconPath = {
       light: vscode.Uri.joinPath(this.extensionUri, 'media', 'dirview-icon-light.svg'),
       dark: vscode.Uri.joinPath(this.extensionUri, 'media', 'dirview-icon-dark.svg'),
     };
-    this.panel.webview.html = this.getHtml(this.panel.webview);
+    panel.webview.html = this.getHtml(panel.webview);
 
-    this.panel.webview.onDidReceiveMessage((message: { command: string; path?: string; langs?: string[]; show?: boolean; enabled?: boolean }) => {
+    panel.webview.onDidReceiveMessage((message: { command: string; path?: string; langs?: string[]; show?: boolean; enabled?: boolean }) => {
       if (message.command === 'refresh') {
         this.onRefresh?.();
       } else if (message.command === 'openFile' && message.path) {
@@ -53,49 +98,70 @@ export class TabProvider {
         const enabled: boolean = message.enabled ?? true;
         const threshold = enabled ? (this.getConfiguredThreshold?.() ?? 4) : 0;
         this.updateTruncation(threshold, enabled);
+      } else if (message.command === 'openDirInTab' && message.path) {
+        this.onOpenDirInTab?.(message.path);
       }
     });
 
-    this.panel.onDidDispose(() => {
-      this.panel = undefined;
+    panel.onDidDispose(() => {
+      this.panels.delete(dirPath);
     });
 
-    if (this.lastUpdate) {
+    this.panels.set(dirPath, panel);
+
+    // Replay latest scan data if available, so the new tab shows content immediately.
+    const roots = this.getRootsForDir(dirPath);
+    if (roots !== undefined) {
       setTimeout(() => {
-        if (this.lastUpdate) {
-          this.panel?.webview.postMessage({ type: 'update', ...this.lastUpdate });
-        }
+        panel.webview.postMessage({ type: 'update', roots, autoRescanEnabled: this.lastAutoRescanEnabled, showIgnored: this.lastShowIgnored });
       }, 100);
     }
   }
 
   get isOpen(): boolean {
-    return this.panel !== undefined;
+    return this.panels.size > 0;
   }
 
   showScanning(): void {
-    this.panel?.webview.postMessage({ type: 'scanning' });
+    for (const panel of this.panels.values()) {
+      panel.webview.postMessage({ type: 'scanning' });
+    }
   }
 
   update(roots: DirNode[], autoRescanEnabled: boolean, showIgnored: boolean = false): void {
-    this.lastUpdate = { roots, autoRescanEnabled, showIgnored };
-    this.panel?.webview.postMessage({ type: 'update', roots, autoRescanEnabled, showIgnored });
+    this.lastRoots = roots;
+    this.lastAutoRescanEnabled = autoRescanEnabled;
+    this.lastShowIgnored = showIgnored;
+    for (const [dirPath, panel] of this.panels) {
+      const panelRoots = this.getRootsForDir(dirPath);
+      // Send empty array if the directory was deleted — the tab will show an empty state.
+      const effectiveRoots = panelRoots ?? [];
+      panel.webview.postMessage({ type: 'update', roots: effectiveRoots, autoRescanEnabled, showIgnored });
+    }
   }
 
   updateTruncation(truncateThreshold: number, truncationEnabled: boolean = truncateThreshold > 0): void {
-    this.panel?.webview.postMessage({ type: 'updateTruncation', truncateThreshold, truncationEnabled });
+    for (const panel of this.panels.values()) {
+      panel.webview.postMessage({ type: 'updateTruncation', truncateThreshold, truncationEnabled });
+    }
   }
 
   expandAll(): void {
-    this.panel?.webview.postMessage({ type: 'expandAll' });
+    for (const panel of this.panels.values()) {
+      panel.webview.postMessage({ type: 'expandAll' });
+    }
   }
 
   collapseAll(): void {
-    this.panel?.webview.postMessage({ type: 'collapseAll' });
+    for (const panel of this.panels.values()) {
+      panel.webview.postMessage({ type: 'collapseAll' });
+    }
   }
 
   setFilter(langs: string[]): void {
-    this.panel?.webview.postMessage({ type: 'filter', langs });
+    for (const panel of this.panels.values()) {
+      panel.webview.postMessage({ type: 'filter', langs });
+    }
   }
 
   private getHtml(webview: vscode.Webview): string {

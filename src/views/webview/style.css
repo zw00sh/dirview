@@ -44,32 +44,17 @@ body {
   gap: 4px;
   min-height: 22px;
   overflow: hidden;
-  position: relative;
 }
 
-/* Hover action buttons — hidden until row is hovered */
+/* Hover action buttons — hidden until row is hovered; always inline after dir-name */
 .dir-actions {
   display: none;
   align-items: center;
   gap: 2px;
-}
-.dir-row:hover .dir-actions { display: flex; }
-
-/* Sidebar: overlay on the right edge of the row */
-.dir-actions-overlay {
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  padding: 0 4px;
-  background: var(--vscode-list-hoverBackground);
-}
-
-/* Tab: inline between dir name and bar spacer */
-.dir-actions-inline {
   flex-shrink: 0;
   padding: 0 2px;
 }
+.dir-row:hover .dir-actions { display: flex; }
 
 .dir-action-btn {
   display: flex;
@@ -369,24 +354,6 @@ body {
   align-items: center;
   gap: 3px;
   flex-shrink: 0;
-}
-
-/* Drill-down back row */
-.chevron.back {
-  transform: rotate(180deg);
-  color: var(--vscode-textLink-foreground, var(--vscode-descriptionForeground));
-}
-
-.drill-back-li {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: var(--vscode-sideBar-background);
-}
-
-.drill-back-row {
-  border-bottom: 1px solid var(--vscode-tree-inactiveIndentGuidesStroke, rgba(128,128,128,0.2));
-  margin-bottom: 2px;
 }
 
 /* Multi-root workspace folder separator */

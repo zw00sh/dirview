@@ -23,7 +23,6 @@
     tooltip,
     options: {
       skipDepthZeroGuides: false,
-      inlineActions: true,
       barFactor: 0.35,
       barMaxWidth: 400,
       barFallbackWidth: 600,
@@ -85,10 +84,10 @@
   expandCollapseBtn.addEventListener('click', () => {
     if (!state.lastRoots) { return; }
     if (!allExpanded) {
-      S.walkExpand(state, S.getDrillRoots(state));
+      S.walkExpand(state, state.lastRoots);
       allExpanded = true;
     } else {
-      S.walkCollapse(state, S.getDrillRoots(state));
+      S.walkCollapse(state, state.lastRoots);
       state.truncationExpanded.clear();
       state.emptyGroupExpanded.clear();
       allExpanded = false;
@@ -140,8 +139,7 @@
     const titleLabels = { files: 'count', name: 'name', size: 'size' };
     tabTitleEl.textContent = 'Tree (' + (titleLabels[state.currentSortMode] || 'count') + ')';
 
-    S.pruneDrillStack(state);
-    updateLegend(roots ? S.computeStats(S.getDrillRoots(state)) : []);
+    updateLegend(roots ? S.computeStats(state.lastRoots) : []);
 
     root.innerHTML = '';
 
