@@ -19,7 +19,6 @@
       barMaxWidth: 200,
       barFallbackWidth: 300,
     },
-    onExpandChanged: (hasAny) => vscode.postMessage({ command: 'expandChanged', hasAny }),
   });
 
   function render(roots, autoRescanEnabled, sortMode) {
@@ -55,14 +54,6 @@
           state.emptyGroupExpanded.clear();
         }
         state.truncateThreshold = message.truncateThreshold;
-      }
-    },
-    onAfterRender: () => {
-      vscode.postMessage({ command: 'expandChanged', hasAny: [...state.expanded.values()].some(v => v) });
-    },
-    onFilter: () => {
-      if (state.activeFilters.size > 0) {
-        vscode.postMessage({ command: 'expandChanged', hasAny: true });
       }
     },
   }));

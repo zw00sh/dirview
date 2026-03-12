@@ -157,13 +157,13 @@
         },
         {
           "command": "dirview.expandAll",
-          "when": "view == dirview.sidebar && !dirview.allExpanded",
+          "when": "view == dirview.sidebar",
           "group": "navigation@5"
         },
         {
           "command": "dirview.collapseAll",
-          "when": "view == dirview.sidebar && dirview.allExpanded",
-          "group": "navigation@5"
+          "when": "view == dirview.sidebar",
+          "group": "navigation@6"
         }
       ],
       "webview/context": [

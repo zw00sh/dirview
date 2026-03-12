@@ -8,11 +8,11 @@
   const legendEl = document.getElementById('legend');
   const root = document.getElementById('root');
   const tabTitleEl = document.getElementById('tab-title');
-  const upBtn = document.getElementById('tab-up');
   const sortBtn = document.getElementById('tab-sort');
   const toggleIgnoredBtn = document.getElementById('tab-toggle-ignored');
   const toggleTruncationBtn = document.getElementById('tab-toggle-truncation');
-  const expandCollapseBtn = document.getElementById('tab-expand-collapse');
+  const expandAllBtn = document.getElementById('tab-expand-all');
+  const collapseAllBtn = document.getElementById('tab-collapse-all');
 
   const scanBar = S.createScanBar();
   const tooltip = S.createTooltip();
@@ -30,17 +30,14 @@
       barMinWidth: 24,
       barSqrt: true,
     },
-    onExpandChanged: (hasAny) => {
-      allExpanded = hasAny;
-      updateExpandCollapseBtn();
-    },
   });
 
   let currentShowIgnored = false;
   let currentTruncationEnabled = true;
-  let allExpanded = false;
   // The directory path this tab is rooted at ('' = workspace root).
   state.dirPath = '';
+  // Workspace folder name used by ancestor path context menus.
+  state.workspaceFolderName = '';
 
   // Tab-local truncation defaults (match config defaults)
   state.truncateThreshold = 4;
@@ -60,21 +57,11 @@
     toggleTruncationBtn.setAttribute('aria-label', toggleTruncationBtn.title);
   }
 
-  function updateExpandCollapseBtn() {
-    expandCollapseBtn.innerHTML = allExpanded ? S.SVG_COLLAPSE_ALL : S.SVG_EXPAND_ALL;
-    expandCollapseBtn.title = allExpanded ? 'Collapse All' : 'Expand All';
-    expandCollapseBtn.setAttribute('aria-label', expandCollapseBtn.title);
-  }
-
   updateToggleIgnoredBtn();
   updateTruncationBtn();
-  updateExpandCollapseBtn();
 
   // ── Toolbar event listeners ─────────────────────────────────────────────
 
-  upBtn.addEventListener('click', () => {
-    vscode.postMessage({ command: 'navigateUp' });
-  });
   toggleTruncationBtn.addEventListener('click', () => {
     vscode.postMessage({ command: 'toggleTruncation', enabled: !currentTruncationEnabled });
   });
@@ -87,18 +74,16 @@
   toggleIgnoredBtn.addEventListener('click', () => {
     vscode.postMessage({ command: 'toggleIgnored', show: !currentShowIgnored });
   });
-  expandCollapseBtn.addEventListener('click', () => {
+  expandAllBtn.addEventListener('click', () => {
     if (!state.lastRoots) { return; }
-    if (!allExpanded) {
-      S.walkExpand(state, state.lastRoots);
-      allExpanded = true;
-    } else {
-      S.walkCollapse(state, state.lastRoots);
-      state.truncationExpanded.clear();
-      state.emptyGroupExpanded.clear();
-      allExpanded = false;
-    }
-    updateExpandCollapseBtn();
+    S.tieredExpandAll(state, state.lastRoots);
+    render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+  });
+  collapseAllBtn.addEventListener('click', () => {
+    if (!state.lastRoots) { return; }
+    S.tieredCollapseAll(state, state.lastRoots);
+    state.truncationExpanded.clear();
+    state.emptyGroupExpanded.clear();
     render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
   });
   legendHeader.addEventListener('click', () => {
@@ -110,13 +95,10 @@
   // ── Legend ──────────────────────────────────────────────────────────────
 
   function toggleFilter(langName) {
-    const hadFilters = state.activeFilters.size > 0;
     if (state.activeFilters.has(langName)) { state.activeFilters.delete(langName); }
     else { state.activeFilters.add(langName); }
-    if (!hadFilters && state.activeFilters.size > 0) {
+    if (state.activeFilters.size > 0) {
       state.expanded.clear();
-      allExpanded = true;
-      updateExpandCollapseBtn();
     }
     vscode.postMessage({ command: 'filter', langs: [...state.activeFilters] });
     render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
@@ -142,14 +124,58 @@
     const sortNames = { files: 'by files', name: 'by name', size: 'by size' };
     sortBtn.title = 'Sort: ' + (sortNames[state.currentSortMode] || 'by files');
     sortBtn.setAttribute('aria-label', sortBtn.title);
-    const titleLabels = { files: 'count', name: 'name', size: 'size' };
-    // Show root dir name in ALLCAPS + sort mode label, matching sidebar style.
-    const rootName = state.dirPath === ''
-      ? 'BREAKDOWN'
-      : (state.lastRoots && state.lastRoots[0] ? state.lastRoots[0].name.toUpperCase() : 'BREAKDOWN');
-    tabTitleEl.textContent = rootName + '  ' + (titleLabels[state.currentSortMode] || 'count');
-    // Show up button only when not at workspace root.
-    upBtn.style.display = state.dirPath !== '' ? '' : 'none';
+
+    // Toolbar title: clickable breadcrumb showing current directory path + dimmed sort indicator.
+    tabTitleEl.innerHTML = '';
+    if (!state.dirPath) {
+      // Workspace root — show the workspace folder name (or "/" as fallback)
+      const rootSeg = document.createElement('span');
+      rootSeg.className = 'ancestor-path-segment';
+      rootSeg.textContent = state.workspaceFolderName || '/';
+      rootSeg.addEventListener('click', () => {
+        vscode.postMessage({ command: 'navigateToDir', path: '' });
+      });
+      tabTitleEl.appendChild(rootSeg);
+    } else {
+      // Subdir — prepend workspace folder name as first segment, then each path segment.
+      const segments = state.dirPath.split('/');
+      const hasRoot = !!state.workspaceFolderName;
+      const allNames = hasRoot ? [state.workspaceFolderName, ...segments] : segments;
+
+      for (let i = 0; i < allNames.length; i++) {
+        if (i > 0) {
+          const sep = document.createElement('span');
+          sep.className = 'ancestor-path-sep';
+          sep.textContent = ' / ';
+          tabTitleEl.appendChild(sep);
+        }
+
+        // offset: -1 means the root segment (path = ''), >=0 is index into segments
+        const offset = hasRoot ? i - 1 : i;
+        const segPath = offset < 0 ? '' : segments.slice(0, offset + 1).join('/');
+
+        const span = document.createElement('span');
+        span.className = 'ancestor-path-segment';
+        span.textContent = allNames[i];
+        span.title = offset < 0 ? (state.workspaceFolderName || '/') : segPath;
+        span.setAttribute('data-vscode-context', JSON.stringify({
+          webviewSection: 'directory',
+          path: segPath,
+          rootName: state.workspaceFolderName || state.currentRootName,
+          preventDefaultContextMenuItems: true,
+        }));
+        span.addEventListener('click', () => {
+          vscode.postMessage({ command: 'navigateToDir', path: segPath });
+        });
+        tabTitleEl.appendChild(span);
+      }
+    }
+
+    // Dimmed sort indicator after the breadcrumb
+    const sortLabel = document.createElement('span');
+    sortLabel.className = 'tab-title-sort';
+    sortLabel.textContent = '(' + (sortNames[state.currentSortMode] || 'by files') + ')';
+    tabTitleEl.appendChild(sortLabel);
 
     updateLegend(roots ? S.computeStats(state.lastRoots) : []);
 
@@ -181,27 +207,10 @@
       currentShowIgnored = message.showIgnored || false;
       updateToggleIgnoredBtn();
       if (typeof message.dirPath === 'string') { state.dirPath = message.dirPath; }
-    },
-    onAfterRender: () => {
-      allExpanded = [...state.expanded.values()].some(v => v);
-      updateExpandCollapseBtn();
+      if (typeof message.workspaceFolderName === 'string') { state.workspaceFolderName = message.workspaceFolderName; }
     },
     onLoading: () => {
       legendSection.style.display = 'none';
-    },
-    onFilter: (hadFilters) => {
-      if (!hadFilters && state.activeFilters.size > 0) {
-        allExpanded = true;
-        updateExpandCollapseBtn();
-      }
-    },
-    onExpandAll: () => {
-      allExpanded = true;
-      updateExpandCollapseBtn();
-    },
-    onCollapseAll: () => {
-      allExpanded = false;
-      updateExpandCollapseBtn();
     },
   });
 

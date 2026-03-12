@@ -522,3 +522,176 @@ describe('dir hover action buttons', () => {
     expect(state.expanded.get('/p/a/b')).toBe(true);
   });
 });
+
+// --- tieredExpandAll ---
+// Workspace folder nodes (roots) are always-visible containers; their CHILDREN are
+// the first expandable items in the tree. Tests model this correctly:
+// makeWorkspace() returns a workspace node whose children are the top-level items.
+
+describe('tieredExpandAll', () => {
+  // ws → [a → [ax, ay], b → [bp, bq]] (both a and b have 2 children so neither compacts)
+  function makeWorkspace() {
+    const ax = makeDir('/ws/a/x', 'x', { totalFiles: 1 });
+    const ay = makeDir('/ws/a/y', 'y', { totalFiles: 1 });
+    const bp = makeDir('/ws/b/p', 'p', { totalFiles: 1 });
+    const bq = makeDir('/ws/b/q', 'q', { totalFiles: 1 });
+    const a = makeDir('/ws/a', 'a', { children: [ax, ay], totalFiles: 2 });
+    const b = makeDir('/ws/b', 'b', { children: [bp, bq], totalFiles: 2 });
+    const ws = makeDir('/ws', 'ws', { children: [a, b], totalFiles: 4 });
+    return { ws, a, b, ax, ay, bp, bq };
+  }
+
+  it('tier 1: expands top-level items when none are expanded', () => {
+    const { ws } = makeWorkspace();
+    const state = S.createState();
+    S.tieredExpandAll(state, [ws]);
+    expect(state.expanded.get('/ws/a')).toBe(true);
+    expect(state.expanded.get('/ws/b')).toBe(true);
+    // 2nd-level should NOT be expanded
+    expect(state.expanded.get('/ws/a/x')).toBeFalsy();
+    expect(state.expanded.get('/ws/b/p')).toBeFalsy();
+  });
+
+  it('tier 1: expands all top-level items even when only some are expanded', () => {
+    const { ws } = makeWorkspace();
+    const state = S.createState();
+    state.expanded.set('/ws/a', true); // a expanded, b not
+    S.tieredExpandAll(state, [ws]);
+    expect(state.expanded.get('/ws/a')).toBe(true);
+    expect(state.expanded.get('/ws/b')).toBe(true);
+    // 2nd-level should NOT be expanded (still tier 1)
+    expect(state.expanded.get('/ws/a/x')).toBeFalsy();
+  });
+
+  it('tier 2: recursively expands all when all top-level are expanded', () => {
+    // ws → [a → [a1 → [a1_x, a1_y]]]
+    const a1x = makeDir('/ws/a/a1/x', 'x', { totalFiles: 1 });
+    const a1y = makeDir('/ws/a/a1/y', 'y', { totalFiles: 1 });
+    const a1 = makeDir('/ws/a/a1', 'a1', { children: [a1x, a1y], totalFiles: 2 });
+    const a2 = makeDir('/ws/a/a2', 'a2', { totalFiles: 1 }); // leaf
+    const a = makeDir('/ws/a', 'a', { children: [a1, a2], totalFiles: 3 });
+    const ws = makeDir('/ws', 'ws', { children: [a], totalFiles: 3 });
+    const state = S.createState();
+    state.expanded.set('/ws/a', true); // top-level expanded → tier 2
+    S.tieredExpandAll(state, [ws]);
+    // Tier 2: walkExpand — all descendants should now be expanded
+    expect(state.expanded.get('/ws/a/a1')).toBe(true);
+    expect(state.expanded.get('/ws/a/a1/x')).toBe(true);
+    expect(state.expanded.get('/ws/a/a1/y')).toBe(true);
+  });
+
+  it('top-level leaf items count as already expanded for tier promotion', () => {
+    // ws → [a → [a1 → [a1x, a1y], a2 → [a2p, a2q]], b (leaf)]
+    // a has 2 children → NOT compacted; a1/a2 each have 2 children.
+    // b is a leaf — counts as already expanded so tier 2 fires instead of re-doing tier 1.
+    const a1x = makeDir('/ws/a/a1/x', 'x', { totalFiles: 1 });
+    const a1y = makeDir('/ws/a/a1/y', 'y', { totalFiles: 1 });
+    const a2p = makeDir('/ws/a/a2/p', 'p', { totalFiles: 1 });
+    const a2q = makeDir('/ws/a/a2/q', 'q', { totalFiles: 1 });
+    const a1 = makeDir('/ws/a/a1', 'a1', { children: [a1x, a1y], totalFiles: 2 });
+    const a2 = makeDir('/ws/a/a2', 'a2', { children: [a2p, a2q], totalFiles: 2 });
+    const a = makeDir('/ws/a', 'a', { children: [a1, a2], totalFiles: 4 });
+    const b = makeDir('/ws/b', 'b', { totalFiles: 1 }); // leaf
+    const ws = makeDir('/ws', 'ws', { children: [a, b], totalFiles: 5 });
+    const state = S.createState();
+    state.expanded.set('/ws/a', true); // a expanded (2 children → path stays '/ws/a')
+    // b is leaf → counts as expanded → allTopExpanded = true → tier 2 fires
+    S.tieredExpandAll(state, [ws]);
+    // Tier 2: walkExpand — all descendants recursively expanded
+    expect(state.expanded.get('/ws/a/a1')).toBe(true);
+    expect(state.expanded.get('/ws/a/a2')).toBe(true);
+    expect(state.expanded.get('/ws/a/a1/x')).toBe(true);
+    expect(state.expanded.get('/ws/a/a2/p')).toBe(true);
+  });
+
+  it('works with multiple workspace roots', () => {
+    const a1 = makeDir('/ws1/a', 'a', { totalFiles: 1 });
+    const a2 = makeDir('/ws1/b', 'b', { totalFiles: 1 });
+    const ws1 = makeDir('/ws1', 'ws1', { children: [a1, a2], totalFiles: 2 });
+    const b1 = makeDir('/ws2/c', 'c', { totalFiles: 1 });
+    const ws2 = makeDir('/ws2', 'ws2', { children: [b1], totalFiles: 1 });
+    const state = S.createState();
+    S.tieredExpandAll(state, [ws1, ws2]);
+    // Leaves — none have children — tier 1 has nothing to expand since all are leaves
+    // (leaves count as already expanded in tier checks, so tier 2 fires but is a no-op)
+    // No errors thrown
+  });
+});
+
+// --- tieredCollapseAll ---
+
+describe('tieredCollapseAll', () => {
+  // ws → [a → [ax → [ax_deep, ax_other]], b → [bx, by]]
+  // a: 1 child ax, no files → compacts to ax. ax: 2 children → NOT compacted (prevents chain).
+  // compactedNode(a) = ax, compactedPath(a) = '/ws/a/ax'.
+  function makeWorkspace() {
+    const ax_deep = makeDir('/ws/a/ax/deep', 'deep', { totalFiles: 1 });
+    const ax_other = makeDir('/ws/a/ax/other', 'other', { totalFiles: 1 });
+    const ax = makeDir('/ws/a/ax', 'ax', { children: [ax_deep, ax_other], totalFiles: 2 });
+    const a = makeDir('/ws/a', 'a', { children: [ax], totalFiles: 2 }); // 1 child → compacts to ax
+    const bx = makeDir('/ws/b/x', 'x', { totalFiles: 1 });
+    const by = makeDir('/ws/b/y', 'y', { totalFiles: 1 });
+    const b = makeDir('/ws/b', 'b', { children: [bx, by], totalFiles: 2 });
+    const ws = makeDir('/ws', 'ws', { children: [a, b], totalFiles: 4 });
+    return { ws, a, b, ax, ax_deep, bx, by };
+  }
+
+  it('tier 3 (no-op): does nothing when no top-level items are expanded', () => {
+    const { ws } = makeWorkspace();
+    const state = S.createState();
+    S.tieredCollapseAll(state, [ws]);
+    expect(state.expanded.get('/ws/a/ax')).toBeFalsy();
+    expect(state.expanded.get('/ws/b')).toBeFalsy();
+  });
+
+  it('tier 2: collapses all top-level items when none have expanded descendants', () => {
+    const { ws } = makeWorkspace();
+    const state = S.createState();
+    // a compacts to ax → compacted path = '/ws/a/ax'
+    // b has 2 children → NOT compacted, path = '/ws/b'
+    state.expanded.set('/ws/a/ax', true);
+    state.expanded.set('/ws/b', true);
+    S.tieredCollapseAll(state, [ws]);
+    expect(state.expanded.get('/ws/a/ax')).toBe(false);
+    expect(state.expanded.get('/ws/b')).toBe(false);
+  });
+
+  it('tier 1: collapses deeper descendants only, keeping top-level items open', () => {
+    const { ws } = makeWorkspace();
+    const state = S.createState();
+    state.expanded.set('/ws/a/ax', true);       // top-level (a compacted to ax)
+    state.expanded.set('/ws/a/ax/deep', true);  // deeper descendant (child of ax)
+    S.tieredCollapseAll(state, [ws]);
+    // Top-level (/ws/a/ax) should stay open
+    expect(state.expanded.get('/ws/a/ax')).toBe(true);
+    // Deeper node should be collapsed
+    expect(state.expanded.get('/ws/a/ax/deep')).toBe(false);
+  });
+
+  it('tier 1 applies when any top-level item has a deeper descendant', () => {
+    const { ws } = makeWorkspace();
+    const state = S.createState();
+    state.expanded.set('/ws/a/ax', true);       // a → ax (compacted)
+    state.expanded.set('/ws/b', true);          // b expanded, no deeper descendants
+    state.expanded.set('/ws/a/ax/deep', true);  // deeper under a
+    S.tieredCollapseAll(state, [ws]);
+    // Both top-level items stay open (tier 1 preserves them)
+    expect(state.expanded.get('/ws/a/ax')).toBe(true);
+    expect(state.expanded.get('/ws/b')).toBe(true);
+    // Only the deeper node under a is collapsed
+    expect(state.expanded.get('/ws/a/ax/deep')).toBe(false);
+  });
+
+  it('works with multiple workspace roots', () => {
+    const a = makeDir('/ws1/a', 'a', { totalFiles: 1 });
+    const ws1 = makeDir('/ws1', 'ws1', { children: [a], totalFiles: 1 });
+    const b = makeDir('/ws2/b', 'b', { totalFiles: 1 });
+    const ws2 = makeDir('/ws2', 'ws2', { children: [b], totalFiles: 1 });
+    const state = S.createState();
+    state.expanded.set('/ws1/a', true);
+    state.expanded.set('/ws2/b', true);
+    S.tieredCollapseAll(state, [ws1, ws2]);
+    expect(state.expanded.get('/ws1/a')).toBe(false);
+    expect(state.expanded.get('/ws2/b')).toBe(false);
+  });
+});

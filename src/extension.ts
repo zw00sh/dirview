@@ -27,11 +27,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     sidebarProvider.setFilter(langs);
   };
 
-  // Update expand/collapse context key when user manually expands/collapses dirs in sidebar
-  sidebarProvider.onExpandChanged = (hasAny: boolean) => {
-    vscode.commands.executeCommand('setContext', 'dirview.allExpanded', hasAny);
-  };
-
   // Tab legend manages its own filter state independently; no cross-view propagation
   tabProvider.onFilterChange = (_langs) => {};
   tabProvider.getConfiguredThreshold = () =>
@@ -129,14 +124,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     vscode.commands.registerCommand('dirview.expandAll', () => {
       sidebarProvider.expandAll();
-      vscode.commands.executeCommand('setContext', 'dirview.allExpanded', true);
     })
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('dirview.collapseAll', () => {
       sidebarProvider.collapseAll();
-      vscode.commands.executeCommand('setContext', 'dirview.allExpanded', false);
     })
   );
 

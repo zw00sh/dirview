@@ -27,8 +27,15 @@ body {
 }
 
 .tab-title {
-  font-size: 11px;
-  color: var(--vscode-descriptionForeground);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-icon-foreground);
+  display: flex;
+  align-items: center;
+}
+
+.tab-title-sort {
+  opacity: 0.4;
+  margin-left: 4px;
 }
 
 .tab-action {
@@ -103,4 +110,19 @@ body {
 .tab-view .dir-name { flex-shrink: 1; }
 .tab-view .file-name { flex-shrink: 1; }
 .tab-view .indent-guide { width: 16px; }
+
+/* Ancestor path breadcrumb in toolbar */
+.ancestor-path-segment {
+  cursor: pointer;
+}
+
+.ancestor-path-segment:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.ancestor-path-sep {
+  opacity: 0.4;
+  margin: 0 1px;
+}
 

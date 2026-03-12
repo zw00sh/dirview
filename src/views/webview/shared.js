@@ -55,10 +55,13 @@
   }
 
   // Simple reference-equality cache: avoids redundant full-tree walks on filter/sort/expand.
-  let _maxMetricCache = { roots: null, sortMode: null, value: 1 };
+  let _maxMetricCache = { roots: null, sortMode: null, includeRoots: false, value: 1 };
 
-  function computeMaxMetric(roots, sortMode) {
-    if (_maxMetricCache.roots === roots && _maxMetricCache.sortMode === sortMode) {
+  // Computes the max metric value across the tree for bar scaling.
+  // When includeRoots is false (default), skips root nodes so they always render at 100%.
+  // When includeRoots is true (tab showRootNode mode), includes roots so bars scale relative to them.
+  function computeMaxMetric(roots, sortMode, includeRoots) {
+    if (_maxMetricCache.roots === roots && _maxMetricCache.sortMode === sortMode && _maxMetricCache.includeRoots === !!includeRoots) {
       return _maxMetricCache.value;
     }
     let max = 0;
@@ -67,12 +70,12 @@
       if (val > max) { max = val; }
       for (const c of node.children) { walk(c); }
     }
-    // Skip roots (always 100%) — scale relative to largest subdirectory
     for (const r of roots) {
-      for (const c of r.children) { walk(c); }
+      if (includeRoots) { walk(r); }
+      else { for (const c of r.children) { walk(c); } }
     }
     const value = max || 1;
-    _maxMetricCache = { roots, sortMode, value };
+    _maxMetricCache = { roots, sortMode, includeRoots: !!includeRoots, value };
     return value;
   }
 
@@ -136,6 +139,30 @@
   //     barFallbackWidth: number,      // fallback when clientWidth is 0
   //   }
   // }
+  // Returns the node that renderDirNode would use as displayNode for the given node —
+  // i.e. follows the compact-folder chain (single child dir, no files) to its deepest node.
+  function compactedNode(node) {
+    let cur = node;
+    while (cur.children.length === 1 && (cur.files || []).length === 0) {
+      cur = cur.children[0];
+    }
+    return cur;
+  }
+
+  function compactedPath(node) {
+    return compactedNode(node).path;
+  }
+
+  // Returns true if any of node's descendants are expanded.
+  function hasExpandedDescendant(state, node) {
+    for (const child of (node.children || [])) {
+      const cn = compactedNode(child);
+      if (state.expanded.get(cn.path)) return true;
+      if (hasExpandedDescendant(state, cn)) return true;
+    }
+    return false;
+  }
+
   function createRenderer(state, deps) {
     const { vscode, root, tooltip } = deps;
     const opts = deps.options || {};
@@ -339,31 +366,6 @@
       return li;
     }
 
-    // Returns the node that renderDirNode would use as displayNode for the given node —
-    // i.e. follows the compact-folder chain (single child dir, no files) to its deepest node.
-    function compactedNode(node) {
-      let cur = node;
-      while (cur.children.length === 1 && (cur.files || []).length === 0) {
-        cur = cur.children[0];
-      }
-      return cur;
-    }
-
-    function compactedPath(node) {
-      return compactedNode(node).path;
-    }
-
-    // Returns true if any of node's children (recursively) are expanded.
-    // Must live inside createRenderer to access compactedNode.
-    function hasExpandedDescendant(state, node) {
-      for (const child of (node.children || [])) {
-        const cn = compactedNode(child);
-        if (state.expanded.get(cn.path)) return true;
-        if (hasExpandedDescendant(state, cn)) return true;
-      }
-      return false;
-    }
-
     function renderDirNode(node, depth, maxMetric, ancestors, clientWidth) {
       const li = document.createElement('li');
 
@@ -371,6 +373,7 @@
       // Skip sortDirs inside the loop — single-child arrays don't need sorting.
       let displayNode = node;
       let displayName = node.name;
+      const compactSegments = [{ name: node.name, path: node.path }];
       while (true) {
         const children = displayNode.children;
         const files = displayNode.files || [];
@@ -382,6 +385,7 @@
           : files;
         if (vChildren.length === 1 && vFiles.length === 0) {
           displayName += ' / ' + vChildren[0].name;
+          compactSegments.push({ name: vChildren[0].name, path: vChildren[0].path });
           displayNode = vChildren[0];
         } else {
           break;
@@ -414,7 +418,7 @@
       row.setAttribute('data-vscode-context', JSON.stringify({
         webviewSection: 'directory',
         path: displayNode.path,
-        rootName: state.currentRootName,
+        rootName: state.workspaceFolderName || state.currentRootName,
         preventDefaultContextMenuItems: true
       }));
 
@@ -429,11 +433,35 @@
       chevron.innerHTML = SVG_CHEVRON;
       row.appendChild(chevron);
 
-      // Name
+      // Name — for compacted paths, render each segment separately with dimmed separators
+      // and per-segment data-vscode-context for RMB "copy path" etc on individual segments.
       const nameEl = document.createElement('span');
       nameEl.className = 'dir-name';
-      nameEl.textContent = displayName;
       nameEl.title = displayNode.path || displayName;
+
+      if (compactSegments.length === 1) {
+        nameEl.textContent = compactSegments[0].name;
+      } else {
+        for (let i = 0; i < compactSegments.length; i++) {
+          if (i > 0) {
+            const sep = document.createElement('span');
+            sep.className = 'path-sep';
+            sep.textContent = ' / ';
+            nameEl.appendChild(sep);
+          }
+          const seg = document.createElement('span');
+          seg.className = 'path-segment';
+          seg.textContent = compactSegments[i].name;
+          seg.setAttribute('data-vscode-context', JSON.stringify({
+            webviewSection: 'directory',
+            path: compactSegments[i].path,
+            rootName: state.workspaceFolderName || state.currentRootName,
+            preventDefaultContextMenuItems: true,
+          }));
+          nameEl.appendChild(seg);
+        }
+      }
+
       row.appendChild(nameEl);
 
       // Flex spacer pushes bar + count to the right
@@ -745,6 +773,8 @@
       render: null,
       /** @type {string} */
       currentRootName: '',
+      /** Workspace folder name sent by tabProvider. Empty in sidebar (falls back to currentRootName). */
+      workspaceFolderName: '',
     };
   }
 
@@ -762,6 +792,66 @@
     }
   }
 
+  // Tiered expand for the toolbar/sidebar "expand all" button, mirroring per-dir expand button behaviour.
+  // Workspace folder nodes (roots) are always-visible containers; their children are the top-level
+  // expandable items. The tiers mirror the per-dir button with the virtual workspace root as target:
+  // Tier 1: any top-level item not expanded → expand all top-level items
+  // Tier 2: all top-level items expanded → recursively expand entire subtree
+  function tieredExpandAll(state, roots) {
+    const topLevel = roots.flatMap(r => r.children || []);
+    if (topLevel.length === 0) { return; }
+
+    const allTopExpanded = topLevel.every(node => {
+      const cn = compactedNode(node);
+      return cn.children.length === 0 || state.expanded.get(cn.path);
+    });
+
+    if (!allTopExpanded) {
+      // Tier 1: expand all top-level items that have children
+      for (const node of topLevel) {
+        if (compactedNode(node).children.length > 0) {
+          state.expanded.set(compactedPath(node), true);
+        }
+      }
+      return;
+    }
+
+    // Tier 2: recursively expand entire subtree
+    walkExpand(state, topLevel);
+  }
+
+  // 3-tier collapse for the toolbar/sidebar "collapse all" button, mirroring per-dir collapse button behaviour.
+  // Tier 1: any top-level item has expanded descendants → collapse those (keep top-level items open)
+  // Tier 2: only top-level items expanded (no deeper descendants) → collapse all top-level items
+  // Tier 3: nothing is expanded → no-op
+  function tieredCollapseAll(state, roots) {
+    const topLevel = roots.flatMap(r => r.children || []);
+    if (topLevel.length === 0) { return; }
+
+    const anyTopExpanded = topLevel.some(node => state.expanded.get(compactedPath(node)));
+    if (!anyTopExpanded) {
+      // Tier 3: nothing to collapse
+      return;
+    }
+
+    const anyDeeperExpanded = topLevel.some(node => {
+      const cn = compactedNode(node);
+      return hasExpandedDescendant(state, cn);
+    });
+
+    if (anyDeeperExpanded) {
+      // Tier 1: collapse everything inside top-level items, keep top-level itself open
+      for (const node of topLevel) {
+        const cn = compactedNode(node);
+        walkCollapse(state, cn.children || []);
+      }
+    } else {
+      // Tier 2: collapse all top-level items
+      for (const node of topLevel) {
+        state.expanded.set(compactedPath(node), false);
+      }
+    }
+  }
 
   // Renders the root-level tree rows into treeEl. Shared between sidebar and tab views.
   // Requires state.lastRoots to be set.
@@ -842,12 +932,13 @@
    * @param {{ cssClass?: string }} [opts]
    */
   function renderTree(state, renderer, rootEl, opts) {
-    const maxMetric = computeMaxMetric(state.lastRoots, state.currentSortMode);
+    const maxMetric = computeMaxMetric(state.lastRoots, state.currentSortMode, false);
     const clientWidth = rootEl.clientWidth;
     const treeEl = document.createElement('ul');
     treeEl.className = 'tree' +
       (opts && opts.cssClass ? ' ' + opts.cssClass : '') +
       (state.currentSortMode === 'size' ? ' sort-size' : '');
+
     renderRoots(renderer, state, treeEl, maxMetric, clientWidth);
     rootEl.appendChild(treeEl);
   }
@@ -866,8 +957,8 @@
    *   deps.onAfterRender?(msg) — called inside rAF after render on 'update'
    *   deps.onLoading?() — called after clearing rootEl on 'loading'
    *   deps.onFilter?(hadFilters) — called after filter state update + re-render
-   *   deps.onExpandAll?() — called after walkExpand + re-render
-   *   deps.onCollapseAll?() — called after walkCollapse + re-render
+   *   deps.onExpandAll?() — called after tieredExpandAll + re-render
+   *   deps.onCollapseAll?() — called after tieredCollapseAll + re-render
    * @returns {function} — pass directly to window.addEventListener('message', ...)
    */
   function createMessageHandler(state, scanBar, rootEl, deps) {
@@ -903,14 +994,14 @@
         }
         case 'expandAll':
           if (state.lastRoots) {
-            walkExpand(state, state.lastRoots);
+            tieredExpandAll(state, state.lastRoots);
             deps.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
             if (deps.onExpandAll) { deps.onExpandAll(); }
           }
           break;
         case 'collapseAll':
           if (state.lastRoots) {
-            walkCollapse(state, state.lastRoots);
+            tieredCollapseAll(state, state.lastRoots);
             state.truncationExpanded.clear();
             state.emptyGroupExpanded.clear();
             deps.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
@@ -931,7 +1022,7 @@
     escHtml, formatBytes, sortDirs, sortFiles, computeMaxMetric, groupEmptyDirs,
     createScanBar, createTooltip, createRenderer,
     computeStats, renderLegend, createState,
-    walkExpand, walkCollapse, renderRoots,
+    walkExpand, walkCollapse, tieredExpandAll, tieredCollapseAll, renderRoots,
     createRescanWarning, renderTree, createMessageHandler,
   };
 })();

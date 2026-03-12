@@ -8,7 +8,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private extensionUri: vscode.Uri;
   private lastUpdate: { roots: DirNode[]; autoRescanEnabled: boolean; sortMode: SortMode; truncateThreshold: number } | undefined;
 
-  onExpandChanged?: (hasAny: boolean) => void;
   onRefresh?: () => void;
   onOpenDirInTab?: (dirPath: string) => void;
 
@@ -36,13 +35,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this.getHtml(webviewView.webview);
 
-    webviewView.webview.onDidReceiveMessage((message: { command: string; path?: string; hasAny?: boolean }) => {
+    webviewView.webview.onDidReceiveMessage((message: { command: string; path?: string }) => {
       if (message.command === 'refresh') {
         this.onRefresh?.();
       } else if (message.command === 'openFile' && message.path) {
         vscode.commands.executeCommand('vscode.open', vscode.Uri.file(message.path));
-      } else if (message.command === 'expandChanged') {
-        this.onExpandChanged?.(message.hasAny ?? false);
       } else if (message.command === 'openDirInTab' && message.path) {
         this.onOpenDirInTab?.(message.path);
       }

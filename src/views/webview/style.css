@@ -160,6 +160,16 @@ body {
   font-size: var(--vscode-font-size, 13px);
 }
 
+/* Compacted path rendering: dimmed separator, hoverable segments */
+.path-sep {
+  opacity: 0.4;
+}
+
+.path-segment:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .bar-spacer {
   flex: 1;
   min-width: 8px;
