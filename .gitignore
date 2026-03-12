@@ -4,3 +4,4 @@ out/
 .vscode-test/
 test-repos/
 .claude/
+CLAUDE.md
