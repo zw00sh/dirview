@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.4.0] — 2026-03-13
+
+### Added
+- Editor tab toolbar breadcrumb now shows a dimmed `./ ` prefix before the directory path, pixel-aligned with tree node names below.
+
 ## [0.3.2] — 2026-03-13
 
 ### Fixed
