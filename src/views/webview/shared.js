@@ -48,7 +48,7 @@
     return copy;
   }
 
-  function sortFiles(files, mode) {
+  function sortFiles(files) {
     const copy = files.slice();
     copy.sort((a, b) => a.name.localeCompare(b.name));
     return copy;
@@ -205,7 +205,7 @@
             e.stopPropagation();
             if (state.activeFilters.size > 0) { return; }
             state.expanded.set(ancestor.path, false);
-            state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+            state.rerender();
           });
         }
         container.appendChild(guide);
@@ -399,15 +399,11 @@
       }
 
       const sortedChildren = sortDirs(displayNode.children, state.currentSortMode);
-      const sortedFiles = sortFiles(displayNode.files || [], state.currentSortMode);
+      const sortedFiles = sortFiles(displayNode.files || []);
 
       // Apply language filter
-      const visibleChildren = state.activeFilters.size > 0
-        ? sortedChildren.filter(c => dirMatchesFilter(c))
-        : sortedChildren;
-      const visibleFiles = state.activeFilters.size > 0
-        ? sortedFiles.filter(f => state.activeFilters.has(f.langName))
-        : sortedFiles;
+      const visibleChildren = getVisibleChildren(sortedChildren, state.activeFilters, dirMatchesFilter);
+      const visibleFiles = getVisibleFiles(sortedFiles, state.activeFilters);
 
       const hasChildren = visibleChildren.length > 0 || visibleFiles.length > 0;
 
@@ -594,7 +590,7 @@
               }
             }
           }
-          state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+          state.rerender();
         });
         actionsEl.appendChild(expandBtn);
 
@@ -634,7 +630,7 @@
             // Tier 3: no children expanded → collapse target itself
             state.expanded.set(displayNode.path, false);
           }
-          state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+          state.rerender();
         });
         actionsEl.appendChild(collapseBtn);
       }
@@ -700,7 +696,7 @@
           // Reset truncation when collapsing so it re-truncates on next expand
           if (!nowExpanded && state.truncationExpanded.has(displayNode.path)) {
             state.truncationExpanded.delete(displayNode.path);
-            state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+            state.rerender();
             return;
           }
 
@@ -760,7 +756,7 @@
 
   // Create a fresh webview state object with default values.
   function createState() {
-    return {
+    const state = {
       activeFilters: new Set(),
       expanded: new Map(),
       truncationExpanded: new Set(),
@@ -776,6 +772,9 @@
       /** Workspace folder name sent by tabProvider. Empty in sidebar (falls back to currentRootName). */
       workspaceFolderName: '',
     };
+    // Convenience shorthand: re-renders with the current roots/flags without re-passing them explicitly.
+    state.rerender = () => state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+    return state;
   }
 
   function walkExpand(state, nodes) {
@@ -853,6 +852,14 @@
     }
   }
 
+  // Filter helpers — shared by renderDirNode and renderRoots.
+  function getVisibleChildren(sortedChildren, activeFilters, matchFn) {
+    return activeFilters.size > 0 ? sortedChildren.filter(matchFn) : sortedChildren;
+  }
+  function getVisibleFiles(sortedFiles, activeFilters) {
+    return activeFilters.size > 0 ? sortedFiles.filter(f => activeFilters.has(f.langName)) : sortedFiles;
+  }
+
   // Renders the root-level tree rows into treeEl. Shared between sidebar and tab views.
   // Requires state.lastRoots to be set.
   function renderRoots(renderer, state, treeEl, maxMetric, clientWidth) {
@@ -867,13 +874,9 @@
         treeEl.appendChild(header);
       }
       const sortedChildren = sortDirs(r.children, state.currentSortMode);
-      const sortedFiles = sortFiles(r.files || [], state.currentSortMode);
-      const visibleChildren = state.activeFilters.size > 0
-        ? sortedChildren.filter(c => renderer.dirMatchesFilter(c))
-        : sortedChildren;
-      const visibleFiles = state.activeFilters.size > 0
-        ? sortedFiles.filter(f => state.activeFilters.has(f.langName))
-        : sortedFiles;
+      const sortedFiles = sortFiles(r.files || []);
+      const visibleChildren = getVisibleChildren(sortedChildren, state.activeFilters, c => renderer.dirMatchesFilter(c));
+      const visibleFiles = getVisibleFiles(sortedFiles, state.activeFilters);
       if (state.activeFilters.size === 0 && visibleChildren.length > 0) {
         for (const group of groupEmptyDirs(visibleChildren)) {
           if (group.type === 'emptyGroup') {
@@ -975,6 +978,7 @@
           break;
         case 'update':
           if (deps.onBeforeUpdate) { deps.onBeforeUpdate(message); }
+          scanBar.show(true);
           requestAnimationFrame(() => {
             const sortMode = deps.resolveUpdateSortMode ? deps.resolveUpdateSortMode(message) : message.sortMode;
             deps.render(message.roots, message.autoRescanEnabled, sortMode);
@@ -987,7 +991,7 @@
           state.activeFilters = new Set(message.langs || []);
           if (!hadFilters && state.activeFilters.size > 0) { state.expanded.clear(); }
           if (state.lastRoots) {
-            deps.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+            state.rerender();
           }
           if (deps.onFilter) { deps.onFilter(hadFilters); }
           break;
@@ -995,7 +999,7 @@
         case 'expandAll':
           if (state.lastRoots) {
             tieredExpandAll(state, state.lastRoots);
-            deps.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+            state.rerender();
             if (deps.onExpandAll) { deps.onExpandAll(); }
           }
           break;
@@ -1004,7 +1008,7 @@
             tieredCollapseAll(state, state.lastRoots);
             state.truncationExpanded.clear();
             state.emptyGroupExpanded.clear();
-            deps.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+            state.rerender();
             if (deps.onCollapseAll) { deps.onCollapseAll(); }
           }
           break;
@@ -1018,7 +1022,7 @@
 
   window.DirviewShared = {
     SVG_CHEVRON, SVG_PLUS, SVG_WARNING,
-    SVG_EYE, SVG_EYE_CLOSED, SVG_FOLD, SVG_UNFOLD, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_TARGET, SVG_OPEN_IN_TAB,
+    SVG_EYE, SVG_EYE_CLOSED, SVG_FOLD, SVG_UNFOLD, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_OPEN_IN_TAB,
     escHtml, formatBytes, sortDirs, sortFiles, computeMaxMetric, groupEmptyDirs,
     createScanBar, createTooltip, createRenderer,
     computeStats, renderLegend, createState,

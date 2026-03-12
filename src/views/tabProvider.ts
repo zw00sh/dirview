@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { DirNode } from '../scanner/types';
-import { getNonce } from './getNonce';
+import { buildWebviewHtml } from './buildWebviewHtml';
+import { handleCommonMessage } from './providerUtils';
 
 export class TabProvider {
   // Map from directory path (relative to workspace root, '' for root) → WebviewPanel.
@@ -13,7 +14,6 @@ export class TabProvider {
   private lastAutoRescanEnabled: boolean = true;
   private lastShowIgnored: boolean = false;
 
-  onFilterChange: ((langs: string[]) => void) | undefined;
   getConfiguredThreshold: (() => number) | undefined;
   onRefresh: (() => void) | undefined;
   onOpenDirInTab: ((dirPath: string) => void) | undefined;
@@ -103,21 +103,17 @@ export class TabProvider {
     };
     panel.webview.html = this.getHtml(panel.webview);
 
-    panel.webview.onDidReceiveMessage((message: { command: string; path?: string; langs?: string[]; show?: boolean; enabled?: boolean }) => {
-      if (message.command === 'refresh') {
-        this.onRefresh?.();
-      } else if (message.command === 'openFile' && message.path) {
-        vscode.commands.executeCommand('vscode.open', vscode.Uri.file(message.path));
-      } else if (message.command === 'filter') {
-        this.onFilterChange?.(message.langs ?? []);
-      } else if (message.command === 'toggleIgnored') {
+    panel.webview.onDidReceiveMessage((message: { command: string; path?: string; show?: boolean; enabled?: boolean }) => {
+      if (handleCommonMessage(message, {
+        onRefresh: this.onRefresh,
+        onOpenDirInTab: this.onOpenDirInTab,
+      })) { return; }
+      if (message.command === 'toggleIgnored') {
         vscode.commands.executeCommand(message.show ? 'dirview.toggleIgnored' : 'dirview.toggleIgnoredOff');
       } else if (message.command === 'toggleTruncation') {
         const enabled: boolean = message.enabled ?? true;
         const threshold = enabled ? (this.getConfiguredThreshold?.() ?? 4) : 0;
         this.updateTruncation(threshold, enabled);
-      } else if (message.command === 'openDirInTab' && message.path) {
-        this.onOpenDirInTab?.(message.path);
       } else if (message.command === 'navigateToDir' && typeof message.path === 'string') {
         // Find the current dirPath for this panel by searching the map by reference.
         let currentPath: string | undefined;
@@ -217,36 +213,13 @@ export class TabProvider {
   }
 
   private getHtml(webview: vscode.Webview): string {
-    const nonce = getNonce();
-    const sharedScriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'shared.js')
-    );
-    const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'tab.js')
-    );
-    const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'style.css')
-    );
-    const langStyleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'languages.css')
-    );
-    const tabStyleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'tab.css')
-    );
-
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link href="${styleUri}" rel="stylesheet">
-  <link href="${langStyleUri}" rel="stylesheet">
-  <link href="${tabStyleUri}" rel="stylesheet">
-  <title>Breakdown</title>
-</head>
-<body class="tab-view" data-vscode-context='{"preventDefaultContextMenuItems": true}'>
-  <div id="legend-section" class="tab-legend-section" style="display:none">
+    return buildWebviewHtml(webview, this.extensionUri, {
+      scripts: ['shared.js', 'tab.js'],
+      styles: ['style.css', 'languages.css', 'tab.css'],
+      title: 'Breakdown',
+      bodyClass: 'tab-view',
+      bodyAttrs: `data-vscode-context='{"preventDefaultContextMenuItems": true}'`,
+      bodyHtml: `  <div id="legend-section" class="tab-legend-section" style="display:none">
     <div id="legend-header" class="tab-legend-header">
       <span id="legend-chevron" class="tab-legend-header-chevron"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M6.146 3.146a.5.5 0 0 0 0 .707l4.146 4.146-4.146 4.146a.5.5 0 0 0 .707.707l4.5-4.5a.5.5 0 0 0 0-.707l-4.5-4.5a.5.5 0 0 0-.707 0Z"/></svg></span>
       <span class="tab-legend-header-title">Languages</span>
@@ -264,11 +237,7 @@ export class TabProvider {
       <button class="tab-action" id="tab-expand-all" title="Expand All" aria-label="Expand All"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M15 6v5c0 2.21-1.79 4-4 4H6c-.74 0-1.38-.4-1.73-1H11c1.65 0 3-1.35 3-3V4.27c.6.35 1 .99 1 1.73Zm-4 7H4c-1.103 0-2-.897-2-2V4c0-1.103.897-2 2-2h7c1.103 0 2 .897 2 2v7c0 1.103-.897 2-2 2Zm-7-1h7c.551 0 1-.448 1-1V4c0-.551-.449-1-1-1H4c-.551 0-1 .449-1 1v7c0 .552.449 1 1 1Zm5.5-5H8V5.5a.5.5 0 0 0-1 0V7H5.5a.5.5 0 0 0 0 1H7v1.5a.5.5 0 0 0 1 0V8h1.5a.5.5 0 0 0 0-1Z"/></svg></button>
       <button class="tab-action" id="tab-collapse-all" title="Collapse All" aria-label="Collapse All"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M14 4.27c.6.35 1 .99 1 1.73v5c0 2.21-1.79 4-4 4H6c-.74 0-1.38-.4-1.73-1H11c1.65 0 3-1.35 3-3V4.27ZM9.5 7a.5.5 0 0 1 0 1h-4a.5.5 0 0 1 0-1h4Z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M11 2c1.103 0 2 .897 2 2v7c0 1.103-.897 2-2 2H4c-1.103 0-2-.897-2-2V4c0-1.103.897-2 2-2h7ZM4 3c-.551 0-1 .449-1 1v7c0 .552.449 1 1 1h7c.551 0 1-.448 1-1V4c0-.551-.449-1-1-1H4Z"/></svg></button>
     </div>
-  </div>
-  <div id="root"></div>
-  <script nonce="${nonce}" src="${sharedScriptUri}"></script>
-  <script nonce="${nonce}" src="${scriptUri}"></script>
-</body>
-</html>`;
+  </div>`,
+    });
   }
 }

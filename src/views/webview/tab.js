@@ -77,14 +77,14 @@
   expandAllBtn.addEventListener('click', () => {
     if (!state.lastRoots) { return; }
     S.tieredExpandAll(state, state.lastRoots);
-    render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+    state.rerender();
   });
   collapseAllBtn.addEventListener('click', () => {
     if (!state.lastRoots) { return; }
     S.tieredCollapseAll(state, state.lastRoots);
     state.truncationExpanded.clear();
     state.emptyGroupExpanded.clear();
-    render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+    state.rerender();
   });
   legendHeader.addEventListener('click', () => {
     legendCollapsed = !legendCollapsed;
@@ -101,7 +101,7 @@
       state.expanded.clear();
     }
     vscode.postMessage({ command: 'filter', langs: [...state.activeFilters] });
-    render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+    state.rerender();
   }
 
   function updateLegend(stats) {
@@ -227,7 +227,7 @@
         currentTruncationEnabled = message.truncationEnabled;
         updateTruncationBtn();
       }
-      if (state.lastRoots) { render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode); }
+      if (state.lastRoots) { state.rerender(); }
       return;
     }
     sharedHandler(event);

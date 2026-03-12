@@ -78,13 +78,13 @@ describe('sortFiles', () => {
   ];
 
   it('sorts alphabetically', () => {
-    const result = S.sortFiles(files, 'files');
+    const result = S.sortFiles(files);
     expect(result.map(f => f.name)).toEqual(['alpha.ts', 'Middle.ts', 'zebra.ts']);
   });
 
   it('does not mutate input', () => {
     const original = [...files];
-    S.sortFiles(files, 'files');
+    S.sortFiles(files);
     expect(files).toEqual(original);
   });
 });

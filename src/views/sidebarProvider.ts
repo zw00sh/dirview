@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { DirNode } from '../scanner/types';
 import { SortMode } from '../config';
-import { getNonce } from './getNonce';
+import { buildWebviewHtml } from './buildWebviewHtml';
+import { handleCommonMessage, setupVisibilityReplay } from './providerUtils';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
@@ -36,28 +37,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     webviewView.webview.html = this.getHtml(webviewView.webview);
 
     webviewView.webview.onDidReceiveMessage((message: { command: string; path?: string }) => {
-      if (message.command === 'refresh') {
-        this.onRefresh?.();
-      } else if (message.command === 'openFile' && message.path) {
-        vscode.commands.executeCommand('vscode.open', vscode.Uri.file(message.path));
-      } else if (message.command === 'openDirInTab' && message.path) {
-        this.onOpenDirInTab?.(message.path);
-      }
+      handleCommonMessage(message, {
+        onRefresh: this.onRefresh,
+        onOpenDirInTab: this.onOpenDirInTab,
+      });
     });
 
-    webviewView.onDidChangeVisibility(() => {
-      if (webviewView.visible && this.lastUpdate) {
-        webviewView.webview.postMessage({ type: 'update', ...this.lastUpdate });
-      }
-    });
-
-    if (this.lastUpdate) {
-      setTimeout(() => {
-        if (this.lastUpdate) {
-          webviewView.webview.postMessage({ type: 'update', ...this.lastUpdate });
-        }
-      }, 100);
-    }
+    setupVisibilityReplay(webviewView, () =>
+      this.lastUpdate ? { type: 'update', ...this.lastUpdate } : undefined
+    );
   }
 
   // Only show loading indicator on first load (when no data exists yet)
@@ -108,32 +96,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }
 
   private getHtml(webview: vscode.Webview): string {
-    const nonce = getNonce();
-
-    const sharedScriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'shared.js')
-    );
-    const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'main.js')
-    );
-    const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'style.css')
-    );
-
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link href="${styleUri}" rel="stylesheet">
-  <title>Directory Breakdown</title>
-</head>
-<body data-vscode-context='{"preventDefaultContextMenuItems": true}'>
-  <div id="root"></div>
-  <script nonce="${nonce}" src="${sharedScriptUri}"></script>
-  <script nonce="${nonce}" src="${scriptUri}"></script>
-</body>
-</html>`;
+    return buildWebviewHtml(webview, this.extensionUri, {
+      scripts: ['shared.js', 'main.js'],
+      styles: ['style.css'],
+      title: 'Directory Breakdown',
+      bodyAttrs: `data-vscode-context='{"preventDefaultContextMenuItems": true}'`,
+    });
   }
 }

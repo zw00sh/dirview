@@ -27,7 +27,7 @@
   window.addEventListener('message', (event) => {
     const message = event.data;
     if (message.type === 'update') {
-      currentStats = message.stats;
+      currentStats = S.computeStats(message.roots || []);
       if (message.activeFilters !== undefined) {
         activeFilters = new Set(message.activeFilters);
       }

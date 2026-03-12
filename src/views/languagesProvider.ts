@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { DirNode } from '../scanner/types';
-import { getNonce } from './getNonce';
+import { buildWebviewHtml } from './buildWebviewHtml';
+import { setupVisibilityReplay } from './providerUtils';
 
 export class LanguagesProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
@@ -33,20 +34,14 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
       }
     });
 
-    webviewView.onDidChangeVisibility(() => {
-      if (webviewView.visible && this.lastRoots) {
-        this.postUpdate();
-      }
-    });
-
-    if (this.lastRoots) {
-      setTimeout(() => this.postUpdate(), 100);
-    }
+    setupVisibilityReplay(webviewView, () =>
+      this.lastRoots ? { type: 'update', roots: this.lastRoots, activeFilters: this.activeFilters } : undefined
+    );
   }
 
   update(roots: DirNode[]): void {
     this.lastRoots = roots;
-    this.postUpdate();
+    this.view?.webview.postMessage({ type: 'update', roots, activeFilters: this.activeFilters });
   }
 
   setFilter(langs: string[]): void {
@@ -54,60 +49,12 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
     this.view?.webview.postMessage({ type: 'filter', langs });
   }
 
-  private postUpdate(): void {
-    if (!this.lastRoots) { return; }
-    const stats = computeStats(this.lastRoots);
-    this.view?.webview.postMessage({ type: 'update', stats, activeFilters: this.activeFilters });
-  }
-
   private getHtml(webview: vscode.Webview): string {
-    const nonce = getNonce();
-    const sharedScriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'shared.js')
-    );
-    const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'languages.js')
-    );
-    const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'languages.css')
-    );
-
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link href="${styleUri}" rel="stylesheet">
-  <title>Languages</title>
-</head>
-<body>
-  <div id="root"></div>
-  <script nonce="${nonce}" src="${sharedScriptUri}"></script>
-  <script nonce="${nonce}" src="${scriptUri}"></script>
-</body>
-</html>`;
+    return buildWebviewHtml(webview, this.extensionUri, {
+      scripts: ['shared.js', 'languages.js'],
+      styles: ['languages.css'],
+      title: 'Languages',
+    });
   }
 }
 
-function computeStats(roots: DirNode[]): Array<{ name: string; color: string; count: number; pct: string }> {
-  const counts = new Map<string, { color: string; count: number }>();
-  let total = 0;
-  for (const r of roots) {
-    for (const s of r.stats) {
-      const existing = counts.get(s.name);
-      if (existing) {
-        existing.count += s.count;
-      } else {
-        counts.set(s.name, { color: s.color, count: s.count });
-      }
-    }
-    total += r.totalFiles;
-  }
-  return Array.from(counts.entries())
-    .map(([name, { color, count }]) => ({
-      name, color, count,
-      pct: total > 0 ? ((count / total) * 100).toFixed(1) : '0',
-    }))
-    .sort((a, b) => b.count - a.count);
-}
