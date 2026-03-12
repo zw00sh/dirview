@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.2] — 2026-03-13
+
+### Fixed
+- Scan bar animation no longer freezes during heavy tree renders (GPU-composited transform instead of main-thread background-position).
+- Scan bar now actually appears during local re-renders (expand all, toggle truncation, sort change) — previously it was shown and hidden before the browser could paint.
+
 ## [0.3.1] — 2026-03-12
 
 ### Fixed

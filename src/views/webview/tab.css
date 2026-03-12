@@ -15,7 +15,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 12px 6px 8px;
+  padding: 6px 12px 6px 0;
   border-bottom: 1px solid var(--vscode-sideBar-border, rgba(128,128,128,0.2));
   gap: 8px;
 }
@@ -29,6 +29,20 @@ body {
 .tab-title {
   font-size: var(--vscode-font-size);
   color: var(--vscode-icon-foreground);
+  position: relative;
+  /* Indent matches depth-0 tree node name start (measured: 24px from left edge) */
+  padding-left: 24px;
+}
+
+/* './ ' prefix with trailing space: right-edge anchored to the content start
+ * (padding-left: 16px) so 'source' stays aligned with depth-0 tree names.
+ * white-space: pre preserves the trailing space for a 1-space gap. */
+.tab-title::before {
+  content: './ ';
+  position: absolute;
+  right: calc(100% - 24px);
+  opacity: 0.4;
+  white-space: pre;
 }
 
 .tab-title-sort {

@@ -127,7 +127,10 @@
     sortBtn.setAttribute('aria-label', sortBtn.title);
 
     // Toolbar title: clickable breadcrumb showing current directory path + dimmed sort indicator.
+    // The './' prefix is rendered via CSS ::before on .tab-title, positioned absolutely so it
+    // doesn't push 'source' rightward — allowing 'source' to align with depth-0 tree node names.
     tabTitleEl.innerHTML = '';
+
     if (!state.dirPath) {
       // Workspace root — show the workspace folder name (or "/" as fallback)
       const rootSeg = document.createElement('span');
