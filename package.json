@@ -1,0 +1,226 @@
+{
+  "name": "dirview",
+  "displayName": "Directory Breakdown",
+  "description": "Visualize per-directory file type composition as GitHub-style colored proportional bars",
+  "version": "0.1.0",
+  "publisher": "zwoosh",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zwoosh/dirview"
+  },
+  "bugs": {
+    "url": "https://github.com/zwoosh/dirview/issues"
+  },
+  "homepage": "https://github.com/zwoosh/dirview#readme",
+  "keywords": [
+    "file-types",
+    "directory",
+    "visualization",
+    "language",
+    "composition",
+    "linguist",
+    "bar-chart"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "icon": "media/dirview-icon.png",
+  "categories": [
+    "Visualization"
+  ],
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "activationEvents": [
+    "onView:dirview.sidebar",
+    "onView:dirview.languages"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "dirview-container",
+          "title": "Directory Breakdown",
+          "icon": "media/dirview-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "dirview-container": [
+        {
+          "type": "webview",
+          "id": "dirview.languages",
+          "name": "Languages"
+        },
+        {
+          "type": "webview",
+          "id": "dirview.sidebar",
+          "name": "Tree"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "dirview.toggleIgnored",
+        "title": "Show Ignored Files",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "dirview.toggleIgnoredOff",
+        "title": "Hide Ignored Files",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "dirview.cycleSort",
+        "title": "Cycle Sort Order (Files / Name / Size)",
+        "icon": "$(list-ordered)"
+      },
+      {
+        "command": "dirview.toggleTruncation",
+        "title": "Enable File Truncation",
+        "icon": "$(fold)"
+      },
+      {
+        "command": "dirview.toggleTruncationOff",
+        "title": "Disable File Truncation",
+        "icon": "$(unfold)"
+      },
+      {
+        "command": "dirview.openInTab",
+        "title": "Open in Editor Tab",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "dirview.expandAll",
+        "title": "Expand All",
+        "icon": "$(expand-all)"
+      },
+      {
+        "command": "dirview.collapseAll",
+        "title": "Collapse All",
+        "icon": "$(collapse-all)"
+      },
+      {
+        "command": "dirview.contextCopyPath",
+        "title": "Copy Path"
+      },
+      {
+        "command": "dirview.contextRevealInExplorer",
+        "title": "Reveal in Explorer"
+      },
+      {
+        "command": "dirview.contextOpenFile",
+        "title": "Open File"
+      },
+      {
+        "command": "dirview.contextOpenInTerminal",
+        "title": "Open in Integrated Terminal"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "dirview.toggleIgnored",
+          "when": "view == dirview.sidebar && !dirview.showIgnored",
+          "group": "navigation@2"
+        },
+        {
+          "command": "dirview.toggleIgnoredOff",
+          "when": "view == dirview.sidebar && dirview.showIgnored",
+          "group": "navigation@2"
+        },
+        {
+          "command": "dirview.cycleSort",
+          "when": "view == dirview.sidebar",
+          "group": "navigation@1"
+        },
+        {
+          "command": "dirview.toggleTruncation",
+          "when": "view == dirview.sidebar && !dirview.truncationEnabled",
+          "group": "navigation@3"
+        },
+        {
+          "command": "dirview.toggleTruncationOff",
+          "when": "view == dirview.sidebar && dirview.truncationEnabled",
+          "group": "navigation@3"
+        },
+        {
+          "command": "dirview.openInTab",
+          "when": "view == dirview.sidebar",
+          "group": "navigation@7"
+        },
+        {
+          "command": "dirview.expandAll",
+          "when": "view == dirview.sidebar && !dirview.allExpanded",
+          "group": "navigation@5"
+        },
+        {
+          "command": "dirview.collapseAll",
+          "when": "view == dirview.sidebar && dirview.allExpanded",
+          "group": "navigation@5"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "dirview.contextCopyPath",
+          "when": "webviewSection == 'file' || webviewSection == 'directory'"
+        },
+        {
+          "command": "dirview.contextRevealInExplorer",
+          "when": "webviewSection == 'file' || webviewSection == 'directory'"
+        },
+        {
+          "command": "dirview.contextOpenFile",
+          "when": "webviewSection == 'file'"
+        },
+        {
+          "command": "dirview.contextOpenInTerminal",
+          "when": "webviewSection == 'directory'"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Directory Breakdown",
+      "properties": {
+        "dirview.autoRescanThreshold": {
+          "type": "number",
+          "default": 10000,
+          "description": "Maximum number of files before auto-rescan is disabled. Use the inline Refresh button in the warning banner for large repos."
+        },
+        "dirview.maxDepth": {
+          "type": "number",
+          "default": 10,
+          "description": "Maximum directory depth to scan."
+        },
+        "dirview.truncateThreshold": {
+          "type": "number",
+          "default": 3,
+          "description": "Maximum files shown per directory before truncation. Set to 0 to disable."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "node esbuild.mjs && node scripts/copyWebview.js",
+    "watch": "node scripts/watchAll.js",
+    "watch:tsc": "tsc -watch -p ./",
+    "copy-webview": "node scripts/copyWebview.js",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/minimatch": "^5.1.2",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.25.12",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "dependencies": {
+    "ignore": "^5.3.0",
+    "linguist-languages": "^7.27.0",
+    "minimatch": "^9.0.3"
+  }
+}

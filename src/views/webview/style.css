@@ -1,0 +1,361 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+  background: var(--vscode-sideBar-background);
+  padding: 0;
+}
+
+#root {
+  padding: 4px 0;
+}
+
+/* Loading state */
+.loading {
+  padding: 16px;
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+}
+
+/* Error state */
+.error {
+  padding: 12px;
+  color: var(--vscode-errorForeground);
+}
+
+/* Tree */
+.tree {
+  list-style: none;
+}
+
+/* Directory row */
+.dir-row {
+  display: flex;
+  align-items: center;
+  padding: 1px 0;
+  cursor: pointer;
+  user-select: none;
+  gap: 4px;
+  min-height: 22px;
+  overflow: hidden;
+}
+
+.dir-row:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+/* File row */
+.file-row {
+  display: flex;
+  align-items: center;
+  padding: 1px 0;
+  gap: 4px;
+  min-height: 22px;
+  cursor: default;
+  overflow: hidden;
+}
+
+.file-row.clickable {
+  cursor: pointer;
+}
+
+.file-row:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.indent-guides {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-self: stretch;
+}
+
+.indent-guide {
+  width: 8px;
+  position: relative;
+  cursor: pointer;
+}
+
+.indent-guide::before {
+  content: '';
+  position: absolute;
+  left: 75%;
+  top: -1px;
+  bottom: -1px;
+  width: 1px;
+  background: var(--vscode-tree-inactiveIndentGuidesStroke, rgba(128,128,128,0.2));
+}
+
+.indent-guide.hovered::before {
+  background: var(--vscode-tree-indentGuidesStroke, rgba(128,128,128,0.6));
+}
+
+.chevron {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--vscode-descriptionForeground);
+  transition: transform 0.1s;
+}
+
+.chevron.open {
+  transform: rotate(90deg);
+}
+
+.chevron.leaf {
+  visibility: hidden;
+}
+
+/* Colored dot for file language */
+.file-dot {
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.dir-name, .file-name {
+  flex: 0 1 auto;
+  min-width: 40px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--vscode-font-size, 13px);
+}
+
+.bar-spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+.bar-wrap {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  width: 100%;
+  background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.12));
+}
+
+.bar-segment {
+  height: 100%;
+  min-width: 2px;
+  transition: opacity 0.1s;
+  cursor: default;
+}
+
+.bar-segment:hover {
+  opacity: 0.8;
+}
+
+.file-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+  width: 52px;
+  text-align: left;
+  padding-right: 8px;
+}
+
+/* Size mode needs wider column for "884 KB" etc. in dir rows */
+.tree.sort-size .file-count { width: 72px; }
+
+/* Sidebar has no count column — pad rows (not the tree) so hover highlight reaches the panel edge */
+.tree.sidebar .dir-row,
+.tree.sidebar .file-row { padding-right: 8px; }
+
+/* In the sidebar, file-count is only used for empty-dir "—". Override width/padding so it
+   aligns with the right-side file dot (9px wide, abutting the 8px row padding-right). */
+.tree.sidebar .file-count {
+  width: auto;
+  padding-right: 0;
+}
+
+/* Children */
+.children {
+  display: none;
+}
+
+.children.open {
+  display: block;
+}
+
+/* Empty state */
+.empty {
+  padding: 16px 12px;
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+  font-size: 12px;
+}
+
+/* Auto-rescan warning */
+.rescan-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--vscode-inputValidation-warningBackground, rgba(200,150,0,0.1));
+  border-bottom: 1px solid var(--vscode-inputValidation-warningBorder, rgba(200,150,0,0.3));
+  font-size: 12px;
+  color: var(--vscode-inputValidation-warningForeground, inherit);
+}
+
+.rescan-btn {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  border-radius: 2px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.rescan-btn:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+/* Scan progress bar */
+.scan-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--vscode-progressBar-background, #007acc) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: scan-slide 1.5s linear infinite;
+  z-index: 1000;
+  display: none;
+}
+
+.scan-progress.active {
+  display: block;
+}
+
+@keyframes scan-slide {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Bar hover tooltip */
+.bar-tooltip {
+  position: fixed;
+  background: var(--vscode-editorHoverWidget-background, #252526);
+  border: 1px solid var(--vscode-editorHoverWidget-border, #454545);
+  color: var(--vscode-editorHoverWidget-foreground, inherit);
+  border-radius: 3px;
+  padding: 6px 8px;
+  font-size: 12px;
+  z-index: 9999;
+  display: none;
+  min-width: 160px;
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0,0,0,0.16));
+  pointer-events: none;
+}
+
+.bar-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.bar-tooltip-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.bar-tooltip-name {
+  flex: 1;
+  white-space: nowrap;
+}
+
+.bar-tooltip-pct {
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+.bar-tooltip-count {
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+  min-width: 48px;
+  text-align: right;
+}
+
+/* Truncated rows and empty group/dir rows — uniform dim color */
+.truncated-row .dir-name,
+.empty-group-row .dir-name,
+.empty-dir .dir-name {
+  color: var(--vscode-descriptionForeground);
+  opacity: 0.5;
+}
+
+.truncated-row .chevron svg,
+.empty-group-row .chevron svg {
+  transform: scale(0.65);
+}
+
+.truncated-dots {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+/* Drill-down back row */
+.chevron.back {
+  transform: rotate(180deg);
+  color: var(--vscode-textLink-foreground, var(--vscode-descriptionForeground));
+}
+
+.drill-back-li {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--vscode-sideBar-background);
+}
+
+.drill-back-row {
+  border-bottom: 1px solid var(--vscode-tree-inactiveIndentGuidesStroke, rgba(128,128,128,0.2));
+  margin-bottom: 2px;
+}
+
+/* Multi-root workspace folder separator */
+.workspace-root-header {
+  list-style: none;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-foreground));
+  padding: 8px 8px 2px 4px;
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
