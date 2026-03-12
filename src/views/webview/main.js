@@ -30,17 +30,7 @@
     root.innerHTML = '';
 
     if (!autoRescanEnabled) {
-      const warn = document.createElement('div');
-      warn.className = 'rescan-warning';
-      warn.innerHTML = `
-        <span class="rescan-warning-icon">${S.SVG_WARNING}</span>
-        <span>Auto-rescan disabled (large repo)</span>
-        <button class="rescan-btn" id="manual-refresh">Refresh</button>
-      `;
-      warn.querySelector('#manual-refresh').addEventListener('click', () => {
-        vscode.postMessage({ command: 'refresh' });
-      });
-      root.appendChild(warn);
+      root.appendChild(S.createRescanWarning(vscode));
     }
 
     if (!roots || roots.length === 0) {
@@ -51,74 +41,31 @@
       return;
     }
 
-    S.pruneDrillStack(state);
-    const maxMetric = S.computeMaxMetric(S.getDrillRoots(state), state.currentSortMode);
-    const clientWidth = root.clientWidth;
-
-    const treeEl = document.createElement('ul');
-    treeEl.className = 'tree sidebar' + (state.currentSortMode === 'size' ? ' sort-size' : '');
-    S.renderRoots(renderer, state, treeEl, maxMetric, clientWidth);
-    root.appendChild(treeEl);
+    S.renderTree(state, renderer, root, { cssClass: 'sidebar' });
   }
 
   state.render = render;
 
-  window.addEventListener('message', (event) => {
-    const message = event.data;
-    switch (message.type) {
-      case 'scanning':
-        scanBar.show(true);
-        break;
-      case 'loading':
-        scanBar.show(false);
-        root.innerHTML = '<div class="loading">Scanning workspace…</div>';
-        break;
-      case 'update':
-        if (typeof message.truncateThreshold === 'number') {
-          if (message.truncateThreshold !== state.truncateThreshold) {
-            state.truncationExpanded.clear();
-            state.emptyGroupExpanded.clear();
-          }
-          state.truncateThreshold = message.truncateThreshold;
-        }
-        requestAnimationFrame(() => {
-          render(message.roots, message.autoRescanEnabled, message.sortMode);
-          scanBar.show(false);
-          vscode.postMessage({ command: 'expandChanged', hasAny: [...state.expanded.values()].some(v => v) });
-        });
-        break;
-      case 'filter': {
-        const hadFilters = state.activeFilters.size > 0;
-        state.activeFilters = new Set(message.langs || []);
-        if (!hadFilters && state.activeFilters.size > 0) { state.expanded.clear(); }
-        if (state.lastRoots) {
-          render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
-        }
-        if (state.activeFilters.size > 0) {
-          vscode.postMessage({ command: 'expandChanged', hasAny: true });
-        }
-        break;
-      }
-      case 'expandAll':
-        if (state.lastRoots) {
-          S.walkExpand(state, S.getDrillRoots(state));
-          render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
-        }
-        break;
-      case 'collapseAll':
-        if (state.lastRoots) {
-          S.walkCollapse(state, S.getDrillRoots(state));
+  window.addEventListener('message', S.createMessageHandler(state, scanBar, root, {
+    render,
+    onBeforeUpdate: (message) => {
+      if (typeof message.truncateThreshold === 'number') {
+        if (message.truncateThreshold !== state.truncateThreshold) {
           state.truncationExpanded.clear();
           state.emptyGroupExpanded.clear();
-          render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
         }
-        break;
-      case 'error':
-        scanBar.show(false);
-        root.innerHTML = `<div class="error">Error: ${S.escHtml(message.message)}</div>`;
-        break;
-    }
-  });
+        state.truncateThreshold = message.truncateThreshold;
+      }
+    },
+    onAfterRender: () => {
+      vscode.postMessage({ command: 'expandChanged', hasAny: [...state.expanded.values()].some(v => v) });
+    },
+    onFilter: () => {
+      if (state.activeFilters.size > 0) {
+        vscode.postMessage({ command: 'expandChanged', hasAny: true });
+      }
+    },
+  }));
 
   root.innerHTML = '<div class="loading">Initializing…</div>';
   scanBar.show(true);

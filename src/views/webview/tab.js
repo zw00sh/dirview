@@ -146,15 +146,7 @@
     root.innerHTML = '';
 
     if (!autoRescanEnabled) {
-      const warn = document.createElement('div');
-      warn.className = 'rescan-warning';
-      warn.innerHTML = `
-        <span class="rescan-warning-icon">${S.SVG_WARNING}</span>
-        <span>Auto-rescan disabled (large repo)</span>
-        <button class="rescan-btn" id="warn-refresh">Refresh</button>
-      `;
-      warn.querySelector('#warn-refresh').addEventListener('click', () => vscode.postMessage({ command: 'refresh' }));
-      root.appendChild(warn);
+      root.appendChild(S.createRescanWarning(vscode));
     }
 
     if (!roots || roots.length === 0) {
@@ -165,88 +157,60 @@
       return;
     }
 
-    const maxMetric = S.computeMaxMetric(S.getDrillRoots(state), state.currentSortMode);
-    const clientWidth = root.clientWidth;
-
-    const treeEl = document.createElement('ul');
-    treeEl.className = 'tree' + (state.currentSortMode === 'size' ? ' sort-size' : '');
-    S.renderRoots(renderer, state, treeEl, maxMetric, clientWidth);
-    root.appendChild(treeEl);
+    S.renderTree(state, renderer, root);
   }
 
   state.render = render;
 
   // ── Message handler ─────────────────────────────────────────────────────
 
+  const sharedHandler = S.createMessageHandler(state, scanBar, root, {
+    render,
+    resolveUpdateSortMode: () => state.currentSortMode || 'files',
+    onBeforeUpdate: (message) => {
+      currentShowIgnored = message.showIgnored || false;
+      updateToggleIgnoredBtn();
+    },
+    onAfterRender: () => {
+      allExpanded = [...state.expanded.values()].some(v => v);
+      updateExpandCollapseBtn();
+    },
+    onLoading: () => {
+      legendSection.style.display = 'none';
+    },
+    onFilter: (hadFilters) => {
+      if (!hadFilters && state.activeFilters.size > 0) {
+        allExpanded = true;
+        updateExpandCollapseBtn();
+      }
+    },
+    onExpandAll: () => {
+      allExpanded = true;
+      updateExpandCollapseBtn();
+    },
+    onCollapseAll: () => {
+      allExpanded = false;
+      updateExpandCollapseBtn();
+    },
+  });
+
   window.addEventListener('message', (event) => {
     const message = event.data;
-    switch (message.type) {
-      case 'scanning':
-        scanBar.show(true);
-        break;
-      case 'loading':
-        scanBar.show(false);
-        legendSection.style.display = 'none';
-        root.innerHTML = '<div class="loading">Scanning workspace…</div>';
-        break;
-      case 'update':
-        currentShowIgnored = message.showIgnored || false;
-        updateToggleIgnoredBtn();
-        requestAnimationFrame(() => {
-          render(message.roots, message.autoRescanEnabled, state.currentSortMode || 'files');
-          scanBar.show(false);
-          allExpanded = [...state.expanded.values()].some(v => v);
-          updateExpandCollapseBtn();
-        });
-        break;
-      case 'updateTruncation': {
-        const newThreshold = message.truncateThreshold;
-        if (typeof newThreshold === 'number' && newThreshold !== state.truncateThreshold) {
-          state.truncationExpanded.clear();
-          state.emptyGroupExpanded.clear();
-        }
-        if (typeof newThreshold === 'number') { state.truncateThreshold = newThreshold; }
-        if (typeof message.truncationEnabled === 'boolean') {
-          currentTruncationEnabled = message.truncationEnabled;
-          updateTruncationBtn();
-        }
-        if (state.lastRoots) { render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode); }
-        break;
+    if (message.type === 'updateTruncation') {
+      const newThreshold = message.truncateThreshold;
+      if (typeof newThreshold === 'number' && newThreshold !== state.truncateThreshold) {
+        state.truncationExpanded.clear();
+        state.emptyGroupExpanded.clear();
       }
-      case 'filter': {
-        const hadFilters = state.activeFilters.size > 0;
-        state.activeFilters = new Set(message.langs || []);
-        if (!hadFilters && state.activeFilters.size > 0) {
-          state.expanded.clear();
-          allExpanded = true;
-          updateExpandCollapseBtn();
-        }
-        if (state.lastRoots) { render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode); }
-        break;
+      if (typeof newThreshold === 'number') { state.truncateThreshold = newThreshold; }
+      if (typeof message.truncationEnabled === 'boolean') {
+        currentTruncationEnabled = message.truncationEnabled;
+        updateTruncationBtn();
       }
-      case 'expandAll':
-        if (state.lastRoots) {
-          S.walkExpand(state, S.getDrillRoots(state));
-          allExpanded = true;
-          updateExpandCollapseBtn();
-          render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
-        }
-        break;
-      case 'collapseAll':
-        if (state.lastRoots) {
-          S.walkCollapse(state, S.getDrillRoots(state));
-          state.truncationExpanded.clear();
-          state.emptyGroupExpanded.clear();
-          allExpanded = false;
-          updateExpandCollapseBtn();
-          render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
-        }
-        break;
-      case 'error':
-        scanBar.show(false);
-        root.innerHTML = `<div class="error">Error: ${S.escHtml(message.message)}</div>`;
-        break;
+      if (state.lastRoots) { render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode); }
+      return;
     }
+    sharedHandler(event);
   });
 
   root.innerHTML = '<div class="loading">Initializing…</div>';

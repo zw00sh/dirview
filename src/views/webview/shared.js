@@ -959,6 +959,121 @@
     }
   }
 
+  // ── Shared view helpers ───────────────────────────────────────────────────
+
+  /**
+   * Creates the "auto-rescan disabled" warning banner with a wired Refresh button.
+   * @param {object} vscode — VS Code webview API (for postMessage)
+   * @returns {HTMLElement}
+   */
+  function createRescanWarning(vscode) {
+    const warn = document.createElement('div');
+    warn.className = 'rescan-warning';
+    warn.innerHTML = `
+      <span class="rescan-warning-icon">${SVG_WARNING}</span>
+      <span>Auto-rescan disabled (large repo)</span>
+      <button class="rescan-btn">Refresh</button>
+    `;
+    warn.querySelector('.rescan-btn').addEventListener('click', () => {
+      vscode.postMessage({ command: 'refresh' });
+    });
+    return warn;
+  }
+
+  /**
+   * Renders the tree <ul> into rootEl.
+   * Handles pruneDrillStack, computeMaxMetric, tree element creation, and renderRoots.
+   * Call after clearing rootEl and appending any pre-tree elements (e.g. rescan warning).
+   * @param {object} state
+   * @param {object} renderer
+   * @param {HTMLElement} rootEl
+   * @param {{ cssClass?: string }} [opts]
+   */
+  function renderTree(state, renderer, rootEl, opts) {
+    pruneDrillStack(state);
+    const maxMetric = computeMaxMetric(getDrillRoots(state), state.currentSortMode);
+    const clientWidth = rootEl.clientWidth;
+    const treeEl = document.createElement('ul');
+    treeEl.className = 'tree' +
+      (opts && opts.cssClass ? ' ' + opts.cssClass : '') +
+      (state.currentSortMode === 'size' ? ' sort-size' : '');
+    renderRoots(renderer, state, treeEl, maxMetric, clientWidth);
+    rootEl.appendChild(treeEl);
+  }
+
+  /**
+   * Creates a window 'message' handler that handles common message types
+   * (scanning, loading, update, filter, expandAll, collapseAll, error).
+   *
+   * @param {object} state
+   * @param {object} scanBar
+   * @param {HTMLElement} rootEl
+   * @param {object} deps
+   *   deps.render(roots, autoRescanEnabled, sortMode) — the view's render function
+   *   deps.resolveUpdateSortMode?(msg) — returns the sortMode to use for 'update'; defaults to msg.sortMode
+   *   deps.onBeforeUpdate?(msg) — called synchronously before rAF on 'update'
+   *   deps.onAfterRender?(msg) — called inside rAF after render on 'update'
+   *   deps.onLoading?() — called after clearing rootEl on 'loading'
+   *   deps.onFilter?(hadFilters) — called after filter state update + re-render
+   *   deps.onExpandAll?() — called after walkExpand + re-render
+   *   deps.onCollapseAll?() — called after walkCollapse + re-render
+   * @returns {function} — pass directly to window.addEventListener('message', ...)
+   */
+  function createMessageHandler(state, scanBar, rootEl, deps) {
+    return function (event) {
+      const message = event.data;
+      switch (message.type) {
+        case 'scanning':
+          scanBar.show(true);
+          break;
+        case 'loading':
+          scanBar.show(false);
+          rootEl.innerHTML = '<div class="loading">Scanning workspace…</div>';
+          if (deps.onLoading) { deps.onLoading(); }
+          break;
+        case 'update':
+          if (deps.onBeforeUpdate) { deps.onBeforeUpdate(message); }
+          requestAnimationFrame(() => {
+            const sortMode = deps.resolveUpdateSortMode ? deps.resolveUpdateSortMode(message) : message.sortMode;
+            deps.render(message.roots, message.autoRescanEnabled, sortMode);
+            scanBar.show(false);
+            if (deps.onAfterRender) { deps.onAfterRender(message); }
+          });
+          break;
+        case 'filter': {
+          const hadFilters = state.activeFilters.size > 0;
+          state.activeFilters = new Set(message.langs || []);
+          if (!hadFilters && state.activeFilters.size > 0) { state.expanded.clear(); }
+          if (state.lastRoots) {
+            deps.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+          }
+          if (deps.onFilter) { deps.onFilter(hadFilters); }
+          break;
+        }
+        case 'expandAll':
+          if (state.lastRoots) {
+            walkExpand(state, getDrillRoots(state));
+            deps.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+            if (deps.onExpandAll) { deps.onExpandAll(); }
+          }
+          break;
+        case 'collapseAll':
+          if (state.lastRoots) {
+            walkCollapse(state, getDrillRoots(state));
+            state.truncationExpanded.clear();
+            state.emptyGroupExpanded.clear();
+            deps.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+            if (deps.onCollapseAll) { deps.onCollapseAll(); }
+          }
+          break;
+        case 'error':
+          scanBar.show(false);
+          rootEl.innerHTML = `<div class="error">Error: ${escHtml(message.message)}</div>`;
+          break;
+      }
+    };
+  }
+
   window.DirviewShared = {
     SVG_CHEVRON, SVG_PLUS, SVG_WARNING,
     SVG_EYE, SVG_EYE_CLOSED, SVG_FOLD, SVG_UNFOLD, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_TARGET,
@@ -967,5 +1082,6 @@
     computeStats, renderLegend, createState,
     walkExpand, walkCollapse, renderRoots,
     findNodeByPath, getDrillRoots, pruneDrillStack,
+    createRescanWarning, renderTree, createMessageHandler,
   };
 })();
