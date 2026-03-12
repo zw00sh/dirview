@@ -8,6 +8,7 @@
   const legendEl = document.getElementById('legend');
   const root = document.getElementById('root');
   const tabTitleEl = document.getElementById('tab-title');
+  const upBtn = document.getElementById('tab-up');
   const sortBtn = document.getElementById('tab-sort');
   const toggleIgnoredBtn = document.getElementById('tab-toggle-ignored');
   const toggleTruncationBtn = document.getElementById('tab-toggle-truncation');
@@ -38,6 +39,8 @@
   let currentShowIgnored = false;
   let currentTruncationEnabled = true;
   let allExpanded = false;
+  // The directory path this tab is rooted at ('' = workspace root).
+  state.dirPath = '';
 
   // Tab-local truncation defaults (match config defaults)
   state.truncateThreshold = 4;
@@ -69,6 +72,9 @@
 
   // ── Toolbar event listeners ─────────────────────────────────────────────
 
+  upBtn.addEventListener('click', () => {
+    vscode.postMessage({ command: 'navigateUp' });
+  });
   toggleTruncationBtn.addEventListener('click', () => {
     vscode.postMessage({ command: 'toggleTruncation', enabled: !currentTruncationEnabled });
   });
@@ -137,7 +143,13 @@
     sortBtn.title = 'Sort: ' + (sortNames[state.currentSortMode] || 'by files');
     sortBtn.setAttribute('aria-label', sortBtn.title);
     const titleLabels = { files: 'count', name: 'name', size: 'size' };
-    tabTitleEl.textContent = 'Tree (' + (titleLabels[state.currentSortMode] || 'count') + ')';
+    // Show root dir name in ALLCAPS + sort mode label, matching sidebar style.
+    const rootName = state.dirPath === ''
+      ? 'BREAKDOWN'
+      : (state.lastRoots && state.lastRoots[0] ? state.lastRoots[0].name.toUpperCase() : 'BREAKDOWN');
+    tabTitleEl.textContent = rootName + '  ' + (titleLabels[state.currentSortMode] || 'count');
+    // Show up button only when not at workspace root.
+    upBtn.style.display = state.dirPath !== '' ? '' : 'none';
 
     updateLegend(roots ? S.computeStats(state.lastRoots) : []);
 
@@ -168,6 +180,7 @@
     onBeforeUpdate: (message) => {
       currentShowIgnored = message.showIgnored || false;
       updateToggleIgnoredBtn();
+      if (typeof message.dirPath === 'string') { state.dirPath = message.dirPath; }
     },
     onAfterRender: () => {
       allExpanded = [...state.expanded.values()].some(v => v);

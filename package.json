@@ -2,17 +2,17 @@
   "name": "dirview",
   "displayName": "Directory Breakdown",
   "description": "Visualize per-directory file type composition as GitHub-style colored proportional bars",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "zwoosh",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/zwoosh/dirview"
+    "url": "https://github.com/zw00sh/dirview"
   },
   "bugs": {
-    "url": "https://github.com/zwoosh/dirview/issues"
+    "url": "https://github.com/zw00sh/dirview/issues"
   },
-  "homepage": "https://github.com/zwoosh/dirview#readme",
+  "homepage": "https://github.com/zw00sh/dirview#readme",
   "keywords": [
     "file-types",
     "directory",
@@ -54,12 +54,14 @@
         {
           "type": "webview",
           "id": "dirview.languages",
-          "name": "Languages"
+          "name": "Languages",
+          "initialSize": 1
         },
         {
           "type": "webview",
           "id": "dirview.sidebar",
-          "name": "Tree"
+          "name": "Tree",
+          "initialSize": 4
         }
       ]
     },

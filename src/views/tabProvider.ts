@@ -100,11 +100,37 @@ export class TabProvider {
         this.updateTruncation(threshold, enabled);
       } else if (message.command === 'openDirInTab' && message.path) {
         this.onOpenDirInTab?.(message.path);
+      } else if (message.command === 'navigateUp') {
+        // Find the current dirPath for this panel by searching the map by reference.
+        let currentPath: string | undefined;
+        for (const [dp, p] of this.panels) {
+          if (p === panel) { currentPath = dp; break; }
+        }
+        if (currentPath === undefined || currentPath === '') { return; }
+        const parentPath = currentPath.includes('/')
+          ? currentPath.substring(0, currentPath.lastIndexOf('/'))
+          : '';
+        // Re-key the panel under its new root path.
+        this.panels.delete(currentPath);
+        this.panels.set(parentPath, panel);
+        panel.title = parentPath === '' ? 'Breakdown' : path.basename(parentPath);
+        const roots = this.getRootsForDir(parentPath);
+        if (roots !== undefined) {
+          panel.webview.postMessage({
+            type: 'update', roots, dirPath: parentPath,
+            autoRescanEnabled: this.lastAutoRescanEnabled,
+            showIgnored: this.lastShowIgnored,
+          });
+        }
       }
     });
 
+    // Use panel reference lookup on dispose so the correct key is removed even
+    // if the panel was re-keyed by navigateUp after initial creation.
     panel.onDidDispose(() => {
-      this.panels.delete(dirPath);
+      for (const [dp, p] of this.panels) {
+        if (p === panel) { this.panels.delete(dp); break; }
+      }
     });
 
     this.panels.set(dirPath, panel);
@@ -113,7 +139,7 @@ export class TabProvider {
     const roots = this.getRootsForDir(dirPath);
     if (roots !== undefined) {
       setTimeout(() => {
-        panel.webview.postMessage({ type: 'update', roots, autoRescanEnabled: this.lastAutoRescanEnabled, showIgnored: this.lastShowIgnored });
+        panel.webview.postMessage({ type: 'update', roots, dirPath, autoRescanEnabled: this.lastAutoRescanEnabled, showIgnored: this.lastShowIgnored });
       }, 100);
     }
   }
@@ -136,7 +162,7 @@ export class TabProvider {
       const panelRoots = this.getRootsForDir(dirPath);
       // Send empty array if the directory was deleted — the tab will show an empty state.
       const effectiveRoots = panelRoots ?? [];
-      panel.webview.postMessage({ type: 'update', roots: effectiveRoots, autoRescanEnabled, showIgnored });
+      panel.webview.postMessage({ type: 'update', roots: effectiveRoots, dirPath, autoRescanEnabled, showIgnored });
     }
   }
 
@@ -203,6 +229,7 @@ export class TabProvider {
   </div>
   <div class="tab-toolbar">
     <div class="tab-toolbar-left">
+      <button class="tab-action" id="tab-up" title="Navigate up" aria-label="Navigate up" style="display:none"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M5.854 4.146L2.207 7.793a.5.5 0 0 0 0 .707l3.647 3.647.707-.707L3.914 8.5H10.5A2.5 2.5 0 0 1 13 11v1h1v-1a3.5 3.5 0 0 0-3.5-3.5H3.914l2.647-2.647-.707-.707z"/></svg></button>
       <span id="tab-title" class="tab-title">Tree</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px">

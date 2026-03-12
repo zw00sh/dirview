@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.1] — 2026-03-12
+
+### Fixed
+- Corrected repository URL in package manifest.
+
 ## [0.1.0] — 2026-03-12
 
 Initial release.

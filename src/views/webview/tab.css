@@ -28,7 +28,6 @@ body {
 
 .tab-title {
   font-size: 11px;
-  text-transform: uppercase;
   color: var(--vscode-descriptionForeground);
 }
 
