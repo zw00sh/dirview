@@ -189,7 +189,7 @@ describe('scanWorkspace', () => {
       { uri: folderUri, name: 'repo' },
     ];
     (vscode.workspace.getConfiguration as ReturnType<typeof vi.fn>)
-      .mockReturnValue({ get: (key: string, def: unknown) => key === 'maxDepth' ? 0 : def });
+      .mockReturnValue({ get: (key: string, def: unknown) => key === 'maxDepth' ? 1 : def });
     (vscode.workspace.fs.readDirectory as ReturnType<typeof vi.fn>)
       .mockResolvedValue([
         ['src', vscode.FileType.Directory],
@@ -197,11 +197,9 @@ describe('scanWorkspace', () => {
       ]);
 
     const result = await scanWorkspace(false);
-    // maxDepth=0 means root is scanned but depth > 0 dirs are empty
+    // maxDepth=1: root (depth=0) and direct children (depth=1) are scanned,
+    // but grandchildren (depth=2) are skipped → grandchild dir has totalFiles=0
     const root = result.roots[0];
-    // Files at root level are still included (depth===0, check is depth > maxDepth)
-    // Actually depth starts at 0 and check is depth > maxDepth, so depth=0 > 0 is false → root IS scanned
-    // But children at depth=1 would be depth > 0 = true → skipped
-    expect(root.children[0].totalFiles).toBe(0);
+    expect(root.children[0].children[0].totalFiles).toBe(0);
   });
 });

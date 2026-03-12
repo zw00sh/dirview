@@ -192,8 +192,8 @@
         },
         "dirview.maxDepth": {
           "type": "number",
-          "default": 10,
-          "description": "Maximum directory depth to scan."
+          "default": 0,
+          "description": "Maximum directory depth to scan. Set to 0 for unlimited depth."
         },
         "dirview.truncateThreshold": {
           "type": "number",

@@ -16,7 +16,7 @@ export async function scanWorkspace(showIgnored: boolean): Promise<ScanResult> {
     return { roots: [], totalFiles: 0 };
   }
 
-  const maxDepth = vscode.workspace.getConfiguration('dirview').get<number>('maxDepth', 10);
+  const maxDepth = vscode.workspace.getConfiguration('dirview').get<number>('maxDepth', 0);
 
   const roots: DirNode[] = [];
   let totalFiles = 0;
@@ -62,7 +62,7 @@ async function scanDir(
     children: [],
   };
 
-  if (depth > maxDepth) {
+  if (maxDepth > 0 && depth > maxDepth) {
     return node;
   }
 

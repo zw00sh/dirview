@@ -11,7 +11,7 @@ export class Config {
   }
 
   get showIgnored(): boolean {
-    return this.context.workspaceState.get<boolean>('dirview.showIgnored', false);
+    return this.context.workspaceState.get<boolean>('dirview.showIgnored', true);
   }
 
   async setShowIgnored(value: boolean): Promise<void> {
