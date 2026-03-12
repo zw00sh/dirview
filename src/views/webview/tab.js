@@ -23,6 +23,7 @@
     tooltip,
     options: {
       skipDepthZeroGuides: false,
+      inlineActions: true,
       barFactor: 0.35,
       barMaxWidth: 400,
       barFallbackWidth: 600,

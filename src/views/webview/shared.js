@@ -16,6 +16,7 @@
   const SVG_UNFOLD = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M11.854 10.146C12.049 10.341 12.049 10.658 11.854 10.853L8.35401 14.353C8.15901 14.548 7.84201 14.548 7.64701 14.353L4.14701 10.853C3.95201 10.658 3.95201 10.341 4.14701 10.146C4.34201 9.95098 4.65901 9.95098 4.85401 10.146L8.00001 13.293L11.146 10.146C11.341 9.95098 11.658 9.95098 11.853 10.146H11.854ZM4.85401 5.85398L8.00001 2.70798L11.146 5.85398C11.341 6.04898 11.658 6.04898 11.853 5.85398C12.048 5.65898 12.048 5.34198 11.853 5.14698L8.35301 1.64698C8.15801 1.45198 7.84101 1.45198 7.64601 1.64698L4.14601 5.14698C3.95101 5.34198 3.95101 5.65898 4.14601 5.85398C4.34101 6.04898 4.65901 6.04898 4.85401 5.85398Z"/></svg>';
   const SVG_EXPAND_ALL = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M15 6v5c0 2.21-1.79 4-4 4H6c-.74 0-1.38-.4-1.73-1H11c1.65 0 3-1.35 3-3V4.27c.6.35 1 .99 1 1.73Zm-4 7H4c-1.103 0-2-.897-2-2V4c0-1.103.897-2 2-2h7c1.103 0 2 .897 2 2v7c0 1.103-.897 2-2 2Zm-7-1h7c.551 0 1-.448 1-1V4c0-.551-.449-1-1-1H4c-.551 0-1 .449-1 1v7c0 .552.449 1 1 1Zm5.5-5H8V5.5a.5.5 0 0 0-1 0V7H5.5a.5.5 0 0 0 0 1H7v1.5a.5.5 0 0 0 1 0V8h1.5a.5.5 0 0 0 0-1Z"/></svg>';
   const SVG_COLLAPSE_ALL = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M14 4.27c.6.35 1 .99 1 1.73v5c0 2.21-1.79 4-4 4H6c-.74 0-1.38-.4-1.73-1H11c1.65 0 3-1.35 3-3V4.27ZM9.5 7a.5.5 0 0 1 0 1h-4a.5.5 0 0 1 0-1h4Z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M11 2c1.103 0 2 .897 2 2v7c0 1.103-.897 2-2 2H4c-1.103 0-2-.897-2-2V4c0-1.103.897-2 2-2h7ZM4 3c-.551 0-1 .449-1 1v7c0 .552.449 1 1 1h7c.551 0 1-.448 1-1V4c0-.551-.449-1-1-1H4Z"/></svg>';
+  const SVG_TARGET = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM1 8a7 7 0 1 1 14 0A7 7 0 0 1 1 8zm7-3a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM4 8a4 4 0 1 1 8 0 4 4 0 0 1-8 0zm4-1a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>';
 
   function escHtml(str) {
     return str
@@ -153,6 +154,9 @@
       document.querySelectorAll(`.indent-guide[data-guide-path="${CSS.escape(path)}"]`)
         .forEach(el => el.classList.remove('hovered'));
     }, true);
+
+    // Hide tooltip when the tree scrolls (rows move away from the cursor without firing mouseleave).
+    root.addEventListener('scroll', () => { tooltip.style.display = 'none'; }, { passive: true });
 
     function dirMatchesFilter(node) {
       if (state.activeFilters.size === 0) { return true; }
@@ -333,6 +337,20 @@
       return li;
     }
 
+    // Returns the node that renderDirNode would use as displayNode for the given node —
+    // i.e. follows the compact-folder chain (single child dir, no files) to its deepest node.
+    function compactedNode(node) {
+      let cur = node;
+      while (cur.children.length === 1 && (cur.files || []).length === 0) {
+        cur = cur.children[0];
+      }
+      return cur;
+    }
+
+    function compactedPath(node) {
+      return compactedNode(node).path;
+    }
+
     function renderDirNode(node, depth, maxMetric, ancestors, clientWidth) {
       const li = document.createElement('li');
 
@@ -490,6 +508,72 @@
         }
         row.appendChild(metaEl);
       }
+
+      // Hover action buttons — overlay on the right (sidebar) or inline after name (tab)
+      const actionsEl = document.createElement('div');
+      actionsEl.className = opts.inlineActions ? 'dir-actions dir-actions-inline' : 'dir-actions dir-actions-overlay';
+      if (displayNode.children.length > 0) {
+        const expandBtn = document.createElement('button');
+        expandBtn.className = 'dir-action-btn';
+        expandBtn.innerHTML = SVG_EXPAND_ALL;
+        expandBtn.title = 'Expand children';
+        expandBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          tooltip.style.display = 'none';
+          state.expanded.set(displayNode.path, true);
+          const allDirectChildrenExpanded = displayNode.children.every(child => {
+            const cn = compactedNode(child);
+            // A child with no sub-directories can't be expanded further — treat as trivially expanded
+            return cn.children.length === 0 || state.expanded.get(cn.path);
+          });
+          if (allDirectChildrenExpanded) {
+            walkExpand(state, displayNode.children);
+          } else {
+            for (const child of displayNode.children) {
+              state.expanded.set(compactedPath(child), true);
+            }
+          }
+          state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+        });
+        actionsEl.appendChild(expandBtn);
+
+        const collapseBtn = document.createElement('button');
+        collapseBtn.className = 'dir-action-btn';
+        collapseBtn.innerHTML = SVG_COLLAPSE_ALL;
+        collapseBtn.title = 'Collapse children';
+        collapseBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          tooltip.style.display = 'none';
+          const allAlreadyCollapsed = displayNode.children.every(
+            child => !state.expanded.get(compactedPath(child))
+          );
+          if (allAlreadyCollapsed) {
+            state.expanded.set(displayNode.path, false);
+          }
+          for (const child of displayNode.children) {
+            state.expanded.set(compactedPath(child), false);
+          }
+          state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+        });
+        actionsEl.appendChild(collapseBtn);
+      }
+      const focusBtn = document.createElement('button');
+      focusBtn.className = 'dir-action-btn';
+      focusBtn.innerHTML = SVG_TARGET;
+      focusBtn.title = 'Drill into directory';
+      focusBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        tooltip.style.display = 'none';
+        state.drillStack.push(displayNode.path);
+        state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+      });
+      actionsEl.appendChild(focusBtn);
+      if (opts.inlineActions) {
+        row.insertBefore(actionsEl, barSpacer);
+      } else {
+        row.appendChild(actionsEl);
+      }
+
       li.appendChild(row);
 
       // Children container
@@ -533,10 +617,7 @@
           childrenEl.appendChild(renderTruncatedRow(hiddenFiles, depth + 1, nextAncestors, displayNode.path, childrenEl));
         }
 
-        // Use e.detail to distinguish single-click (expand/collapse) from double-click (drill in)
-        // without any artificial delay.
         row.addEventListener('click', (e) => {
-          if (e.detail >= 2) { return; } // dblclick handler takes it
           const nowExpanded = !state.expanded.get(displayNode.path);
           state.expanded.set(displayNode.path, nowExpanded);
 
@@ -557,12 +638,6 @@
 
         li.appendChild(childrenEl);
       }
-
-      // Double-click anywhere on the row to drill into this directory
-      row.addEventListener('dblclick', () => {
-        state.drillStack.push(displayNode.path);
-        state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
-      });
 
       return li;
     }
@@ -886,7 +961,7 @@
 
   window.DirviewShared = {
     SVG_CHEVRON, SVG_PLUS, SVG_WARNING,
-    SVG_EYE, SVG_EYE_CLOSED, SVG_FOLD, SVG_UNFOLD, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL,
+    SVG_EYE, SVG_EYE_CLOSED, SVG_FOLD, SVG_UNFOLD, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_TARGET,
     escHtml, formatBytes, sortDirs, sortFiles, computeMaxMetric, groupEmptyDirs,
     createScanBar, createTooltip, createRenderer,
     computeStats, renderLegend, createState,

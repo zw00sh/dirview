@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -224,5 +224,289 @@ describe('computeStats', () => {
 
   it('handles empty roots', () => {
     expect(S.computeStats([])).toEqual([]);
+  });
+});
+
+// --- dir hover action buttons ---
+
+function makeDir(path, name, { children = [], files = [], totalFiles = 0, sizeBytes = 0, stats = [] } = {}) {
+  return { path, name, children, files, totalFiles, sizeBytes, stats };
+}
+
+function makeRenderer(state) {
+  const vscode = { postMessage: () => {} };
+  const rootEl = document.createElement('div');
+  document.body.appendChild(rootEl);
+  const tooltipEl = document.createElement('div');
+  tooltipEl.className = 'bar-tooltip';
+  tooltipEl.style.display = 'none';
+  document.body.appendChild(tooltipEl);
+  const renderer = S.createRenderer(state, {
+    vscode,
+    root: rootEl,
+    tooltip: tooltipEl,
+    options: { skipDepthZeroGuides: false, barFactor: 0.4, barMaxWidth: 200, barFallbackWidth: 300 },
+  });
+  return renderer;
+}
+
+describe('dir hover action buttons', () => {
+  it('expand button expands the dir itself and direct children when not all children are expanded', () => {
+    const state = S.createState();
+    state.render = vi.fn();
+    state.lastRoots = [];
+
+    // Two grandchildren each so neither child compacts — compaction requires exactly 1 child
+    const gc1 = makeDir('/r/a/x', 'x', { totalFiles: 2, stats: [] });
+    const gc2 = makeDir('/r/a/y', 'y', { totalFiles: 3, stats: [] });
+    const child1 = makeDir('/r/a', 'a', { children: [gc1, gc2], totalFiles: 5, stats: [] });
+    const gc3 = makeDir('/r/b/p', 'p', { totalFiles: 1, stats: [] });
+    const gc4 = makeDir('/r/b/q', 'q', { totalFiles: 2, stats: [] });
+    const child2 = makeDir('/r/b', 'b', { children: [gc3, gc4], totalFiles: 3, stats: [] });
+    const parent = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 8, stats: [] });
+    // child1 expanded, child2 not — so not all expandable children are expanded
+    state.expanded.set('/r/a', true);
+
+    const renderer = makeRenderer(state);
+    const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+    li.querySelector('.dir-action-btn[title="Expand children"]').click();
+
+    expect(state.expanded.get('/r')).toBe(true);
+    expect(state.expanded.get('/r/a')).toBe(true);
+    expect(state.expanded.get('/r/b')).toBe(true);
+    // Grandchildren should NOT be expanded — only direct children
+    expect(state.expanded.get('/r/a/x')).toBeFalsy();
+    expect(state.expanded.get('/r/a/y')).toBeFalsy();
+    expect(state.render).toHaveBeenCalledOnce();
+  });
+
+  it('expand button triggers recursive expand even when some children are leaves (no sub-dirs)', () => {
+    const state = S.createState();
+    state.render = vi.fn();
+    state.lastRoots = [];
+
+    const gc1 = makeDir('/r/a/x', 'x', { totalFiles: 2, stats: [] });
+    const gc2 = makeDir('/r/a/y', 'y', { totalFiles: 3, stats: [] });
+    const child1 = makeDir('/r/a', 'a', { children: [gc1, gc2], totalFiles: 5, stats: [] });
+    // child2 is a leaf — no sub-directories, only files
+    const child2 = makeDir('/r/b', 'b', {
+      files: [{ name: 'f.js', path: '/r/b/f.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 10 }],
+      totalFiles: 1, stats: [],
+    });
+    const parent = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 6, stats: [] });
+    // child1 is expanded; child2 is a leaf so it can't be expanded
+    state.expanded.set('/r/a', true);
+
+    const renderer = makeRenderer(state);
+    const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+    li.querySelector('.dir-action-btn[title="Expand children"]').click();
+
+    // child2 being a leaf should not block recursive expand
+    expect(state.expanded.get('/r/a/x')).toBe(true);
+    expect(state.expanded.get('/r/a/y')).toBe(true);
+  });
+
+  it('expand button recursively expands all descendants when all direct children are already expanded', () => {
+    const state = S.createState();
+    state.render = vi.fn();
+    state.lastRoots = [];
+
+    const gc1 = makeDir('/r/a/x', 'x', { totalFiles: 2, stats: [] });
+    const gc2 = makeDir('/r/a/y', 'y', { totalFiles: 3, stats: [] });
+    const child1 = makeDir('/r/a', 'a', { children: [gc1, gc2], totalFiles: 5, stats: [] });
+    const child2 = makeDir('/r/b', 'b', { totalFiles: 3, stats: [] });
+    const parent = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 8, stats: [] });
+    // Both direct children already expanded
+    state.expanded.set('/r/a', true);
+    state.expanded.set('/r/b', true);
+
+    const renderer = makeRenderer(state);
+    const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+    li.querySelector('.dir-action-btn[title="Expand children"]').click();
+
+    // Grandchildren should now also be expanded
+    expect(state.expanded.get('/r/a/x')).toBe(true);
+    expect(state.expanded.get('/r/a/y')).toBe(true);
+    expect(state.render).toHaveBeenCalledOnce();
+  });
+
+  it('collapse button sets each direct child path to collapsed and calls render', () => {
+    const state = S.createState();
+    state.render = vi.fn();
+    state.lastRoots = [];
+    state.expanded.set('/r', true);
+    state.expanded.set('/r/a', true);
+    state.expanded.set('/r/b', true);
+
+    const child1 = makeDir('/r/a', 'a', { totalFiles: 5, stats: [] });
+    const child2 = makeDir('/r/b', 'b', { totalFiles: 3, stats: [] });
+    const parent = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 8, stats: [] });
+
+    const renderer = makeRenderer(state);
+    const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+
+    const collapseBtn = li.querySelector('.dir-action-btn[title="Collapse children"]');
+    expect(collapseBtn).not.toBeNull();
+    collapseBtn.click();
+
+    expect(state.expanded.get('/r/a')).toBe(false);
+    expect(state.expanded.get('/r/b')).toBe(false);
+    expect(state.render).toHaveBeenCalledOnce();
+  });
+
+  it('collapse button does not collapse the dir itself when some children are expanded', () => {
+    const state = S.createState();
+    state.render = vi.fn();
+    state.lastRoots = [];
+    state.expanded.set('/r', true);
+    state.expanded.set('/r/a', true);
+    // /r/b is not expanded
+
+    const child1 = makeDir('/r/a', 'a', { totalFiles: 5, stats: [] });
+    const child2 = makeDir('/r/b', 'b', { totalFiles: 3, stats: [] });
+    const parent = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 8, stats: [] });
+
+    const renderer = makeRenderer(state);
+    const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+    li.querySelector('.dir-action-btn[title="Collapse children"]').click();
+
+    // Children collapsed, but parent stays expanded
+    expect(state.expanded.get('/r/a')).toBe(false);
+    expect(state.expanded.get('/r/b')).toBe(false);
+    expect(state.expanded.get('/r')).toBe(true);
+  });
+
+  it('collapse button also collapses the dir itself when all children are already collapsed', () => {
+    const state = S.createState();
+    state.render = vi.fn();
+    state.lastRoots = [];
+    state.expanded.set('/r', true);
+    // Both children already collapsed (not in expanded map → falsy)
+
+    const child1 = makeDir('/r/a', 'a', { totalFiles: 5, stats: [] });
+    const child2 = makeDir('/r/b', 'b', { totalFiles: 3, stats: [] });
+    const parent = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 8, stats: [] });
+
+    const renderer = makeRenderer(state);
+    const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+    li.querySelector('.dir-action-btn[title="Collapse children"]').click();
+
+    expect(state.expanded.get('/r')).toBe(false);
+  });
+
+  it('drill-in button pushes displayNode path to drillStack and calls render', () => {
+    const state = S.createState();
+    state.render = vi.fn();
+    state.lastRoots = [];
+
+    // Two children so parent doesn't compact — displayNode stays as parent
+    const child1 = makeDir('/r/a', 'a', { totalFiles: 3, stats: [] });
+    const child2 = makeDir('/r/b', 'b', { totalFiles: 2, stats: [] });
+    const parent = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 5, stats: [] });
+
+    const renderer = makeRenderer(state);
+    const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+
+    const focusBtn = li.querySelector('.dir-action-btn[title="Drill into directory"]');
+    expect(focusBtn).not.toBeNull();
+    focusBtn.click();
+
+    expect(state.drillStack).toContain('/r');
+    expect(state.render).toHaveBeenCalledOnce();
+  });
+
+  it('shows all three buttons when dir has child dirs', () => {
+    const state = S.createState();
+    state.render = () => {};
+    state.lastRoots = [];
+
+    // Two children so parent doesn't compact — displayNode stays as parent
+    const child1 = makeDir('/r/a', 'a', { totalFiles: 3, stats: [] });
+    const child2 = makeDir('/r/b', 'b', { totalFiles: 2, stats: [] });
+    const parent = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 5, stats: [] });
+
+    const renderer = makeRenderer(state);
+    const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+
+    // Scope to the parent's own row, not child rows
+    const btns = li.querySelectorAll(':scope > .dir-row .dir-action-btn');
+    expect(btns).toHaveLength(3);
+    const titles = Array.from(btns).map(b => b.title);
+    expect(titles).toContain('Expand children');
+    expect(titles).toContain('Collapse children');
+    expect(titles).toContain('Drill into directory');
+  });
+
+  it('shows only drill-in button when dir has no child dirs', () => {
+    const state = S.createState();
+    state.render = () => {};
+    state.lastRoots = [];
+
+    // Dir with files but no child dirs
+    const leaf = makeDir('/r', 'r', {
+      files: [{ name: 'a.js', path: '/r/a.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 100 }],
+      totalFiles: 1,
+      stats: [{ name: 'JavaScript', color: '#f1e05a', count: 1 }],
+    });
+
+    const renderer = makeRenderer(state);
+    const li = renderer.renderDirNode(leaf, 0, 10, [], 300);
+
+    const btns = li.querySelectorAll(':scope > .dir-row .dir-action-btn');
+    expect(btns).toHaveLength(1);
+    expect(btns[0].title).toBe('Drill into directory');
+  });
+
+  it('expand button does not trigger row click (stopPropagation)', () => {
+    // The row's own click handler toggles the current dir's expansion.
+    // Clicking the expand-children button should NOT toggle the current dir.
+    const state = S.createState();
+    state.render = vi.fn();
+    state.lastRoots = [];
+    // Pre-mark parent as expanded
+    state.expanded.set('/r', true);
+
+    // Two children so parent doesn't compact — expand/collapse buttons are present
+    const child1 = makeDir('/r/a', 'a', { totalFiles: 3, stats: [] });
+    const child2 = makeDir('/r/b', 'b', { totalFiles: 2, stats: [] });
+    const parent = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 5, stats: [] });
+
+    const renderer = makeRenderer(state);
+    const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+
+    const expandBtn = li.querySelector('.dir-action-btn[title="Expand children"]');
+    expandBtn.click();
+
+    // Parent's own expanded state should be unchanged (still true)
+    expect(state.expanded.get('/r')).toBe(true);
+  });
+
+  it('expand children on a dir whose child compacts sets the compacted path', () => {
+    // P has child A; A has one child B and no files → A compacts to B.
+    // Expanding P's children should expand A/B (the compacted displayNode), not just A.
+    const state = S.createState();
+    state.render = vi.fn();
+    state.lastRoots = [];
+
+    const grandchild = makeDir('/p/a/b', 'b', { totalFiles: 5, stats: [] });
+    // A: single child, no files → will compact to B
+    const childA = makeDir('/p/a', 'a', { children: [grandchild], totalFiles: 5, stats: [] });
+    // P: has file so P itself doesn't compact
+    const P = makeDir('/p', 'p', {
+      children: [childA],
+      files: [{ name: 'p.txt', path: '/p/p.txt', langName: 'Text', langColor: '#aaa', sizeBytes: 10 }],
+      totalFiles: 6,
+      stats: [],
+    });
+
+    const renderer = makeRenderer(state);
+    const li = renderer.renderDirNode(P, 0, 10, [], 300);
+
+    const expandBtn = li.querySelector('.dir-action-btn[title="Expand children"]');
+    expandBtn.click();
+
+    // The compacted displayNode path for A is B (/p/a/b), not A (/p/a).
+    // renderDirNode(A) will compact to B and check state.expanded.get('/p/a/b').
+    expect(state.expanded.get('/p/a/b')).toBe(true);
   });
 });
