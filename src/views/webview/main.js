@@ -7,6 +7,7 @@
   const scanBar = S.createScanBar();
   const tooltip = S.createTooltip();
   const state = S.createState();
+  state.scanBar = scanBar;
 
   const renderer = S.createRenderer(state, {
     vscode,

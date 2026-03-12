@@ -29,8 +29,6 @@ body {
 .tab-title {
   font-size: var(--vscode-font-size);
   color: var(--vscode-icon-foreground);
-  display: flex;
-  align-items: center;
 }
 
 .tab-title-sort {
@@ -123,6 +121,5 @@ body {
 
 .ancestor-path-sep {
   opacity: 0.4;
-  margin: 0 1px;
 }
 

@@ -247,11 +247,14 @@ function makeRenderer(state) {
     tooltip: tooltipEl,
     options: { skipDepthZeroGuides: false, barFactor: 0.4, barMaxWidth: 200, barFallbackWidth: 300 },
   });
+  // Expose rootEl so tests can append rendered `li` elements before clicking,
+  // which is required for delegated event handlers on rootEl to fire.
+  renderer._rootEl = rootEl;
   return renderer;
 }
 
 describe('dir hover action buttons', () => {
-  it('expand button expands the dir itself and direct children when not all children are expanded', () => {
+  it('expand button expands the dir itself and direct children when not all children are expanded', async () => {
     const state = S.createState();
     state.render = vi.fn();
     state.lastRoots = [];
@@ -269,6 +272,7 @@ describe('dir hover action buttons', () => {
 
     const renderer = makeRenderer(state);
     const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
     li.querySelector('.dir-action-btn[title="Expand children"]').click();
 
     expect(state.expanded.get('/r')).toBe(true);
@@ -277,6 +281,7 @@ describe('dir hover action buttons', () => {
     // Grandchildren should NOT be expanded — only direct children
     expect(state.expanded.get('/r/a/x')).toBeFalsy();
     expect(state.expanded.get('/r/a/y')).toBeFalsy();
+    await new Promise(r => requestAnimationFrame(r));
     expect(state.render).toHaveBeenCalledOnce();
   });
 
@@ -299,6 +304,7 @@ describe('dir hover action buttons', () => {
 
     const renderer = makeRenderer(state);
     const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
     li.querySelector('.dir-action-btn[title="Expand children"]').click();
 
     // child2 being a leaf should not block recursive expand
@@ -306,7 +312,7 @@ describe('dir hover action buttons', () => {
     expect(state.expanded.get('/r/a/y')).toBe(true);
   });
 
-  it('expand button recursively expands all descendants when all direct children are already expanded', () => {
+  it('expand button recursively expands all descendants when all direct children are already expanded', async () => {
     const state = S.createState();
     state.render = vi.fn();
     state.lastRoots = [];
@@ -322,15 +328,17 @@ describe('dir hover action buttons', () => {
 
     const renderer = makeRenderer(state);
     const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
     li.querySelector('.dir-action-btn[title="Expand children"]').click();
 
     // Grandchildren should now also be expanded
     expect(state.expanded.get('/r/a/x')).toBe(true);
     expect(state.expanded.get('/r/a/y')).toBe(true);
+    await new Promise(r => requestAnimationFrame(r));
     expect(state.render).toHaveBeenCalledOnce();
   });
 
-  it('collapse button sets each direct child path to collapsed and calls render', () => {
+  it('collapse button sets each direct child path to collapsed and calls render', async () => {
     const state = S.createState();
     state.render = vi.fn();
     state.lastRoots = [];
@@ -344,6 +352,7 @@ describe('dir hover action buttons', () => {
 
     const renderer = makeRenderer(state);
     const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
 
     const collapseBtn = li.querySelector('.dir-action-btn[title="Collapse children"]');
     expect(collapseBtn).not.toBeNull();
@@ -351,6 +360,7 @@ describe('dir hover action buttons', () => {
 
     expect(state.expanded.get('/r/a')).toBe(false);
     expect(state.expanded.get('/r/b')).toBe(false);
+    await new Promise(r => requestAnimationFrame(r));
     expect(state.render).toHaveBeenCalledOnce();
   });
 
@@ -368,6 +378,7 @@ describe('dir hover action buttons', () => {
 
     const renderer = makeRenderer(state);
     const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
     li.querySelector('.dir-action-btn[title="Collapse children"]').click();
 
     // Children collapsed, but parent stays expanded
@@ -389,6 +400,7 @@ describe('dir hover action buttons', () => {
 
     const renderer = makeRenderer(state);
     const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
     li.querySelector('.dir-action-btn[title="Collapse children"]').click();
 
     expect(state.expanded.get('/r')).toBe(false);
@@ -417,6 +429,7 @@ describe('dir hover action buttons', () => {
       options: { skipDepthZeroGuides: false, barFactor: 0.4, barMaxWidth: 200, barFallbackWidth: 300 },
     });
     const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+    rootEl.appendChild(li);
 
     const openInTabBtn = li.querySelector('.dir-action-btn[title="Open in new tab"]');
     expect(openInTabBtn).not.toBeNull();
@@ -485,6 +498,7 @@ describe('dir hover action buttons', () => {
 
     const renderer = makeRenderer(state);
     const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
 
     const expandBtn = li.querySelector('.dir-action-btn[title="Expand children"]');
     expandBtn.click();
@@ -513,6 +527,7 @@ describe('dir hover action buttons', () => {
 
     const renderer = makeRenderer(state);
     const li = renderer.renderDirNode(P, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
 
     const expandBtn = li.querySelector('.dir-action-btn[title="Expand children"]');
     expandBtn.click();

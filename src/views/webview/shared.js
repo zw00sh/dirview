@@ -35,7 +35,15 @@
     return Math.round(bytes / (1024 * 1024)) + ' MB';
   }
 
+  // WeakMap caches keyed by the original array reference: Map<mode, sortedArray>.
+  // This avoids redundant .slice().sort() on every render for unchanged data.
+  const _sortDirsCache = new WeakMap();
+  const _sortFilesCache = new WeakMap();
+
   function sortDirs(dirs, mode) {
+    if (!dirs.length) { return dirs; }
+    let byMode = _sortDirsCache.get(dirs);
+    if (byMode && byMode.has(mode)) { return byMode.get(mode); }
     const copy = dirs.slice();
     if (mode === 'name') {
       copy.sort((a, b) => a.name.localeCompare(b.name));
@@ -45,12 +53,18 @@
       // 'files' — by total file count desc
       copy.sort((a, b) => b.totalFiles - a.totalFiles);
     }
+    if (!byMode) { byMode = new Map(); _sortDirsCache.set(dirs, byMode); }
+    byMode.set(mode, copy);
     return copy;
   }
 
   function sortFiles(files) {
+    if (!files.length) { return files; }
+    const cached = _sortFilesCache.get(files);
+    if (cached) { return cached; }
     const copy = files.slice();
     copy.sort((a, b) => a.name.localeCompare(b.name));
+    _sortFilesCache.set(files, copy);
     return copy;
   }
 
@@ -79,8 +93,12 @@
     return value;
   }
 
+  // WeakMap cache for groupEmptyDirs — keyed by children array reference.
+  const _groupEmptyDirsCache = new WeakMap();
+
   // Groups consecutive empty-dir siblings (totalFiles === 0) into {type:'emptyGroup', nodes:[]}
   function groupEmptyDirs(children) {
+    if (_groupEmptyDirsCache.has(children)) { return _groupEmptyDirsCache.get(children); }
     const result = [];
     let i = 0;
     while (i < children.length) {
@@ -98,6 +116,7 @@
         i++;
       }
     }
+    _groupEmptyDirsCache.set(children, result);
     return result;
   }
 
@@ -167,6 +186,17 @@
     const { vscode, root, tooltip } = deps;
     const opts = deps.options || {};
 
+    // Map from displayNode.path → { node: DirNode, hasChildren: boolean }.
+    // Populated during renderDirNode calls; cleared by beforeRender() at the start of
+    // each full re-render. Used by delegated event handlers to avoid per-element closures.
+    const nodeMap = new Map();
+
+    // ── Delegated event handlers ─────────────────────────────────────────────
+    //
+    // Instead of attaching 3–6 listeners to each rendered row, we use three delegated
+    // handlers on the root container (plus the existing capture-phase guide highlighters).
+    // This eliminates thousands of closure allocations and GC cycles per render on large trees.
+
     // Delegated mouseenter/mouseleave for indent guide hover highlighting.
     // Using capture phase so mouseenter/mouseleave fire for all descendants.
     root.addEventListener('mouseenter', (e) => {
@@ -184,7 +214,180 @@
         .forEach(el => el.classList.remove('hovered'));
     }, true);
 
-    // Hide tooltip when the tree scrolls (rows move away from the cursor without firing mouseleave).
+    // Delegated click: handles guide collapse, dir-action buttons, dir row toggle, file open.
+    root.addEventListener('click', (e) => {
+      // Action elements (buttons, guide spans) take priority — check them first so they
+      // don't also trigger the parent dir-row toggle.
+      const actionEl = e.target.closest('[data-action]');
+      if (actionEl) {
+        const action = actionEl.dataset.action;
+        const path = actionEl.dataset.path;
+
+        if (action === 'collapseGuide') {
+          if (state.activeFilters.size > 0) { return; }
+          const guidePath = actionEl.dataset.guidePath;
+          if (!guidePath) { return; }
+          state.expanded.set(guidePath, false);
+          state.rerender();
+          return;
+        }
+
+        if (action === 'openFile') {
+          vscode.postMessage({ command: 'openFile', path });
+          return;
+        }
+
+        tooltip.style.display = 'none';
+
+        if (action === 'expandDir') {
+          const entry = nodeMap.get(path);
+          if (!entry) { return; }
+          const node = entry.node;
+          const isExp = state.expanded.get(node.path);
+          if (!isExp) {
+            state.expanded.set(node.path, true);
+          } else {
+            const allDirectChildrenExpanded = node.children.every(child => {
+              const cn = compactedNode(child);
+              return cn.children.length === 0 || state.expanded.get(cn.path);
+            });
+            if (allDirectChildrenExpanded) {
+              walkExpand(state, node.children);
+            } else {
+              for (const child of node.children) {
+                state.expanded.set(compactedPath(child), true);
+              }
+            }
+          }
+          state.rerender();
+          return;
+        }
+
+        if (action === 'collapseDir') {
+          const entry = nodeMap.get(path);
+          if (!entry) { return; }
+          const node = entry.node;
+          if (!state.expanded.get(node.path)) { return; }
+          const anyChildExpanded = node.children.some(child => state.expanded.get(compactedPath(child)));
+          if (anyChildExpanded) {
+            const anyDeeperExpanded = node.children.some(child => {
+              const cn = compactedNode(child);
+              return hasExpandedDescendant(state, cn);
+            });
+            if (anyDeeperExpanded) {
+              for (const child of node.children) {
+                const cn = compactedNode(child);
+                walkCollapse(state, cn.children || []);
+              }
+            } else {
+              for (const child of node.children) {
+                state.expanded.set(compactedPath(child), false);
+              }
+            }
+          } else {
+            state.expanded.set(node.path, false);
+          }
+          state.rerender();
+          return;
+        }
+
+        if (action === 'openInTab') {
+          vscode.postMessage({ command: 'openDirInTab', path });
+          return;
+        }
+
+        return;
+      }
+
+      // Dir row toggle (expand/collapse) — only when click is not on an action element.
+      const dirRow = e.target.closest('.dir-row[data-path]');
+      if (dirRow) {
+        const path = dirRow.dataset.path;
+        const entry = nodeMap.get(path);
+        if (!entry || !entry.hasChildren) { return; }
+
+        const nowExpanded = !state.expanded.get(path);
+        state.expanded.set(path, nowExpanded);
+
+        // Reset truncation when collapsing so it re-truncates on next expand.
+        if (!nowExpanded && state.truncationExpanded.has(path)) {
+          state.truncationExpanded.delete(path);
+          state.rerender();
+          return;
+        }
+
+        const chevron = dirRow.querySelector('.chevron');
+        const childrenEl = dirRow.nextElementSibling;
+        if (chevron) { chevron.className = 'chevron' + (nowExpanded ? ' open' : ''); }
+        if (childrenEl) { childrenEl.className = 'children' + (nowExpanded ? ' open' : ''); }
+
+        if (deps.onExpandChanged) {
+          deps.onExpandChanged([...state.expanded.values()].some(v => v));
+        }
+      }
+    });
+
+    // Delegated tooltip: show on mouseover a dir-row, hide on mouseout.
+    // Using mouseover/mouseout (bubbling) instead of per-row mouseenter/mouseleave.
+    root.addEventListener('mouseover', (e) => {
+      const row = e.target.closest('.dir-row[data-path]');
+      if (!row) { return; }
+      // Avoid re-triggering when moving between child elements of the same row.
+      if (e.relatedTarget && row.contains(e.relatedTarget)) { return; }
+
+      const path = row.dataset.path;
+      const entry = nodeMap.get(path);
+      if (!entry || !entry.node.totalFiles) { tooltip.style.display = 'none'; return; }
+
+      const node = entry.node;
+      // Populate tooltip content.
+      tooltip.innerHTML = '';
+      const total = node.totalFiles;
+      for (const s of node.stats) {
+        const segPct = (s.count / total) * 100;
+        const tRow = document.createElement('div');
+        tRow.className = 'bar-tooltip-row';
+        tRow.innerHTML =
+          `<span class="bar-tooltip-swatch" style="background:${s.color}"></span>` +
+          `<span class="bar-tooltip-name">${escHtml(s.name)}</span>` +
+          `<span class="bar-tooltip-pct">${segPct.toFixed(1).replace(/\.0$/, '')}%</span>` +
+          `<span class="bar-tooltip-count">${s.count} file${s.count !== 1 ? 's' : ''}</span>`;
+        tooltip.appendChild(tRow);
+      }
+
+      // --- Read phase (batch before writes) ---
+      const bar = row.querySelector('.bar');
+      if (!bar) { return; }
+      const rect = bar.getBoundingClientRect();
+      const vpWidth = document.documentElement.clientWidth;
+      const wh = window.innerHeight;
+
+      // --- Write phase: initial position + show ---
+      const initLeft = rect.left;
+      const initTop = rect.bottom + 4;
+      tooltip.style.left = initLeft + 'px';
+      tooltip.style.top = initTop + 'px';
+      tooltip.style.display = 'block';
+
+      // --- Deferred adjustment: read tooltip rect in next frame to avoid layout thrash ---
+      requestAnimationFrame(() => {
+        if (tooltip.style.display === 'none') { return; }
+        const tRect = tooltip.getBoundingClientRect();
+        let newLeft = initLeft, newTop = initTop, changed = false;
+        if (tRect.bottom > wh) { newTop = rect.top - tRect.height - 4; changed = true; }
+        if (tRect.right > vpWidth - 4) { newLeft = Math.max(4, vpWidth - tRect.width - 4); changed = true; }
+        if (changed) { tooltip.style.left = newLeft + 'px'; tooltip.style.top = newTop + 'px'; }
+      });
+    });
+
+    root.addEventListener('mouseout', (e) => {
+      const row = e.target.closest('.dir-row[data-path]');
+      if (row && !row.contains(e.relatedTarget)) {
+        tooltip.style.display = 'none';
+      }
+    });
+
+    // Hide tooltip when the tree scrolls (rows move away from the cursor without firing mouseout).
     root.addEventListener('scroll', () => { tooltip.style.display = 'none'; }, { passive: true });
 
     function dirMatchesFilter(node) {
@@ -201,12 +404,8 @@
         const ancestor = ancestors[i];
         if (ancestor) {
           guide.dataset.guidePath = ancestor.path;
-          guide.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (state.activeFilters.size > 0) { return; }
-            state.expanded.set(ancestor.path, false);
-            state.rerender();
-          });
+          // data-action enables the delegated click handler in createRenderer.
+          guide.dataset.action = 'collapseGuide';
         }
         container.appendChild(guide);
       }
@@ -217,6 +416,9 @@
       const li = document.createElement('li');
       const row = document.createElement('div');
       row.className = 'file-row clickable';
+      // data-action + data-path enable the delegated click handler in createRenderer.
+      row.dataset.action = 'openFile';
+      row.dataset.path = file.path;
       row.setAttribute('data-vscode-context', JSON.stringify({
         webviewSection: 'file',
         path: file.path,
@@ -256,7 +458,6 @@
         row.appendChild(sizeEl);
       }
 
-      row.addEventListener('click', () => vscode.postMessage({ command: 'openFile', path: file.path }));
       li.appendChild(row);
       return li;
     }
@@ -491,36 +692,8 @@
           bar.appendChild(seg);
         }
 
-        // Rich hover tooltip — attached to row so the full row is hoverable
-        row.addEventListener('mouseenter', () => {
-          tooltip.innerHTML = '';
-          for (const s of displayNode.stats) {
-            const segPct = (s.count / total) * 100;
-            const tRow = document.createElement('div');
-            tRow.className = 'bar-tooltip-row';
-            tRow.innerHTML =
-              `<span class="bar-tooltip-swatch" style="background:${s.color}"></span>` +
-              `<span class="bar-tooltip-name">${escHtml(s.name)}</span>` +
-              `<span class="bar-tooltip-pct">${segPct.toFixed(1).replace(/\.0$/, '')}%</span>` +
-              `<span class="bar-tooltip-count">${s.count} file${s.count !== 1 ? 's' : ''}</span>`;
-            tooltip.appendChild(tRow);
-          }
-          const rect = bar.getBoundingClientRect();
-          tooltip.style.left = rect.left + 'px';
-          tooltip.style.top = (rect.bottom + 4) + 'px';
-          tooltip.style.display = 'block';
-          const tooltipRect = tooltip.getBoundingClientRect();
-          if (tooltipRect.bottom > window.innerHeight) {
-            tooltip.style.top = (rect.top - tooltipRect.height - 4) + 'px';
-          }
-          const vpWidth = document.documentElement.clientWidth;
-          if (tooltipRect.right > vpWidth - 4) {
-            tooltip.style.left = Math.max(4, vpWidth - tooltipRect.width - 4) + 'px';
-          }
-        });
-        row.addEventListener('mouseleave', () => {
-          tooltip.style.display = 'none';
-        });
+        // Tooltip is now handled by the delegated mouseover/mouseout handler in createRenderer,
+        // which looks up node data from nodeMap. No per-element listeners needed.
 
         barWrap.appendChild(bar);
         row.appendChild(barWrap);
@@ -561,6 +734,8 @@
       //
       // This design lets the user incrementally drill deeper with repeated expand clicks,
       // and incrementally retreat with repeated collapse clicks, without jarring jumps.
+      // Action buttons use data-action + data-path so the delegated click handler
+      // in createRenderer can process them without per-element listener closures.
       const actionsEl = document.createElement('div');
       actionsEl.className = 'dir-actions';
       if (displayNode.children.length > 0) {
@@ -568,83 +743,29 @@
         expandBtn.className = 'dir-action-btn';
         expandBtn.innerHTML = SVG_EXPAND_ALL;
         expandBtn.title = 'Expand children';
-        expandBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          tooltip.style.display = 'none';
-          const isExpanded = state.expanded.get(displayNode.path);
-          if (!isExpanded) {
-            // Tier 1: target is collapsed → expand it
-            state.expanded.set(displayNode.path, true);
-          } else {
-            const allDirectChildrenExpanded = displayNode.children.every(child => {
-              const cn = compactedNode(child);
-              return cn.children.length === 0 || state.expanded.get(cn.path);
-            });
-            if (allDirectChildrenExpanded) {
-              // Tier 3: all children already expanded → recursively expand entire subtree
-              walkExpand(state, displayNode.children);
-            } else {
-              // Tier 2: some/no children expanded → expand all direct children
-              for (const child of displayNode.children) {
-                state.expanded.set(compactedPath(child), true);
-              }
-            }
-          }
-          state.rerender();
-        });
+        expandBtn.dataset.action = 'expandDir';
+        expandBtn.dataset.path = displayNode.path;
         actionsEl.appendChild(expandBtn);
 
         const collapseBtn = document.createElement('button');
         collapseBtn.className = 'dir-action-btn';
         collapseBtn.innerHTML = SVG_COLLAPSE_ALL;
         collapseBtn.title = 'Collapse children';
-        collapseBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          tooltip.style.display = 'none';
-          if (!state.expanded.get(displayNode.path)) {
-            // Target is already collapsed — nothing to do
-            return;
-          }
-          const anyChildExpanded = displayNode.children.some(
-            child => state.expanded.get(compactedPath(child))
-          );
-          if (anyChildExpanded) {
-            // Check if any descendant *beyond* direct children is expanded
-            const anyDeeperExpanded = displayNode.children.some(child => {
-              const cn = compactedNode(child);
-              return hasExpandedDescendant(state, cn);
-            });
-            if (anyDeeperExpanded) {
-              // Tier 1: deeper descendants are expanded → collapse them, keep direct children open
-              for (const child of displayNode.children) {
-                const cn = compactedNode(child);
-                walkCollapse(state, cn.children || []);
-              }
-            } else {
-              // Tier 2: only direct children are expanded (no deeper) → collapse all children
-              for (const child of displayNode.children) {
-                state.expanded.set(compactedPath(child), false);
-              }
-            }
-          } else {
-            // Tier 3: no children expanded → collapse target itself
-            state.expanded.set(displayNode.path, false);
-          }
-          state.rerender();
-        });
+        collapseBtn.dataset.action = 'collapseDir';
+        collapseBtn.dataset.path = displayNode.path;
         actionsEl.appendChild(collapseBtn);
       }
       const focusBtn = document.createElement('button');
       focusBtn.className = 'dir-action-btn';
       focusBtn.innerHTML = SVG_OPEN_IN_TAB;
       focusBtn.title = 'Open in new tab';
-      focusBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        tooltip.style.display = 'none';
-        vscode.postMessage({ command: 'openDirInTab', path: displayNode.path });
-      });
+      focusBtn.dataset.action = 'openInTab';
+      focusBtn.dataset.path = displayNode.path;
       actionsEl.appendChild(focusBtn);
       row.insertBefore(actionsEl, barSpacer);
+
+      // Register this node in nodeMap so the delegated handlers can look it up by path.
+      nodeMap.set(displayNode.path, { node: displayNode, hasChildren });
 
       li.appendChild(row);
 
@@ -689,24 +810,9 @@
           childrenEl.appendChild(renderTruncatedRow(hiddenFiles, depth + 1, nextAncestors, displayNode.path, childrenEl));
         }
 
-        row.addEventListener('click', (e) => {
-          const nowExpanded = !state.expanded.get(displayNode.path);
-          state.expanded.set(displayNode.path, nowExpanded);
-
-          // Reset truncation when collapsing so it re-truncates on next expand
-          if (!nowExpanded && state.truncationExpanded.has(displayNode.path)) {
-            state.truncationExpanded.delete(displayNode.path);
-            state.rerender();
-            return;
-          }
-
-          chevron.className = 'chevron' + (nowExpanded ? ' open' : '');
-          childrenEl.className = 'children' + (nowExpanded ? ' open' : '');
-
-          if (deps.onExpandChanged) {
-            deps.onExpandChanged([...state.expanded.values()].some(v => v));
-          }
-        });
+        // Dir row click (toggle expand) is handled by the delegated click handler in
+        // createRenderer, which looks up this node from nodeMap via row.dataset.path.
+        // No per-row listener needed.
 
         li.appendChild(childrenEl);
       }
@@ -714,11 +820,19 @@
       return li;
     }
 
-    return { dirMatchesFilter, renderIndentGuides, renderFileNode, renderTruncatedRow, renderEmptyGroupNode, renderDirNode };
+    return {
+      // Called at the start of each full renderTree pass to flush stale node references.
+      beforeRender() { nodeMap.clear(); },
+      dirMatchesFilter, renderIndentGuides, renderFileNode, renderTruncatedRow, renderEmptyGroupNode, renderDirNode,
+    };
   }
+
+  // Simple reference-equality cache for computeStats — avoids re-aggregating on every render.
+  let _computeStatsCache = { roots: null, value: null };
 
   // Aggregate language stats from root nodes. Shared between tab.js and languagesProvider.ts.
   function computeStats(roots) {
+    if (_computeStatsCache.roots === roots) { return _computeStatsCache.value; }
     const counts = new Map();
     let total = 0;
     for (const r of roots) {
@@ -728,9 +842,11 @@
       }
       total += r.totalFiles;
     }
-    return Array.from(counts.entries())
+    const value = Array.from(counts.entries())
       .map(([name, { color, count }]) => ({ name, color, count, pct: total > 0 ? ((count / total) * 100).toFixed(1) : '0' }))
       .sort((a, b) => b.count - a.count);
+    _computeStatsCache = { roots, value };
+    return value;
   }
 
   // Render a filterable language legend into a container element.
@@ -772,8 +888,21 @@
       /** Workspace folder name sent by tabProvider. Empty in sidebar (falls back to currentRootName). */
       workspaceFolderName: '',
     };
+    state.scanBar = null;           // Set by main.js / tab.js after creation
+    state._rerenderPending = false; // Deduplication flag: collapse rapid calls into one render
+
     // Convenience shorthand: re-renders with the current roots/flags without re-passing them explicitly.
-    state.rerender = () => state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+    // Uses requestAnimationFrame so the scan bar can paint before the heavy DOM rebuild begins.
+    state.rerender = () => {
+      if (state._rerenderPending) { return; }
+      state._rerenderPending = true;
+      if (state.scanBar) { state.scanBar.show(true); }
+      requestAnimationFrame(() => {
+        state._rerenderPending = false;
+        state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+        if (state.scanBar) { state.scanBar.show(false); }
+      });
+    };
     return state;
   }
 
@@ -935,6 +1064,8 @@
    * @param {{ cssClass?: string }} [opts]
    */
   function renderTree(state, renderer, rootEl, opts) {
+    // Clear the nodeMap so stale entries from the previous render don't persist.
+    if (renderer.beforeRender) { renderer.beforeRender(); }
     const maxMetric = computeMaxMetric(state.lastRoots, state.currentSortMode, false);
     const clientWidth = rootEl.clientWidth;
     const treeEl = document.createElement('ul');
@@ -1011,6 +1142,22 @@
             state.rerender();
             if (deps.onCollapseAll) { deps.onCollapseAll(); }
           }
+          break;
+        case 'updateSortMode':
+          // Lightweight sort-mode change from sidebarProvider.updateSortMode():
+          // avoids re-serializing the full tree when only the sort order changed.
+          state.currentSortMode = message.sortMode || 'files';
+          if (state.lastRoots) { state.rerender(); }
+          break;
+        case 'updateTruncation':
+          // Lightweight truncation change from sidebarProvider.updateTruncateThreshold():
+          // avoids re-serializing the full tree when only the truncation threshold changed.
+          if (typeof message.truncateThreshold === 'number' && message.truncateThreshold !== state.truncateThreshold) {
+            state.truncationExpanded.clear();
+            state.emptyGroupExpanded.clear();
+          }
+          if (typeof message.truncateThreshold === 'number') { state.truncateThreshold = message.truncateThreshold; }
+          if (state.lastRoots) { state.rerender(); }
           break;
         case 'error':
           scanBar.show(false);

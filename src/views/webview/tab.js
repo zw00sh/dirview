@@ -17,6 +17,7 @@
   const scanBar = S.createScanBar();
   const tooltip = S.createTooltip();
   const state = S.createState();
+  state.scanBar = scanBar;
 
   const renderer = S.createRenderer(state, {
     vscode,
@@ -170,6 +171,12 @@
         tabTitleEl.appendChild(span);
       }
     }
+
+    // Trailing slash — same class as inter-segment separators so spacing is consistent
+    const trailingSlash = document.createElement('span');
+    trailingSlash.className = 'ancestor-path-sep';
+    trailingSlash.textContent = ' /';
+    tabTitleEl.appendChild(trailingSlash);
 
     // Dimmed sort indicator after the breadcrumb
     const sortLabel = document.createElement('span');
