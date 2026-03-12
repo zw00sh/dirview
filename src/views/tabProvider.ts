@@ -140,6 +140,26 @@ export class TabProvider {
 
     // Use panel reference lookup on dispose so the correct key is removed even
     // if the panel was re-keyed by navigateUp after initial creation.
+    // When the panel becomes visible again after being hidden, replay the latest
+    // scan data so it shows current state (updates were skipped while hidden).
+    panel.onDidChangeViewState(() => {
+      if (!panel.visible) { return; }
+      let currentPath: string | undefined;
+      for (const [dp, p] of this.panels) {
+        if (p === panel) { currentPath = dp; break; }
+      }
+      if (currentPath === undefined) { return; }
+      const roots = this.getRootsForDir(currentPath);
+      if (roots !== undefined) {
+        panel.webview.postMessage({
+          type: 'update', roots, dirPath: currentPath,
+          workspaceFolderName: this.getWorkspaceFolderName(currentPath),
+          autoRescanEnabled: this.lastAutoRescanEnabled,
+          showIgnored: this.lastShowIgnored,
+        });
+      }
+    });
+
     panel.onDidDispose(() => {
       for (const [dp, p] of this.panels) {
         if (p === panel) { this.panels.delete(dp); break; }
@@ -177,6 +197,8 @@ export class TabProvider {
     this.lastAutoRescanEnabled = autoRescanEnabled;
     this.lastShowIgnored = showIgnored;
     for (const [dirPath, panel] of this.panels) {
+      // Skip hidden panels — onDidChangeViewState will replay when they become visible.
+      if (!panel.visible) { continue; }
       const panelRoots = this.getRootsForDir(dirPath);
       // Send empty array if the directory was deleted — the tab will show an empty state.
       const effectiveRoots = panelRoots ?? [];

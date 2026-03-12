@@ -282,6 +282,7 @@ describe('dir hover action buttons', () => {
     expect(state.expanded.get('/r/a/x')).toBeFalsy();
     expect(state.expanded.get('/r/a/y')).toBeFalsy();
     await new Promise(r => requestAnimationFrame(r));
+    await new Promise(r => requestAnimationFrame(r));
     expect(state.render).toHaveBeenCalledOnce();
   });
 
@@ -335,6 +336,7 @@ describe('dir hover action buttons', () => {
     expect(state.expanded.get('/r/a/x')).toBe(true);
     expect(state.expanded.get('/r/a/y')).toBe(true);
     await new Promise(r => requestAnimationFrame(r));
+    await new Promise(r => requestAnimationFrame(r));
     expect(state.render).toHaveBeenCalledOnce();
   });
 
@@ -360,6 +362,7 @@ describe('dir hover action buttons', () => {
 
     expect(state.expanded.get('/r/a')).toBe(false);
     expect(state.expanded.get('/r/b')).toBe(false);
+    await new Promise(r => requestAnimationFrame(r));
     await new Promise(r => requestAnimationFrame(r));
     expect(state.render).toHaveBeenCalledOnce();
   });

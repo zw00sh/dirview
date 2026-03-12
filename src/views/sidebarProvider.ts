@@ -68,14 +68,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   updateTruncateThreshold(truncateThreshold: number): void {
     if (!this.lastUpdate) { return; }
     this.lastUpdate = { ...this.lastUpdate, truncateThreshold };
-    this.view?.webview.postMessage({ type: 'update', ...this.lastUpdate });
+    // Lightweight message: no need to re-serialize the full tree when only the
+    // truncation threshold changed. The webview re-renders from cached roots.
+    this.view?.webview.postMessage({ type: 'updateTruncation', truncateThreshold });
   }
 
   updateSortMode(sortMode: SortMode): void {
     if (!this.lastUpdate) { return; }
     this.lastUpdate = { ...this.lastUpdate, sortMode };
     if (this.view) { this.view.description = this.getSortDescription(sortMode); }
-    this.view?.webview.postMessage({ type: 'update', ...this.lastUpdate });
+    // Lightweight message: no need to re-serialize the full tree when only the
+    // sort mode changed. The webview re-renders from cached roots.
+    this.view?.webview.postMessage({ type: 'updateSortMode', sortMode });
   }
 
 

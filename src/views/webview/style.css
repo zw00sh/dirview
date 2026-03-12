@@ -270,21 +270,15 @@ body {
   background: var(--vscode-button-hoverBackground);
 }
 
-/* Scan progress bar */
+/* Scan progress bar — uses transform on a pseudo-element so the animation
+   runs on the compositor thread and won't freeze when render() blocks. */
 .scan-progress {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   height: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--vscode-progressBar-background, #007acc) 50%,
-    transparent 100%
-  );
-  background-size: 200% 100%;
-  animation: scan-slide 1.5s linear infinite;
+  overflow: hidden;
   z-index: 1000;
   display: none;
 }
@@ -293,9 +287,26 @@ body {
   display: block;
 }
 
+.scan-progress::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--vscode-progressBar-background, #007acc) 50%,
+    transparent 100%
+  );
+  animation: scan-slide 1.5s linear infinite;
+  will-change: transform;
+}
+
 @keyframes scan-slide {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
 }
 
 /* Bar hover tooltip */

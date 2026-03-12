@@ -892,15 +892,19 @@
     state._rerenderPending = false; // Deduplication flag: collapse rapid calls into one render
 
     // Convenience shorthand: re-renders with the current roots/flags without re-passing them explicitly.
-    // Uses requestAnimationFrame so the scan bar can paint before the heavy DOM rebuild begins.
+    // Double rAF: the first frame paints the scan bar as visible; the second
+    // frame runs the heavy DOM render.  Without this, show(true) and show(false)
+    // both execute before the browser paints, so the bar is never seen.
     state.rerender = () => {
       if (state._rerenderPending) { return; }
       state._rerenderPending = true;
       if (state.scanBar) { state.scanBar.show(true); }
       requestAnimationFrame(() => {
-        state._rerenderPending = false;
-        state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
-        if (state.scanBar) { state.scanBar.show(false); }
+        requestAnimationFrame(() => {
+          state._rerenderPending = false;
+          state.render(state.lastRoots, state.lastAutoRescanEnabled, state.currentSortMode);
+          if (state.scanBar) { state.scanBar.show(false); }
+        });
       });
     };
     return state;
