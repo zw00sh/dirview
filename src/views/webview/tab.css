@@ -91,7 +91,14 @@ body {
 .tab-view #root {
   flex: 1;
   overflow-y: auto;
-  padding: 0 8px 4px 0;
+  padding: 0 0 4px 0;
+}
+
+/* Apply right padding to rows (not the container) so full-width elements
+   like the rescan warning banner extend to the scrollbar edge. */
+.tab-view .dir-row,
+.tab-view .file-row {
+  padding-right: 8px;
 }
 
 .tab-view .dir-name { flex-shrink: 1; }
