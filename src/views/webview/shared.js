@@ -1285,18 +1285,6 @@
       rootEl.appendChild(treeEl);
     }
 
-    // Equalize .file-count widths so bars align across rows. Deferred to a rAF
-    // so the tree paints immediately without a forced synchronous layout reflow.
-    const treeEl = rootEl.querySelector(':scope > ul.tree');
-    requestAnimationFrame(() => {
-      const counts = treeEl.querySelectorAll('.file-count');
-      if (counts.length) {
-        let max = 0;
-        for (const el of counts) { el.style.width = ''; }
-        for (const el of counts) { const w = el.offsetWidth; if (w > max) max = w; }
-        for (const el of counts) { el.style.width = max + 'px'; }
-      }
-    });
   }
 
   /**

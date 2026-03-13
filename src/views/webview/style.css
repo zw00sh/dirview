@@ -207,7 +207,7 @@ body {
   font-size: 11px;
   color: var(--vscode-descriptionForeground);
   white-space: nowrap;
-  width: auto;
+  width: 44px;
   text-align: left;
   padding-right: 8px;
 }
