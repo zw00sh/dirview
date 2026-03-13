@@ -2,7 +2,7 @@
   "name": "dirview",
   "displayName": "Directory Breakdown",
   "description": "Visualize per-directory file type composition as GitHub-style colored proportional bars",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "publisher": "zwoosh",
   "license": "MIT",
   "repository": {

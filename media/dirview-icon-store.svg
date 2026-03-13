@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <clipPath id="bg"><rect width="256" height="256" rx="40"/></clipPath>
+    <clipPath id="b1"><rect x="32" y="52" width="192" height="36" rx="9"/></clipPath>
+    <clipPath id="b2"><rect x="32" y="110" width="140" height="36" rx="9"/></clipPath>
+    <clipPath id="b3"><rect x="32" y="168" width="88" height="36" rx="9"/></clipPath>
+  </defs>
+  <g clip-path="url(#bg)">
+    <rect width="256" height="256" fill="#1e1e1e"/>
+    <!-- Bar 1: widest — 3 language segments -->
+    <g clip-path="url(#b1)">
+      <rect x="32" y="52" width="104" height="36" fill="#3572A5"/>
+      <rect x="136" y="52" width="50" height="36" fill="#f1e05a"/>
+      <rect x="186" y="52" width="38" height="36" fill="#e34c26"/>
+    </g>
+    <!-- Bar 2: medium — 2 language segments -->
+    <g clip-path="url(#b2)">
+      <rect x="32" y="110" width="84" height="36" fill="#178600"/>
+      <rect x="116" y="110" width="56" height="36" fill="#563d7c"/>
+    </g>
+    <!-- Bar 3: narrow — 2 language segments -->
+    <g clip-path="url(#b3)">
+      <rect x="32" y="168" width="60" height="36" fill="#b07219"/>
+      <rect x="92" y="168" width="28" height="36" fill="#3572A5" opacity="0.85"/>
+    </g>
+  </g>
+</svg>
