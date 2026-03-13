@@ -363,6 +363,16 @@ body {
   opacity: 0.5;
 }
 
+/* Truncated-row label must not shrink — it's short fixed text ("N more files")
+   and should never be ellipsised by the proportional bar.
+   min-width: max-content is needed in addition to flex-shrink: 0 because
+   the bar-wrap's JS-set explicit width can create overflow that the browser
+   resolves by shrinking earlier items in the flex row. */
+.truncated-row .dir-name {
+  flex-shrink: 0;
+  min-width: max-content;
+}
+
 .truncated-row .chevron svg,
 .empty-group-row .chevron svg {
   transform: scale(0.65);
