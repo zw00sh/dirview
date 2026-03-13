@@ -506,8 +506,11 @@
 
       const textEl = document.createElement('span');
       textEl.className = 'match-line-text';
-      const lineText = match.lineText || '';
-      const col = match.column || 0;
+      // Trim leading whitespace; adjust column offset so highlight stays correct.
+      const rawText = match.lineText || '';
+      const trimmedStart = rawText.length - rawText.trimStart().length;
+      const lineText = rawText.trimStart();
+      const col = Math.max(0, (match.column || 0) - trimmedStart);
       const len = match.matchLength || 0;
       const MAX_LINE = 120;
 
@@ -1630,9 +1633,9 @@
     inputRow.appendChild(inputContainer);
     el.appendChild(inputRow);
 
-    // ── Files to include row — always visible (no collapsible toggle) ──────
-    const includeRow = document.createElement('div');
-    includeRow.className = 'search-filter-row';
+    // ── Files to include — label above input, matching VSCode native search ─
+    const includeSection = document.createElement('div');
+    includeSection.className = 'search-filter-section';
     const includeLabel = document.createElement('label');
     includeLabel.className = 'search-filter-label';
     includeLabel.textContent = 'files to include';
@@ -1641,9 +1644,9 @@
     includeInput.className = 'search-input search-filter-input';
     includeInput.placeholder = 'e.g. src/**/*.ts';
     includeInput.setAttribute('aria-label', 'Files to include');
-    includeRow.appendChild(includeLabel);
-    includeRow.appendChild(includeInput);
-    el.appendChild(includeRow);
+    includeSection.appendChild(includeLabel);
+    includeSection.appendChild(includeInput);
+    el.appendChild(includeSection);
 
     // ── Status line ────────────────────────────────────────────────────────
     const statusEl = document.createElement('div');

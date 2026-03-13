@@ -487,23 +487,22 @@ body {
   border: 1px solid var(--vscode-inputOption-activeBorder, transparent);
 }
 
-.search-filter-row {
+.search-filter-section {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 0 1px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0 1px;
 }
 
 .search-filter-label {
   font-size: 11px;
   color: var(--vscode-descriptionForeground);
-  white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .search-filter-input {
-  flex: 1;
-  height: 18px;
+  width: 100%;
+  box-sizing: border-box;
+  height: 20px;
   font-size: 11px;
 }
 

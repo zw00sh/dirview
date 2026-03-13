@@ -20,8 +20,8 @@ export interface SearchOptions {
   include?: string;
 }
 
-const MAX_FILES = 1000;
-const MAX_MATCHES = 5000;
+const MAX_FILES = 2000;
+const MAX_MATCHES = 20000;
 
 export class SearchService {
   private currentProcess: child_process.ChildProcess | null = null;
