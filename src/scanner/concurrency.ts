@@ -1,11 +1,13 @@
 /**
  * Maps items through an async function with a max concurrency limit.
- * Results are returned in input order.
+ * Results are returned in input order. If signal is provided, workers
+ * stop accepting new items once it is aborted (in-progress items complete).
  */
 export async function parallelMap<T, R>(
   items: T[],
   fn: (item: T) => Promise<R>,
-  concurrency: number
+  concurrency: number,
+  signal?: AbortSignal
 ): Promise<R[]> {
   if (items.length === 0) { return []; }
 
@@ -14,6 +16,7 @@ export async function parallelMap<T, R>(
 
   async function worker(): Promise<void> {
     while (nextIndex < items.length) {
+      if (signal?.aborted) { return; }
       const i = nextIndex++;
       results[i] = await fn(items[i]);
     }

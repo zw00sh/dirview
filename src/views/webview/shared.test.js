@@ -233,8 +233,8 @@ function makeDir(path, name, { children = [], files = [], totalFiles = 0, sizeBy
   return { path, name, children, files, totalFiles, sizeBytes, stats };
 }
 
-function makeRenderer(state) {
-  const vscode = { postMessage: () => {} };
+function makeRenderer(state, { onExpandChanged } = {}) {
+  const vscode = { postMessage: vi.fn() };
   const rootEl = document.createElement('div');
   document.body.appendChild(rootEl);
   const tooltipEl = document.createElement('div');
@@ -246,11 +246,18 @@ function makeRenderer(state) {
     root: rootEl,
     tooltip: tooltipEl,
     options: { skipDepthZeroGuides: false, barFactor: 0.4, barMaxWidth: 200, barFallbackWidth: 300 },
+    onExpandChanged,
   });
-  // Expose rootEl so tests can append rendered `li` elements before clicking,
-  // which is required for delegated event handlers on rootEl to fire.
+  // Expose rootEl and vscode so tests can append rendered elements and verify messages.
   renderer._rootEl = rootEl;
+  renderer._vscode = vscode;
   return renderer;
+}
+
+/** Await two animation frames (matches state.rerender's double-rAF pattern). */
+async function awaitRerender() {
+  await new Promise(r => requestAnimationFrame(r));
+  await new Promise(r => requestAnimationFrame(r));
 }
 
 describe('dir hover action buttons', () => {
@@ -711,5 +718,688 @@ describe('tieredCollapseAll', () => {
     S.tieredCollapseAll(state, [ws1, ws2]);
     expect(state.expanded.get('/ws1/a')).toBe(false);
     expect(state.expanded.get('/ws2/b')).toBe(false);
+  });
+});
+
+// ── patchTreeChildren / patchDirLi ───────────────────────────────────────────
+
+function makeLi(path, barWidth, countText, childPaths = []) {
+  const li = document.createElement('li');
+  li.dataset.nodePath = path;
+
+  const row = document.createElement('div');
+  row.className = 'dir-row';
+
+  if (barWidth > 0) {
+    const barWrap = document.createElement('div');
+    barWrap.className = 'bar-wrap';
+    barWrap.style.width = barWidth + 'px';
+    const bar = document.createElement('div');
+    bar.className = 'bar';
+    barWrap.appendChild(bar);
+    row.appendChild(barWrap);
+  }
+
+  const count = document.createElement('span');
+  count.className = 'file-count';
+  count.textContent = countText;
+  row.appendChild(count);
+
+  li.appendChild(row);
+
+  if (childPaths.length) {
+    const ul = document.createElement('ul');
+    ul.className = 'children open';
+    for (const cp of childPaths) { ul.appendChild(makeLi(cp, 10, '1')); }
+    li.appendChild(ul);
+  }
+
+  return li;
+}
+
+function makeTree(items) {
+  const ul = document.createElement('ul');
+  ul.className = 'tree';
+  for (const [path, barWidth, count, children] of items) {
+    ul.appendChild(makeLi(path, barWidth, String(count), children || []));
+  }
+  return ul;
+}
+
+describe('patchTreeChildren', () => {
+  it('does not duplicate unkeyed (file) children on re-patch', () => {
+    const container = document.createElement('div');
+    // Old tree: one dir with data-node-path, two plain <li>s (like file rows)
+    const oldTree = document.createElement('ul');
+    oldTree.className = 'tree';
+    const dirLi = makeLi('/a', 50, '5');
+    const fileLi1 = document.createElement('li');
+    fileLi1.textContent = 'file1.ts';
+    const fileLi2 = document.createElement('li');
+    fileLi2.textContent = 'file2.ts';
+    oldTree.appendChild(dirLi);
+    oldTree.appendChild(fileLi1);
+    oldTree.appendChild(fileLi2);
+    container.appendChild(oldTree);
+
+    // New tree: same dir (updated count) + same two files
+    const newTree = document.createElement('ul');
+    newTree.className = 'tree';
+    newTree.appendChild(makeLi('/a', 60, '6'));
+    const newFile1 = document.createElement('li');
+    newFile1.textContent = 'file1.ts';
+    const newFile2 = document.createElement('li');
+    newFile2.textContent = 'file2.ts';
+    newTree.appendChild(newFile1);
+    newTree.appendChild(newFile2);
+
+    S.patchTreeChildren(oldTree, newTree);
+
+    // Must have exactly 3 children, not 5 (which would indicate duplication)
+    expect(oldTree.children.length).toBe(3);
+    expect(oldTree.querySelector('[data-node-path="/a"]')).toBeTruthy();
+    expect(oldTree.querySelector('.file-count').textContent).toBe('6');
+  });
+
+  it('updates bar width and count for matching paths', () => {
+    const container = document.createElement('div');
+    const oldTree = makeTree([['/a', 50, '5']]);
+    container.appendChild(oldTree);
+
+    const newTree = makeTree([['/a', 80, '8']]);
+    S.patchTreeChildren(oldTree, newTree);
+
+    const li = oldTree.querySelector('[data-node-path="/a"]');
+    expect(li).toBeTruthy();
+    expect(li.querySelector('.bar-wrap').style.width).toBe('80px');
+    expect(li.querySelector('.file-count').textContent).toBe('8');
+  });
+
+  it('inserts new nodes that did not previously exist', () => {
+    const container = document.createElement('div');
+    const oldTree = makeTree([['/a', 50, '5']]);
+    container.appendChild(oldTree);
+
+    const newTree = makeTree([['/a', 50, '5'], ['/b', 30, '3']]);
+    S.patchTreeChildren(oldTree, newTree);
+
+    expect(oldTree.querySelectorAll('[data-node-path]')).toHaveLength(2);
+    expect(oldTree.querySelector('[data-node-path="/b"]')).toBeTruthy();
+  });
+
+  it('removes nodes that no longer exist in the new tree', () => {
+    const container = document.createElement('div');
+    const oldTree = makeTree([['/a', 50, '5'], ['/b', 30, '3']]);
+    container.appendChild(oldTree);
+
+    const newTree = makeTree([['/a', 50, '5']]);
+    S.patchTreeChildren(oldTree, newTree);
+
+    expect(oldTree.querySelectorAll('[data-node-path]')).toHaveLength(1);
+    expect(oldTree.querySelector('[data-node-path="/b"]')).toBeNull();
+  });
+
+  it('reuses the same DOM node for matching paths', () => {
+    const container = document.createElement('div');
+    const oldTree = makeTree([['/a', 50, '5']]);
+    container.appendChild(oldTree);
+    const originalLi = oldTree.querySelector('[data-node-path="/a"]');
+
+    const newTree = makeTree([['/a', 60, '6']]);
+    S.patchTreeChildren(oldTree, newTree);
+
+    const patchedLi = oldTree.querySelector('[data-node-path="/a"]');
+    expect(patchedLi).toBe(originalLi); // same DOM node — not replaced
+  });
+
+  it('recurses into children <ul>', () => {
+    const container = document.createElement('div');
+    const oldTree = makeTree([['/a', 50, '5', ['/a/x']]]);
+    container.appendChild(oldTree);
+
+    const newTree = makeTree([['/a', 60, '6', ['/a/x', '/a/y']]]);
+    S.patchTreeChildren(oldTree, newTree);
+
+    const childUl = oldTree.querySelector('[data-node-path="/a"] > ul.children');
+    expect(childUl).toBeTruthy();
+    expect(childUl.querySelectorAll('[data-node-path]')).toHaveLength(2);
+  });
+
+  it('handles adding a bar where none existed', () => {
+    const container = document.createElement('div');
+    const oldTree = makeTree([['/a', 0, '—']]); // no bar (empty dir)
+    container.appendChild(oldTree);
+
+    const newTree = makeTree([['/a', 40, '4']]); // now has files
+    S.patchTreeChildren(oldTree, newTree);
+
+    const li = oldTree.querySelector('[data-node-path="/a"]');
+    expect(li.querySelector('.bar-wrap')).toBeTruthy();
+    expect(li.querySelector('.bar-wrap').style.width).toBe('40px');
+  });
+
+  it('handles removing a bar when dir becomes empty', () => {
+    const container = document.createElement('div');
+    const oldTree = makeTree([['/a', 40, '4']]); // has bar
+    container.appendChild(oldTree);
+
+    const newTree = makeTree([['/a', 0, '—']]); // no bar
+    S.patchTreeChildren(oldTree, newTree);
+
+    const li = oldTree.querySelector('[data-node-path="/a"]');
+    expect(li.querySelector('.bar-wrap')).toBeNull();
+  });
+});
+
+// --- Delegated click handler interaction tests ---
+// These tests simulate the full cycle: render → click DOM element → delegated handler fires →
+// state updates → rerender → DOM reflects new state. This catches stale-closure and
+// event-delegation bugs that attribute-only tests miss.
+
+describe('delegated click handler', () => {
+  // -- Data-action attribute presence --
+
+  describe('data-action attributes', () => {
+    it('renderTruncatedRow has data-action="expandTruncated" and data-dir-path', () => {
+      const state = S.createState();
+      const renderer = makeRenderer(state);
+      const hiddenFiles = [
+        { name: 'a.js', path: '/d/a.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 100 },
+      ];
+      const li = renderer.renderTruncatedRow(hiddenFiles, 1, [{ path: '/d' }], '/d', 10, 300);
+      const row = li.querySelector('.truncated-row');
+      expect(row.dataset.action).toBe('expandTruncated');
+      expect(row.dataset.dirPath).toBe('/d');
+    });
+
+    it('renderEmptyGroupNode has data-action="expandEmptyGroup" and data-group-key', () => {
+      const state = S.createState();
+      const renderer = makeRenderer(state);
+      const nodes = [makeDir('/r/empty1', 'empty1'), makeDir('/r/empty2', 'empty2')];
+      const li = renderer.renderEmptyGroupNode(nodes, 0, 10, []);
+      const row = li.querySelector('.empty-group-row');
+      expect(row.dataset.action).toBe('expandEmptyGroup');
+      expect(row.dataset.groupKey).toBe('/r/empty1');
+    });
+
+    it('renderFileNode has data-action="openFile" and data-path', () => {
+      const state = S.createState();
+      const renderer = makeRenderer(state);
+      const li = renderer.renderFileNode(
+        { name: 'foo.js', path: '/r/foo.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 42 },
+        0, [],
+      );
+      const row = li.querySelector('.file-row');
+      expect(row.dataset.action).toBe('openFile');
+      expect(row.dataset.path).toBe('/r/foo.js');
+    });
+
+    it('indent guides have data-action="collapseGuide" and data-guide-path', () => {
+      const state = S.createState();
+      const renderer = makeRenderer(state);
+      const ancestor = { path: '/r' };
+      const li = renderer.renderFileNode(
+        { name: 'f.js', path: '/r/f.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 1 },
+        1, [ancestor],
+      );
+      const guide = li.querySelector('.indent-guide');
+      expect(guide.dataset.action).toBe('collapseGuide');
+      expect(guide.dataset.guidePath).toBe('/r');
+    });
+  });
+
+  // -- File open --
+
+  describe('openFile action', () => {
+    it('clicking a file row posts openFile message', () => {
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      const renderer = makeRenderer(state);
+      const file = { name: 'foo.js', path: '/r/foo.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 42 };
+      const parent = makeDir('/r', 'r', { files: [file], totalFiles: 1, stats: [{ name: 'JavaScript', color: '#f1e05a', count: 1 }] });
+      state.expanded.set('/r', true);
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(parent, 0, 1, [], 300);
+      renderer._rootEl.appendChild(li);
+
+      li.querySelector('.file-row').click();
+
+      expect(renderer._vscode.postMessage).toHaveBeenCalledWith({ command: 'openFile', path: '/r/foo.js' });
+    });
+
+    it('clicking a file row does not toggle the parent dir', () => {
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      const renderer = makeRenderer(state);
+      const file = { name: 'foo.js', path: '/r/foo.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 42 };
+      const parent = makeDir('/r', 'r', { files: [file], totalFiles: 1, stats: [{ name: 'JavaScript', color: '#f1e05a', count: 1 }] });
+      state.expanded.set('/r', true);
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(parent, 0, 1, [], 300);
+      renderer._rootEl.appendChild(li);
+
+      li.querySelector('.file-row').click();
+
+      // Parent should still be expanded
+      expect(state.expanded.get('/r')).toBe(true);
+    });
+  });
+
+  // -- Indent guide collapse --
+
+  describe('collapseGuide action', () => {
+    it('clicking an indent guide collapses the ancestor dir and rerenders', async () => {
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      const renderer = makeRenderer(state);
+
+      // Two grandchildren so child doesn't compact
+      const gc1 = makeDir('/r/a/x', 'x', { totalFiles: 1, stats: [] });
+      const gc2 = makeDir('/r/a/y', 'y', { totalFiles: 1, stats: [] });
+      const child = makeDir('/r/a', 'a', { children: [gc1, gc2], totalFiles: 2, stats: [] });
+      const root = makeDir('/r', 'r', { children: [child], totalFiles: 2, stats: [] });
+      state.expanded.set('/r', true);
+      state.expanded.set('/r/a', true);
+
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(root, 0, 2, [], 300);
+      renderer._rootEl.appendChild(li);
+
+      // Grandchild row has an indent guide pointing at '/r/a'
+      const guides = li.querySelectorAll('.indent-guide[data-guide-path="/r/a"]');
+      expect(guides.length).toBeGreaterThan(0);
+      guides[0].click();
+
+      expect(state.expanded.get('/r/a')).toBe(false);
+      await awaitRerender();
+      expect(state.render).toHaveBeenCalled();
+    });
+
+    it('clicking an indent guide does nothing when filters are active', () => {
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      state.activeFilters.add('JavaScript');
+      const renderer = makeRenderer(state);
+
+      const gc1 = makeDir('/r/a/x', 'x', { totalFiles: 1, stats: [{ name: 'JavaScript', color: '#f1e05a', count: 1 }] });
+      const gc2 = makeDir('/r/a/y', 'y', { totalFiles: 1, stats: [{ name: 'JavaScript', color: '#f1e05a', count: 1 }] });
+      const child = makeDir('/r/a', 'a', { children: [gc1, gc2], totalFiles: 2, stats: [{ name: 'JavaScript', color: '#f1e05a', count: 2 }] });
+      const root = makeDir('/r', 'r', { children: [child], totalFiles: 2, stats: [{ name: 'JavaScript', color: '#f1e05a', count: 2 }] });
+      state.expanded.set('/r', true);
+      state.expanded.set('/r/a', true);
+
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(root, 0, 2, [], 300);
+      renderer._rootEl.appendChild(li);
+
+      const guide = li.querySelector('.indent-guide[data-guide-path="/r/a"]');
+      if (guide) { guide.click(); }
+
+      // Should still be expanded — guide click is a no-op with filters active
+      expect(state.expanded.get('/r/a')).toBe(true);
+    });
+  });
+
+  // -- Dir row toggle (no action element) --
+
+  describe('dir row toggle', () => {
+    it('clicking a dir row toggles chevron and children visibility without rerender', () => {
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      const renderer = makeRenderer(state);
+      // Two children prevent folder compaction, keeping displayNode.path = '/r'
+      const child1 = makeDir('/r/a', 'a', { totalFiles: 1, stats: [{ name: 'JS', color: '#f1e05a', count: 1 }] });
+      const child2 = makeDir('/r/b', 'b', { totalFiles: 1, stats: [{ name: 'JS', color: '#f1e05a', count: 1 }] });
+      const root = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 2, stats: [{ name: 'JS', color: '#f1e05a', count: 2 }] });
+      state.expanded.set('/r', true);
+
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(root, 0, 2, [], 300);
+      renderer._rootEl.appendChild(li);
+
+      const dirRow = li.querySelector('.dir-row[data-path="/r"]');
+      const chevron = dirRow.querySelector('.chevron');
+      expect(chevron.className).toBe('chevron open');
+
+      // Click dir row label area (not a button) to collapse
+      dirRow.querySelector('.dir-name').click();
+
+      expect(state.expanded.get('/r')).toBe(false);
+      expect(chevron.className).toBe('chevron');
+      // Fast-path: no rerender call
+      expect(state.render).not.toHaveBeenCalled();
+    });
+
+    it('clicking a dir row fires onExpandChanged callback', () => {
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      const onExpandChanged = vi.fn();
+      const renderer = makeRenderer(state, { onExpandChanged });
+      const child1 = makeDir('/r/a', 'a', { totalFiles: 1, stats: [] });
+      const child2 = makeDir('/r/b', 'b', { totalFiles: 1, stats: [] });
+      const root = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 2, stats: [] });
+      state.expanded.set('/r', true);
+
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(root, 0, 2, [], 300);
+      renderer._rootEl.appendChild(li);
+
+      li.querySelector('.dir-row[data-path="/r"]').querySelector('.dir-name').click();
+
+      expect(onExpandChanged).toHaveBeenCalled();
+    });
+
+    it('does not toggle leaf dirs (no children)', () => {
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      const renderer = makeRenderer(state);
+      // Leaf dir: has files but no child dirs
+      const root = makeDir('/r', 'r', {
+        files: [{ name: 'f.js', path: '/r/f.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 1 }],
+        totalFiles: 1,
+        stats: [{ name: 'JS', color: '#f1e05a', count: 1 }],
+      });
+
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(root, 0, 1, [], 300);
+      renderer._rootEl.appendChild(li);
+
+      li.querySelector('.dir-row[data-path="/r"]').click();
+
+      // Should remain falsy — leaf dirs can't expand
+      expect(state.expanded.get('/r')).toBeFalsy();
+    });
+  });
+
+  // -- Collapse resets truncation --
+
+  describe('collapse resets truncation', () => {
+    it('collapsing a dir with truncation expanded clears truncation and rerenders', async () => {
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      state.truncateThreshold = 2;
+      const renderer = makeRenderer(state);
+      const files = [
+        { name: 'a.js', path: '/r/a.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 1 },
+        { name: 'b.js', path: '/r/b.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 1 },
+        { name: 'c.js', path: '/r/c.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 1 },
+      ];
+      const child = makeDir('/r/a', 'a', { totalFiles: 1, stats: [] });
+      const root = makeDir('/r', 'r', { children: [child], files, totalFiles: 3, stats: [{ name: 'JS', color: '#f1e05a', count: 3 }] });
+      state.expanded.set('/r', true);
+      state.truncationExpanded.add('/r');
+
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(root, 0, 3, [], 300);
+      renderer._rootEl.appendChild(li);
+
+      // Collapse by clicking the dir row
+      li.querySelector('.dir-row[data-path="/r"]').querySelector('.dir-name').click();
+
+      expect(state.expanded.get('/r')).toBe(false);
+      expect(state.truncationExpanded.has('/r')).toBe(false);
+      await awaitRerender();
+      expect(state.render).toHaveBeenCalled();
+    });
+  });
+
+  // -- Truncated row click --
+
+  describe('expandTruncated action', () => {
+    it('clicking a truncated row updates state and rerenders', async () => {
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      state.truncateThreshold = 2;
+      const renderer = makeRenderer(state);
+      const files = [
+        { name: 'a.js', path: '/r/a.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 100 },
+        { name: 'b.py', path: '/r/b.py', langName: 'Python', langColor: '#3572A5', sizeBytes: 200 },
+        { name: 'c.ts', path: '/r/c.ts', langName: 'TypeScript', langColor: '#2b7489', sizeBytes: 300 },
+        { name: 'd.rb', path: '/r/d.rb', langName: 'Ruby', langColor: '#701516', sizeBytes: 400 },
+      ];
+      const root = makeDir('/r', 'r', { children: [], files, totalFiles: 4, stats: [
+        { name: 'JavaScript', color: '#f1e05a', count: 1 },
+        { name: 'Python', color: '#3572A5', count: 1 },
+        { name: 'TypeScript', color: '#2b7489', count: 1 },
+        { name: 'Ruby', color: '#701516', count: 1 },
+      ] });
+      state.expanded.set('/r', true);
+
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(root, 0, 4, [], 300);
+      renderer._rootEl.appendChild(li);
+
+      const truncRow = li.querySelector('.truncated-row');
+      expect(truncRow).toBeTruthy();
+
+      // Click the truncated row via delegated handler
+      truncRow.click();
+
+      expect(state.truncationExpanded.has('/r')).toBe(true);
+      await awaitRerender();
+      expect(state.render).toHaveBeenCalled();
+    });
+
+    it('clicking a truncated row does not toggle the parent dir', async () => {
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      state.truncateThreshold = 2;
+      const renderer = makeRenderer(state);
+      const files = [
+        { name: 'a.js', path: '/r/a.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 1 },
+        { name: 'b.js', path: '/r/b.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 1 },
+        { name: 'c.js', path: '/r/c.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 1 },
+      ];
+      const root = makeDir('/r', 'r', { children: [], files, totalFiles: 3, stats: [{ name: 'JS', color: '#f1e05a', count: 3 }] });
+      state.expanded.set('/r', true);
+
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(root, 0, 3, [], 300);
+      renderer._rootEl.appendChild(li);
+
+      li.querySelector('.truncated-row').click();
+
+      // Parent should still be expanded — action takes priority over dir-row toggle
+      expect(state.expanded.get('/r')).toBe(true);
+    });
+
+    it('rerender after expansion shows all files and removes truncated row', () => {
+      const state = S.createState();
+      state.truncateThreshold = 2;
+      const renderer = makeRenderer(state);
+      const files = [
+        { name: 'a.js', path: '/r/a.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 100 },
+        { name: 'b.py', path: '/r/b.py', langName: 'Python', langColor: '#3572A5', sizeBytes: 200 },
+        { name: 'c.ts', path: '/r/c.ts', langName: 'TypeScript', langColor: '#2b7489', sizeBytes: 300 },
+        { name: 'd.rb', path: '/r/d.rb', langName: 'Ruby', langColor: '#701516', sizeBytes: 400 },
+      ];
+      const root = makeDir('/r', 'r', { children: [], files, totalFiles: 4, stats: [
+        { name: 'JavaScript', color: '#f1e05a', count: 1 },
+        { name: 'Python', color: '#3572A5', count: 1 },
+        { name: 'TypeScript', color: '#2b7489', count: 1 },
+        { name: 'Ruby', color: '#701516', count: 1 },
+      ] });
+      state.expanded.set('/r', true);
+
+      // First render — truncated
+      renderer.beforeRender();
+      const li1 = renderer.renderDirNode(root, 0, 4, [], 300);
+      expect(li1.querySelectorAll('.file-row')).toHaveLength(2);
+      expect(li1.querySelector('.truncated-row')).toBeTruthy();
+
+      // Expand truncation, re-render
+      state.truncationExpanded.add('/r');
+      renderer.beforeRender();
+      const li2 = renderer.renderDirNode(root, 0, 4, [], 300);
+      expect(li2.querySelectorAll('.file-row')).toHaveLength(4);
+      expect(li2.querySelector('.truncated-row')).toBeNull();
+    });
+
+    it('works with empty-string dirPath (root-level truncated row)', async () => {
+      // Root-level DirNodes have path: '' (empty string). The handler must not
+      // treat '' as falsy — this is the regression that caused the original bug.
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      state.truncateThreshold = 2;
+      const renderer = makeRenderer(state);
+      const hiddenFiles = [
+        { name: 'a.js', path: 'a.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 1 },
+        { name: 'b.js', path: 'b.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 1 },
+      ];
+      // dirPath = '' matches real root-level nodes from fileScanner
+      const li = renderer.renderTruncatedRow(hiddenFiles, 0, [], '', 2, 300);
+      renderer._rootEl.appendChild(li);
+
+      li.querySelector('.truncated-row').click();
+
+      expect(state.truncationExpanded.has('')).toBe(true);
+      await awaitRerender();
+      expect(state.render).toHaveBeenCalled();
+    });
+  });
+
+  // -- Empty group row click --
+
+  describe('expandEmptyGroup action', () => {
+    it('clicking an empty group row updates state and rerenders', async () => {
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      const renderer = makeRenderer(state);
+      const empty1 = makeDir('/r/empty1', 'empty1');
+      const empty2 = makeDir('/r/empty2', 'empty2');
+      const nonEmpty = makeDir('/r/full', 'full', { totalFiles: 3, stats: [{ name: 'JS', color: '#f1e05a', count: 3 }] });
+      const root = makeDir('/r', 'r', { children: [empty1, empty2, nonEmpty], totalFiles: 3, stats: [{ name: 'JS', color: '#f1e05a', count: 3 }] });
+      state.expanded.set('/r', true);
+
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(root, 0, 3, [], 300);
+      renderer._rootEl.appendChild(li);
+
+      const groupRow = li.querySelector('.empty-group-row');
+      expect(groupRow).toBeTruthy();
+
+      groupRow.click();
+
+      expect(state.emptyGroupExpanded.has('/r/empty1')).toBe(true);
+      await awaitRerender();
+      expect(state.render).toHaveBeenCalled();
+    });
+
+    it('clicking an empty group row does not toggle the parent dir', async () => {
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      const renderer = makeRenderer(state);
+      const empty1 = makeDir('/r/empty1', 'empty1');
+      const empty2 = makeDir('/r/empty2', 'empty2');
+      const nonEmpty = makeDir('/r/full', 'full', { totalFiles: 1, stats: [{ name: 'JS', color: '#f1e05a', count: 1 }] });
+      const root = makeDir('/r', 'r', { children: [empty1, empty2, nonEmpty], totalFiles: 1, stats: [{ name: 'JS', color: '#f1e05a', count: 1 }] });
+      state.expanded.set('/r', true);
+
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(root, 0, 1, [], 300);
+      renderer._rootEl.appendChild(li);
+
+      li.querySelector('.empty-group-row').click();
+
+      expect(state.expanded.get('/r')).toBe(true);
+    });
+
+    it('rerender after expansion shows individual dirs instead of group row', () => {
+      const state = S.createState();
+      const renderer = makeRenderer(state);
+      const empty1 = makeDir('/r/empty1', 'empty1');
+      const empty2 = makeDir('/r/empty2', 'empty2');
+      const nonEmpty = makeDir('/r/full', 'full', { totalFiles: 3, stats: [{ name: 'JS', color: '#f1e05a', count: 3 }] });
+      const root = makeDir('/r', 'r', { children: [empty1, empty2, nonEmpty], totalFiles: 3, stats: [{ name: 'JS', color: '#f1e05a', count: 3 }] });
+      state.expanded.set('/r', true);
+
+      // First render — grouped
+      renderer.beforeRender();
+      const li1 = renderer.renderDirNode(root, 0, 3, [], 300);
+      expect(li1.querySelector('.empty-group-row')).toBeTruthy();
+      expect(li1.querySelector('[data-path="/r/empty1"]')).toBeNull();
+
+      // Expand, re-render
+      state.emptyGroupExpanded.add('/r/empty1');
+      renderer.beforeRender();
+      const li2 = renderer.renderDirNode(root, 0, 3, [], 300);
+      expect(li2.querySelector('.empty-group-row')).toBeNull();
+      expect(li2.querySelector('[data-path="/r/empty1"]')).toBeTruthy();
+      expect(li2.querySelector('[data-path="/r/empty2"]')).toBeTruthy();
+    });
+
+    it('works with empty-string groupKey (root-level empty group)', async () => {
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      const renderer = makeRenderer(state);
+      // groupKey is nodes[0].path — use '' to match root-level nodes
+      const nodes = [makeDir('', 'root1'), makeDir('other', 'root2')];
+      const li = renderer.renderEmptyGroupNode(nodes, 0, 0, []);
+      renderer._rootEl.appendChild(li);
+
+      li.querySelector('.empty-group-row').click();
+
+      expect(state.emptyGroupExpanded.has('')).toBe(true);
+      await awaitRerender();
+      expect(state.render).toHaveBeenCalled();
+    });
+  });
+
+  // -- Render → patch → click (stale closure regression) --
+
+  describe('render-patch-click cycle', () => {
+    it('truncated row click works correctly after patchTreeChildren moves it', async () => {
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      state.truncateThreshold = 2;
+      const renderer = makeRenderer(state);
+      const files = [
+        { name: 'a.js', path: '/r/a.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 100 },
+        { name: 'b.js', path: '/r/b.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 200 },
+        { name: 'c.js', path: '/r/c.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 300 },
+      ];
+      const root = makeDir('/r', 'r', { children: [], files, totalFiles: 3, stats: [{ name: 'JS', color: '#f1e05a', count: 3 }] });
+      state.expanded.set('/r', true);
+
+      // Initial render
+      renderer.beforeRender();
+      const oldTree = document.createElement('ul');
+      oldTree.className = 'tree';
+      const li1 = renderer.renderDirNode(root, 0, 3, [], 300);
+      oldTree.appendChild(li1);
+      renderer._rootEl.appendChild(oldTree);
+
+      // Simulate FS change: re-render and patch
+      renderer.beforeRender();
+      const newTree = document.createElement('ul');
+      newTree.className = 'tree';
+      newTree.appendChild(renderer.renderDirNode(root, 0, 3, [], 300));
+      S.patchTreeChildren(oldTree, newTree);
+
+      // Now click the truncated row in the patched tree
+      const truncRow = oldTree.querySelector('.truncated-row');
+      expect(truncRow).toBeTruthy();
+      truncRow.click();
+
+      // Should still work — no stale closure, delegated handler reads live state
+      expect(state.truncationExpanded.has('/r')).toBe(true);
+      await awaitRerender();
+      expect(state.render).toHaveBeenCalled();
+    });
   });
 });

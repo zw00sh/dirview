@@ -27,20 +27,30 @@
     state.lastAutoRescanEnabled = autoRescanEnabled;
     state.currentSortMode = sortMode || 'files';
 
-    root.innerHTML = '';
+    // Remove one-time placeholders (loading/initializing) without wiping the
+    // whole container — preserves any existing tree for incremental patching.
+    root.querySelector('.loading')?.remove();
 
-    if (!autoRescanEnabled) {
-      root.appendChild(S.createRescanWarning(vscode));
+    // Manage the rescan-warning banner in place rather than clearing root.
+    const existingWarn = root.querySelector('.rescan-warning');
+    if (!autoRescanEnabled && !existingWarn) {
+      root.insertBefore(S.createRescanWarning(vscode), root.firstChild);
+    } else if (autoRescanEnabled && existingWarn) {
+      existingWarn.remove();
     }
 
     if (!roots || roots.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'empty';
-      empty.textContent = 'No workspace folder open.';
-      root.appendChild(empty);
+      root.querySelector('ul.tree')?.remove();
+      if (!root.querySelector('.empty')) {
+        const empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = 'No workspace folder open.';
+        root.appendChild(empty);
+      }
       return;
     }
 
+    root.querySelector('.empty')?.remove();
     S.renderTree(state, renderer, root, { cssClass: 'sidebar' });
   }
 

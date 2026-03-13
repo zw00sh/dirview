@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
-import { DirNode } from '../scanner/types';
+import { ScanUpdatePayload } from '../scanner/types';
 import { buildWebviewHtml } from './buildWebviewHtml';
 import { setupVisibilityReplay } from './providerUtils';
 
 export class LanguagesProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private extensionUri: vscode.Uri;
-  private lastRoots: DirNode[] | undefined;
+  private lastPayload: ScanUpdatePayload | undefined;
   private activeFilters: string[] = [];
 
   onFilterChange: ((langs: string[]) => void) | undefined;
@@ -35,18 +35,22 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
     });
 
     setupVisibilityReplay(webviewView, () =>
-      this.lastRoots ? { type: 'update', roots: this.lastRoots, activeFilters: this.activeFilters } : undefined
+      this.lastPayload ? { type: 'update', roots: this.lastPayload.roots, activeFilters: this.activeFilters } : undefined
     );
   }
 
-  update(roots: DirNode[]): void {
-    this.lastRoots = roots;
-    this.view?.webview.postMessage({ type: 'update', roots, activeFilters: this.activeFilters });
+  update(payload: ScanUpdatePayload): void {
+    this.lastPayload = payload;
+    this.view?.webview.postMessage({ type: 'update', roots: payload.roots, activeFilters: this.activeFilters });
   }
 
   setFilter(langs: string[]): void {
     this.activeFilters = langs;
     this.view?.webview.postMessage({ type: 'filter', langs });
+  }
+
+  showError(message: string): void {
+    this.view?.webview.postMessage({ type: 'error', message });
   }
 
   private getHtml(webview: vscode.Webview): string {

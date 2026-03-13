@@ -212,7 +212,7 @@
     }
   },
   "scripts": {
-    "compile": "node esbuild.mjs && node scripts/copyWebview.js",
+    "compile": "rm -rf out && node esbuild.mjs && node scripts/copyWebview.js",
     "watch": "node scripts/watchAll.js",
     "watch:tsc": "tsc -watch -p ./",
     "copy-webview": "node scripts/copyWebview.js",

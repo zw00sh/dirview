@@ -10,7 +10,7 @@ export interface ScanResult {
   totalFiles: number;
 }
 
-export async function scanWorkspace(showIgnored: boolean): Promise<ScanResult> {
+export async function scanWorkspace(showIgnored: boolean, signal?: AbortSignal): Promise<ScanResult> {
   const folders = vscode.workspace.workspaceFolders;
   if (!folders || folders.length === 0) {
     return { roots: [], totalFiles: 0 };
@@ -18,17 +18,17 @@ export async function scanWorkspace(showIgnored: boolean): Promise<ScanResult> {
 
   const maxDepth = vscode.workspace.getConfiguration('dirview').get<number>('maxDepth', 0);
 
-  const roots: DirNode[] = [];
-  let totalFiles = 0;
-
-  for (const folder of folders) {
+  // Scan all workspace folders in parallel — each has its own independent filter/visited state.
+  // Promise.all preserves order, so roots are always in the same order as workspaceFolders.
+  const roots = await Promise.all(folders.map(async (folder) => {
     const filter = new IgnoreFilter(folder.uri, showIgnored);
     await filter.init();
     const visitedPaths = new Set<string>();
-    const node = await scanDir(folder.uri, folder.name, '', filter, visitedPaths, 0, maxDepth);
-    roots.push(node);
-    totalFiles += node.totalFiles;
-  }
+    return scanDir(folder.uri, folder.name, '', filter, visitedPaths, 0, maxDepth, signal);
+  }));
+
+  let totalFiles = 0;
+  for (const node of roots) { totalFiles += node.totalFiles; }
 
   return { roots, totalFiles };
 }
@@ -40,8 +40,12 @@ async function scanDir(
   filter: IgnoreFilter,
   visitedPaths: Set<string>,
   depth: number,
-  maxDepth: number
+  maxDepth: number,
+  signal?: AbortSignal
 ): Promise<DirNode> {
+  // Return a partial node immediately if the scan was cancelled.
+  if (signal?.aborted) { return emptyNode(name, relPath); }
+
   const fsPath = dirUri.fsPath;
   if (visitedPaths.has(fsPath)) {
     return emptyNode(name, relPath);
@@ -65,6 +69,8 @@ async function scanDir(
   if (maxDepth > 0 && depth > maxDepth) {
     return node;
   }
+
+  if (signal?.aborted) { return node; }
 
   let entries: [string, vscode.FileType][];
   try {
@@ -101,9 +107,13 @@ async function scanDir(
   const childResults = await parallelMap(
     pendingDirs,
     ({ entryName, entryRelPath, entryUri }) =>
-      scanDir(entryUri, entryName, entryRelPath, filter, myVisited, depth + 1, maxDepth),
-    20
+      scanDir(entryUri, entryName, entryRelPath, filter, myVisited, depth + 1, maxDepth, signal),
+    20,
+    signal
   );
+
+  // Return early if cancelled — childResults may contain empty placeholders.
+  if (signal?.aborted) { return node; }
 
   const typeCounts = new Map<string, { color: string; count: number }>();
 

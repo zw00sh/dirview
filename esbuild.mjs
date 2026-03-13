@@ -8,7 +8,7 @@ await esbuild.build({
   format: 'cjs',
   platform: 'node',
   sourcemap: false,
-  minify: false,
+  minify: true,
 });
 
 console.log('esbuild: extension bundled → out/extension.js');

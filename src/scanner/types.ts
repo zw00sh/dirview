@@ -1,3 +1,13 @@
+import { SortMode } from '../config';
+
+export interface ScanUpdatePayload {
+  roots: DirNode[];
+  autoRescanEnabled: boolean;
+  sortMode: SortMode;
+  truncateThreshold: number;
+  showIgnored: boolean;
+}
+
 export interface FileTypeStats {
   name: string;
   color: string;

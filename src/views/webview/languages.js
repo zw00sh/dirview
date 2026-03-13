@@ -35,6 +35,8 @@
     } else if (message.type === 'filter') {
       activeFilters = new Set(message.langs || []);
       render();
+    } else if (message.type === 'error') {
+      root.innerHTML = `<div class="empty">Error: ${S.escHtml(message.message)}</div>`;
     }
   });
 

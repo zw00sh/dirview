@@ -12,6 +12,7 @@ todo.md
 CLAUDE.md
 .claude/**
 **/*.js.map
+**/*.test.js
 .DS_Store
 vitest.config.*
 esbuild.mjs

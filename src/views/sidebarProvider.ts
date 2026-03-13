@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { DirNode } from '../scanner/types';
+import { DirNode, ScanUpdatePayload } from '../scanner/types';
 import { SortMode } from '../config';
 import { buildWebviewHtml } from './buildWebviewHtml';
 import { handleCommonMessage, setupVisibilityReplay } from './providerUtils';
@@ -7,7 +7,7 @@ import { handleCommonMessage, setupVisibilityReplay } from './providerUtils';
 export class SidebarProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private extensionUri: vscode.Uri;
-  private lastUpdate: { roots: DirNode[]; autoRescanEnabled: boolean; sortMode: SortMode; truncateThreshold: number } | undefined;
+  private lastUpdate: ScanUpdatePayload | undefined;
 
   onRefresh?: () => void;
   onOpenDirInTab?: (dirPath: string) => void;
@@ -59,8 +59,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this.view?.webview.postMessage({ type: 'scanning' });
   }
 
-  update(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode, truncateThreshold: number = 4): void {
-    this.lastUpdate = { roots, autoRescanEnabled, sortMode, truncateThreshold };
+  update(payload: ScanUpdatePayload): void {
+    this.lastUpdate = payload;
+    const { roots, autoRescanEnabled, sortMode, truncateThreshold } = payload;
     if (this.view) { this.view.description = this.getSortDescription(sortMode); }
     this.view?.webview.postMessage({ type: 'update', roots, autoRescanEnabled, sortMode, truncateThreshold });
   }

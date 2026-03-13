@@ -296,6 +296,24 @@
           return;
         }
 
+        if (action === 'expandTruncated') {
+          const dp = actionEl.dataset.dirPath;
+          if (dp != null) {
+            state.truncationExpanded.add(dp);
+            state.rerender();
+          }
+          return;
+        }
+
+        if (action === 'expandEmptyGroup') {
+          const gk = actionEl.dataset.groupKey;
+          if (gk != null) {
+            state.emptyGroupExpanded.add(gk);
+            state.rerender();
+          }
+          return;
+        }
+
         return;
       }
 
@@ -462,10 +480,12 @@
       return li;
     }
 
-    function renderTruncatedRow(hiddenFiles, depth, ancestors, dirPath, childrenEl, maxMetric, clientWidth) {
+    function renderTruncatedRow(hiddenFiles, depth, ancestors, dirPath, maxMetric, clientWidth) {
       const li = document.createElement('li');
       const row = document.createElement('div');
       row.className = 'dir-row truncated-row';
+      row.dataset.action = 'expandTruncated';
+      row.dataset.dirPath = dirPath;
       // Use a synthetic path so the delegated tooltip handler can look up this row's stats.
       const truncKey = dirPath + '\0truncated';
       row.dataset.path = truncKey;
@@ -561,25 +581,6 @@
         row.appendChild(metaEl);
       }
 
-      row.addEventListener('click', () => {
-        state.truncationExpanded.add(dirPath);
-        li.remove();
-        for (const file of hiddenFiles) {
-          childrenEl.appendChild(renderFileNode(file, depth, ancestors));
-        }
-        // Re-equalize .file-count widths after new rows are added
-        const treeEl = root.querySelector('.tree');
-        if (treeEl) {
-          const counts = treeEl.querySelectorAll('.file-count');
-          if (counts.length) {
-            let max = 0;
-            for (const el of counts) { el.style.width = ''; }
-            for (const el of counts) { const w = el.offsetWidth; if (w > max) max = w; }
-            for (const el of counts) { el.style.width = max + 'px'; }
-          }
-        }
-      });
-
       li.appendChild(row);
       return li;
     }
@@ -590,6 +591,8 @@
 
       const row = document.createElement('div');
       row.className = 'dir-row empty-group-row';
+      row.dataset.action = 'expandEmptyGroup';
+      row.dataset.groupKey = groupKey;
       row.appendChild(renderIndentGuides(depth, ancestors));
 
       const chevron = document.createElement('span');
@@ -614,17 +617,6 @@
       row.appendChild(metaEl);
 
       li.appendChild(row);
-
-      // On click: replace this row with the individual empty dir nodes
-      row.addEventListener('click', () => {
-        state.emptyGroupExpanded.add(groupKey);
-        const clientWidth = root.clientWidth;
-        const frag = document.createDocumentFragment();
-        for (const node of nodes) {
-          frag.appendChild(renderDirNode(node, depth, maxMetric, ancestors, clientWidth));
-        }
-        li.replaceWith(frag);
-      });
 
       return li;
     }
@@ -654,6 +646,11 @@
           break;
         }
       }
+
+      // data-node-path enables incremental DOM patching in renderTree.
+      // Must use displayNode.path (post-compaction) so it matches the key
+      // used by nodeMap, state.expanded, and the dir-row's data-path attribute.
+      li.dataset.nodePath = displayNode.path;
 
       const isExpanded = state.expanded.get(displayNode.path) ?? (state.activeFilters.size > 0 || depth === 0);
       // Record implicit depth-0 expansion so button state reflects reality after initial render
@@ -869,7 +866,7 @@
           childrenEl.appendChild(renderFileNode(file, depth + 1, nextAncestors));
         }
         if (hiddenFiles.length > 0) {
-          childrenEl.appendChild(renderTruncatedRow(hiddenFiles, depth + 1, nextAncestors, displayNode.path, childrenEl, maxMetric, clientWidth));
+          childrenEl.appendChild(renderTruncatedRow(hiddenFiles, depth + 1, nextAncestors, displayNode.path, maxMetric, clientWidth));
         }
 
         // Dir row click (toggle expand) is handled by the delegated click handler in
@@ -1094,7 +1091,7 @@
       const hiddenFiles = shouldTruncate ? visibleFiles.slice(state.truncateThreshold) : [];
       for (const file of shownFiles) { treeEl.appendChild(renderer.renderFileNode(file, 0, [])); }
       if (hiddenFiles.length > 0) {
-        treeEl.appendChild(renderer.renderTruncatedRow(hiddenFiles, 0, [], r.path, treeEl, maxMetric, clientWidth));
+        treeEl.appendChild(renderer.renderTruncatedRow(hiddenFiles, 0, [], r.path, maxMetric, clientWidth));
       }
     }
   }
@@ -1120,10 +1117,116 @@
     return warn;
   }
 
+  // ── Incremental DOM patching ─────────────────────────────────────────────
+  //
+  // On file-change rescans the tree structure is typically stable (same directories,
+  // same files, possibly different counts/bar widths). patchTreeChildren/patchDirLi
+  // reuse existing <li> DOM nodes rather than replacing the whole tree, which:
+  //   • Preserves scroll position (no parent innerHTML wipe)
+  //   • Avoids visual flicker for unchanged nodes
+  //   • Updates only what changed (bar widths, file counts)
+  //
+  // Each <li> produced by renderDirNode carries data-node-path so matching is O(1).
+
   /**
-   * Renders the tree <ul> into rootEl.
-   * Handles computeMaxMetric, tree element creation, and renderRoots.
-   * Call after clearing rootEl and appending any pre-tree elements (e.g. rescan warning).
+   * Patches oldEl's direct children to match newEl's, keyed by data-node-path.
+   * Keyed nodes (dirs) are updated in-place via patchDirLi; unkeyed nodes (file
+   * rows, truncated rows, empty-group rows, workspace headers) are replaced
+   * wholesale.  The reconciled list is built in a DocumentFragment and swapped
+   * in one shot so only a single reflow occurs.
+   * @param {HTMLElement} oldEl
+   * @param {HTMLElement} newEl
+   */
+  function patchTreeChildren(oldEl, newEl) {
+    // Index existing keyed children for O(1) lookup.
+    const oldByPath = new Map();
+    for (const child of oldEl.children) {
+      const p = child.dataset.nodePath;
+      if (p !== undefined) { oldByPath.set(p, child); }
+    }
+
+    // Build the reconciled child list: reuse matched old dir nodes, take new
+    // nodes for everything else (files, truncated rows, headers, new dirs).
+    const fragment = document.createDocumentFragment();
+    for (const newChild of [...newEl.children]) {
+      const p = newChild.dataset.nodePath;
+      const oldChild = (p !== undefined) ? oldByPath.get(p) : undefined;
+
+      if (oldChild) {
+        oldByPath.delete(p);
+        patchDirLi(oldChild, newChild);
+        fragment.appendChild(oldChild);
+      } else {
+        fragment.appendChild(newChild);
+      }
+    }
+
+    // Replace all children at once — drops stale/unkeyed old nodes, preserves
+    // the parent element identity (and therefore scroll position).
+    while (oldEl.firstChild) { oldEl.removeChild(oldEl.firstChild); }
+    oldEl.appendChild(fragment);
+  }
+
+  /**
+   * Updates a single dir <li> in place: bar width/segments, file count, and
+   * recurses into the children <ul>. Non-structural changes only (hover actions,
+   * chevron state, dir name are left as-is since they don't change on rescan).
+   * @param {HTMLElement} oldLi
+   * @param {HTMLElement} newLi
+   */
+  function patchDirLi(oldLi, newLi) {
+    const oldRow = oldLi.querySelector(':scope > .dir-row');
+    const newRow = newLi.querySelector(':scope > .dir-row');
+    if (oldRow && newRow) {
+      // Update bar-wrap width and segment colors/widths.
+      const oldBarWrap = oldRow.querySelector('.bar-wrap');
+      const newBarWrap = newRow.querySelector('.bar-wrap');
+      if (oldBarWrap && newBarWrap) {
+        oldBarWrap.style.width = newBarWrap.style.width;
+        const oldBar = oldBarWrap.querySelector('.bar');
+        const newBar = newBarWrap.querySelector('.bar');
+        // Replace bar segments in one shot — they are small and cheap to recreate.
+        if (oldBar && newBar) { oldBar.replaceWith(newBar); }
+      } else if (!oldBarWrap && newBarWrap) {
+        // Dir went from 0 files to >0 — insert bar before file-count.
+        const countEl = oldRow.querySelector('.file-count');
+        if (countEl) { countEl.before(newBarWrap); }
+        else { oldRow.appendChild(newBarWrap); }
+      } else if (oldBarWrap && !newBarWrap) {
+        // Dir went to 0 files — remove bar.
+        oldBarWrap.remove();
+      }
+
+      // Update file count text, title, and inline style (opacity for empty dirs).
+      const oldCount = oldRow.querySelector('.file-count');
+      const newCount = newRow.querySelector('.file-count');
+      if (oldCount && newCount) {
+        oldCount.textContent = newCount.textContent;
+        oldCount.title = newCount.title;
+        // Preserve width — it will be re-equalized after patching.
+        oldCount.style.cssText = newCount.style.cssText;
+        oldCount.style.width = '';
+      }
+    }
+
+    // Reconcile children <ul> — the open/closed class may have changed, and the
+    // children themselves may have been added, removed, or reordered.
+    const oldChildren = oldLi.querySelector(':scope > ul.children');
+    const newChildren = newLi.querySelector(':scope > ul.children');
+    if (oldChildren && newChildren) {
+      oldChildren.className = newChildren.className;
+      patchTreeChildren(oldChildren, newChildren);
+    } else if (!oldChildren && newChildren) {
+      oldLi.appendChild(newChildren);
+    } else if (oldChildren && !newChildren) {
+      oldChildren.remove();
+    }
+  }
+
+  /**
+   * Renders the tree <ul> into rootEl. If rootEl already contains a <ul class="tree">
+   * from a previous render, patches it incrementally (preserves scroll, avoids flicker).
+   * Otherwise creates and appends a new tree element (first render or after loading/error).
    * @param {object} state
    * @param {object} renderer
    * @param {HTMLElement} rootEl
@@ -1134,18 +1237,33 @@
     if (renderer.beforeRender) { renderer.beforeRender(); }
     const maxMetric = computeMaxMetric(state.lastRoots, state.currentSortMode, false);
     const clientWidth = rootEl.clientWidth;
-    const treeEl = document.createElement('ul');
-    treeEl.className = 'tree' +
+    const treeClass = 'tree' +
       (opts && opts.cssClass ? ' ' + opts.cssClass : '') +
       (state.currentSortMode === 'size' ? ' sort-size' : '');
 
-    renderRoots(renderer, state, treeEl, maxMetric, clientWidth);
-    rootEl.appendChild(treeEl);
+    const existingTree = rootEl.querySelector(':scope > ul.tree');
+    if (existingTree) {
+      // Incremental path: build the new tree off-screen, then reconcile with existing DOM.
+      existingTree.className = treeClass;
+      const newTreeEl = document.createElement('ul');
+      newTreeEl.className = treeClass;
+      renderRoots(renderer, state, newTreeEl, maxMetric, clientWidth);
+      patchTreeChildren(existingTree, newTreeEl);
+    } else {
+      // First render (or after loading/error cleared the container): full creation.
+      const treeEl = document.createElement('ul');
+      treeEl.className = treeClass;
+      renderRoots(renderer, state, treeEl, maxMetric, clientWidth);
+      rootEl.appendChild(treeEl);
+    }
 
-    // Equalize .file-count widths so bars align across rows.
+    // Equalize .file-count widths so bars align across rows. Width is cleared on
+    // each patched node above so offsetWidth reflects the new natural width.
+    const treeEl = rootEl.querySelector(':scope > ul.tree');
     const counts = treeEl.querySelectorAll('.file-count');
     if (counts.length) {
       let max = 0;
+      for (const el of counts) { el.style.width = ''; }
       for (const el of counts) { const w = el.offsetWidth; if (w > max) max = w; }
       for (const el of counts) { el.style.width = max + 'px'; }
     }
@@ -1249,5 +1367,6 @@
     computeStats, renderLegend, createState,
     walkExpand, walkCollapse, tieredExpandAll, tieredCollapseAll, renderRoots,
     createRescanWarning, renderTree, createMessageHandler,
+    patchTreeChildren, patchDirLi,
   };
 })();

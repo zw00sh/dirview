@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { DirNode } from '../scanner/types';
+import { DirNode, ScanUpdatePayload } from '../scanner/types';
 import { buildWebviewHtml } from './buildWebviewHtml';
 import { handleCommonMessage } from './providerUtils';
 
@@ -10,11 +10,8 @@ export class TabProvider {
   private panels: Map<string, vscode.WebviewPanel> = new Map();
   private extensionUri: vscode.Uri;
   // Raw scan data, stored once and used to derive per-panel subtrees on demand.
-  private lastRoots: DirNode[] | undefined;
-  private lastAutoRescanEnabled: boolean = true;
-  private lastShowIgnored: boolean = false;
+  private lastPayload: ScanUpdatePayload | undefined;
 
-  getConfiguredThreshold: (() => number) | undefined;
   onRefresh: (() => void) | undefined;
   onOpenDirInTab: ((dirPath: string) => void) | undefined;
 
@@ -46,16 +43,17 @@ export class TabProvider {
    *  of the "/" fallback. For multi-root workspaces at the root level, returns
    *  '' (the tab title will fall back to "/"). */
   private getWorkspaceFolderName(dirPath: string): string {
-    if (!this.lastRoots) { return ''; }
+    const roots = this.lastPayload?.roots;
+    if (!roots) { return ''; }
     if (dirPath === '') {
-      return this.lastRoots.length === 1 ? this.lastRoots[0].name : '';
+      return roots.length === 1 ? roots[0].name : '';
     }
-    for (const root of this.lastRoots) {
+    for (const root of roots) {
       if (dirPath === root.path || this.findInChildren(root.children, dirPath)) {
         return root.name;
       }
     }
-    return this.lastRoots.length === 1 ? this.lastRoots[0].name : '';
+    return roots.length === 1 ? roots[0].name : '';
   }
 
   /** Returns the roots to send to the panel for a given dirPath.
@@ -63,9 +61,10 @@ export class TabProvider {
    *  For a directory path, returns [node] for just that subtree.
    *  Returns undefined if no scan data exists yet, or [] if the dir was deleted. */
   private getRootsForDir(dirPath: string): DirNode[] | undefined {
-    if (!this.lastRoots) { return undefined; }
-    if (dirPath === '') { return this.lastRoots; }
-    const node = this.findNodeByPath(this.lastRoots, dirPath);
+    const roots = this.lastPayload?.roots;
+    if (!roots) { return undefined; }
+    if (dirPath === '') { return roots; }
+    const node = this.findNodeByPath(roots, dirPath);
     return node ? [node] : [];
   }
 
@@ -112,8 +111,9 @@ export class TabProvider {
         vscode.commands.executeCommand(message.show ? 'dirview.toggleIgnored' : 'dirview.toggleIgnoredOff');
       } else if (message.command === 'toggleTruncation') {
         const enabled: boolean = message.enabled ?? true;
-        const threshold = enabled ? (this.getConfiguredThreshold?.() ?? 4) : 0;
-        this.updateTruncation(threshold, enabled);
+        // Dispatch through the registered command so config is persisted and both
+        // sidebar and all tabs are updated consistently (mirrors toggleIgnored).
+        vscode.commands.executeCommand(enabled ? 'dirview.toggleTruncation' : 'dirview.toggleTruncationOff');
       } else if (message.command === 'navigateToDir' && typeof message.path === 'string') {
         // Find the current dirPath for this panel by searching the map by reference.
         let currentPath: string | undefined;
@@ -131,8 +131,8 @@ export class TabProvider {
           panel.webview.postMessage({
             type: 'update', roots, dirPath: targetPath,
             workspaceFolderName: this.getWorkspaceFolderName(targetPath),
-            autoRescanEnabled: this.lastAutoRescanEnabled,
-            showIgnored: this.lastShowIgnored,
+            autoRescanEnabled: this.lastPayload?.autoRescanEnabled ?? true,
+            showIgnored: this.lastPayload?.showIgnored ?? false,
           });
         }
       }
@@ -154,8 +154,8 @@ export class TabProvider {
         panel.webview.postMessage({
           type: 'update', roots, dirPath: currentPath,
           workspaceFolderName: this.getWorkspaceFolderName(currentPath),
-          autoRescanEnabled: this.lastAutoRescanEnabled,
-          showIgnored: this.lastShowIgnored,
+          autoRescanEnabled: this.lastPayload?.autoRescanEnabled ?? true,
+          showIgnored: this.lastPayload?.showIgnored ?? false,
         });
       }
     });
@@ -175,8 +175,8 @@ export class TabProvider {
         panel.webview.postMessage({
           type: 'update', roots, dirPath,
           workspaceFolderName: this.getWorkspaceFolderName(dirPath),
-          autoRescanEnabled: this.lastAutoRescanEnabled,
-          showIgnored: this.lastShowIgnored,
+          autoRescanEnabled: this.lastPayload?.autoRescanEnabled ?? true,
+          showIgnored: this.lastPayload?.showIgnored ?? false,
         });
       }, 100);
     }
@@ -192,10 +192,9 @@ export class TabProvider {
     }
   }
 
-  update(roots: DirNode[], autoRescanEnabled: boolean, showIgnored: boolean = false): void {
-    this.lastRoots = roots;
-    this.lastAutoRescanEnabled = autoRescanEnabled;
-    this.lastShowIgnored = showIgnored;
+  update(payload: ScanUpdatePayload): void {
+    this.lastPayload = payload;
+    const { autoRescanEnabled, showIgnored } = payload;
     for (const [dirPath, panel] of this.panels) {
       // Skip hidden panels — onDidChangeViewState will replay when they become visible.
       if (!panel.visible) { continue; }
@@ -228,9 +227,9 @@ export class TabProvider {
     }
   }
 
-  setFilter(langs: string[]): void {
+  showError(message: string): void {
     for (const panel of this.panels.values()) {
-      panel.webview.postMessage({ type: 'filter', langs });
+      panel.webview.postMessage({ type: 'error', message });
     }
   }
 

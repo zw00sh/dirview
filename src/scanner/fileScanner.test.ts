@@ -183,6 +183,43 @@ describe('scanWorkspace', () => {
     expect(tsStats?.count).toBe(2);
   });
 
+  it('returns without error when signal is pre-aborted', async () => {
+    const folderUri = { fsPath: '/repo' };
+    (vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [
+      { uri: folderUri, name: 'repo' },
+    ];
+    (vscode.workspace.fs.readDirectory as ReturnType<typeof vi.fn>)
+      .mockResolvedValue([['a.ts', vscode.FileType.File]]);
+
+    const controller = new AbortController();
+    controller.abort();
+    // Should complete without throwing.
+    const result = await scanWorkspace(false, controller.signal);
+    expect(result).toBeDefined();
+    expect(result.roots).toHaveLength(1);
+    // Aborted before any dir reads — roots should be empty nodes.
+    expect(result.roots[0].totalFiles).toBe(0);
+  });
+
+  it('scans multiple workspace folders in parallel', async () => {
+    (vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [
+      { uri: { fsPath: '/folderA' }, name: 'A' },
+      { uri: { fsPath: '/folderB' }, name: 'B' },
+    ];
+    (vscode.workspace.fs.readDirectory as ReturnType<typeof vi.fn>)
+      .mockImplementation(({ fsPath }: { fsPath: string }) => {
+        if (fsPath === '/folderA') { return Promise.resolve([['a.ts', vscode.FileType.File]]); }
+        if (fsPath === '/folderB') { return Promise.resolve([['b.ts', vscode.FileType.File]]); }
+        return Promise.resolve([]);
+      });
+
+    const result = await scanWorkspace(false);
+    expect(result.roots).toHaveLength(2);
+    expect(result.roots[0].name).toBe('A');
+    expect(result.roots[1].name).toBe('B');
+    expect(result.totalFiles).toBe(2);
+  });
+
   it('respects maxDepth setting', async () => {
     const folderUri = { fsPath: '/repo' };
     (vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [

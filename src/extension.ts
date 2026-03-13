@@ -35,9 +35,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   sidebarProvider.onOpenDirInTab = (dirPath) => tabProvider.openForDir(dirPath);
   tabProvider.onOpenDirInTab = (dirPath) => tabProvider.openForDir(dirPath);
 
-  tabProvider.getConfiguredThreshold = () =>
-    vscode.workspace.getConfiguration('dirview').get<number>('truncateThreshold', 4);
-
   registerCommands(context, config, { sidebar: sidebarProvider, tab: tabProvider },
     () => coordinator.scan(),
     () => coordinator.getTruncateThreshold(),
