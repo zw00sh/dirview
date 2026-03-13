@@ -26,9 +26,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.window.registerWebviewViewProvider('dirview.search', searchProvider)
   );
 
-  // Wire filter: languages panel → sidebar tree only (tab has its own independent filter)
+  // Wire filter: languages panel → sidebar tree + search fold warning
   languagesProvider.onFilterChange = (langs) => {
     sidebarProvider.setFilter(langs);
+    searchProvider.setFilterActive(langs.length > 0);
   };
 
   // Wire search: search fold → tree fold. The search fold runs ripgrep and forwards

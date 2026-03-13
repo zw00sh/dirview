@@ -472,7 +472,8 @@
       const cached = _searchMatchCache.get(node);
       if (cached !== undefined) { return cached; }
       for (const f of (node.files || [])) {
-        if (state.searchResults.has(f.path)) {
+        if (state.searchResults.has(f.path) &&
+          (state.activeFilters.size === 0 || state.activeFilters.has(f.langName))) {
           _searchMatchCache.set(node, true);
           return true;
         }
@@ -1644,8 +1645,19 @@
     includeInput.className = 'search-input search-filter-input';
     includeInput.placeholder = 'e.g. src/**/*.ts';
     includeInput.setAttribute('aria-label', 'Files to include');
+    // Warning icon shown when a language filter is active — alerts the user that search
+    // results are being intersected with the language filter, so some matches may be hidden.
+    const filterWarning = document.createElement('span');
+    filterWarning.className = 'search-filter-warning';
+    filterWarning.innerHTML = SVG_WARNING;
+    filterWarning.title = 'Language filter active — some results may be hidden';
+    filterWarning.style.display = 'none';
+    const inputRow2 = document.createElement('div');
+    inputRow2.className = 'search-filter-input-row';
+    inputRow2.appendChild(includeInput);
+    inputRow2.appendChild(filterWarning);
     includeSection.appendChild(includeLabel);
-    includeSection.appendChild(includeInput);
+    includeSection.appendChild(inputRow2);
     el.appendChild(includeSection);
 
     // ── Status line ────────────────────────────────────────────────────────
@@ -1806,7 +1818,11 @@
     function show() { mainInput.focus(); }
     function hide() { clearSearch(); }
 
-    return { el, focus, clear: clearSearch, show, hide, updateStatus, setStatus };
+    function updateFilterWarning(active) {
+      filterWarning.style.display = active ? '' : 'none';
+    }
+
+    return { el, focus, clear: clearSearch, show, hide, updateStatus, setStatus, updateFilterWarning };
   }
 
   window.DirviewShared = {

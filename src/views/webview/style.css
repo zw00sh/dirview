@@ -500,10 +500,29 @@ body {
 }
 
 .search-filter-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   box-sizing: border-box;
   height: 20px;
   font-size: 11px;
+}
+
+.search-filter-input-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.search-filter-warning {
+  display: flex;
+  align-items: center;
+  color: var(--vscode-editorWarning-foreground, #cca700);
+  flex-shrink: 0;
+  cursor: default;
+}
+.search-filter-warning svg {
+  width: 14px;
+  height: 14px;
 }
 
 .search-status {

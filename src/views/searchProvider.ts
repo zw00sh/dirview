@@ -92,6 +92,11 @@ export class SearchProvider implements vscode.WebviewViewProvider {
     this.view?.webview.postMessage({ type: 'focus' });
   }
 
+  /** Notifies the search fold whether a language filter is active so it can show a warning. */
+  setFilterActive(active: boolean): void {
+    this.view?.webview.postMessage({ type: 'filterActive', active });
+  }
+
   private getHtml(webview: vscode.Webview): string {
     return buildWebviewHtml(webview, this.extensionUri, {
       scripts: ['shared.js', 'search.js'],

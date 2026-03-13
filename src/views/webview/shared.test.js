@@ -1724,6 +1724,54 @@ describe('dirMatchesSearch', () => {
     renderer.beforeRender();
     expect(renderer.dirMatchesSearch(node)).toBe(false);
   });
+
+  it('ignores activeFilters when they are empty (existing behavior preserved)', () => {
+    const state = S.createState();
+    state.searchResults = new Map([['/a/foo.ts', []]]);
+    // No active filters — should behave as before
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const node = makeDir('/a', 'a', { files: [{ path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
+    expect(renderer.dirMatchesSearch(node)).toBe(true);
+  });
+
+  it('returns false when file matches search but not active language filter', () => {
+    const state = S.createState();
+    state.searchResults = new Map([['/a/foo.ts', []]]);
+    state.activeFilters = new Set(['YAML']);
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    // foo.ts is TypeScript (in searchResults) but filter wants YAML → no match
+    const node = makeDir('/a', 'a', { files: [{ path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
+    expect(renderer.dirMatchesSearch(node)).toBe(false);
+  });
+
+  it('returns true when file matches both search and active language filter', () => {
+    const state = S.createState();
+    state.searchResults = new Map([['/a/config.yaml', []]]);
+    state.activeFilters = new Set(['YAML']);
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const node = makeDir('/a', 'a', { files: [{ path: '/a/config.yaml', name: 'config.yaml', langName: 'YAML', langColor: '#cb171e', sizeBytes: 0 }] });
+    expect(renderer.dirMatchesSearch(node)).toBe(true);
+  });
+
+  it('returns false for the exact bug scenario: dir has YAML (matches filter, not search) + TypeScript (in search, not filter)', () => {
+    const state = S.createState();
+    // Search found a TypeScript file; filter wants only YAML
+    state.searchResults = new Map([['/a/app.ts', []]]);
+    state.activeFilters = new Set(['YAML']);
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const node = makeDir('/a', 'a', {
+      files: [
+        { path: '/a/config.yaml', name: 'config.yaml', langName: 'YAML', langColor: '#cb171e', sizeBytes: 0 },
+        { path: '/a/app.ts', name: 'app.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 },
+      ],
+    });
+    // app.ts passes search but not filter; config.yaml passes filter but not search → dir = false
+    expect(renderer.dirMatchesSearch(node)).toBe(false);
+  });
 });
 
 // --- search: renderMatchLine ---

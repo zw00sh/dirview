@@ -140,6 +140,7 @@
       state.expanded.clear();
     }
     vscode.postMessage({ command: 'filter', langs: [...state.activeFilters] });
+    searchBar.updateFilterWarning(state.activeFilters.size > 0);
     state.rerender();
   }
 
@@ -221,6 +222,7 @@
     tabTitleEl.appendChild(trailingSlash);
 
     updateLegend(roots ? S.computeStats(state.lastRoots) : []);
+    searchBar.updateFilterWarning(state.activeFilters.size > 0);
 
     // Remove one-time placeholders (loading/initializing) without wiping the
     // whole container — preserves any existing tree for incremental patching.
