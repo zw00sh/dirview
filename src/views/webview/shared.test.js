@@ -1116,6 +1116,32 @@ describe('delegated click handler', () => {
       // Should remain falsy — leaf dirs can't expand
       expect(state.expanded.get('/r')).toBeFalsy();
     });
+
+    it('double-click on dir row does not toggle (e.detail >= 2)', () => {
+      // Regression: after an action button (e.g. expand-children) triggers a rerender,
+      // the rebuilt dir-row loses hover state so its action buttons become display:none.
+      // The second click of a double-click then lands on the dir-row and would undo the
+      // action. We guard against this by ignoring clicks with e.detail >= 2.
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      const renderer = makeRenderer(state);
+      const child1 = makeDir('/r/a', 'a', { totalFiles: 1, stats: [{ name: 'JS', color: '#f1e05a', count: 1 }] });
+      const child2 = makeDir('/r/b', 'b', { totalFiles: 1, stats: [{ name: 'JS', color: '#f1e05a', count: 1 }] });
+      const root = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 2, stats: [{ name: 'JS', color: '#f1e05a', count: 2 }] });
+      state.expanded.set('/r', true);
+
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(root, 0, 2, [], 300);
+      renderer._rootEl.appendChild(li);
+
+      const dirRow = li.querySelector('.dir-row[data-path="/r"]');
+      dirRow.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 }));
+
+      // State must not change — double-click is ignored
+      expect(state.expanded.get('/r')).toBe(true);
+      expect(state.render).not.toHaveBeenCalled();
+    });
   });
 
   // -- Collapse resets truncation --

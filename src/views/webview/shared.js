@@ -320,6 +320,11 @@
       // Dir row toggle (expand/collapse) — only when click is not on an action element.
       const dirRow = e.target.closest('.dir-row[data-path]');
       if (dirRow) {
+        // Ignore the second click of a double-click. After an action button (e.g. expand)
+        // triggers a rerender, the rebuilt dir-row loses hover state so its action buttons
+        // become display:none. The second click then lands on the dir-row itself and would
+        // toggle the directory back — undoing the action. e.detail >= 2 catches this.
+        if (e.detail >= 2) { return; }
         const path = dirRow.dataset.path;
         const entry = nodeMap.get(path);
         if (!entry || !entry.hasChildren) { return; }
