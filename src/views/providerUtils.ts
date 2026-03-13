@@ -1,5 +1,8 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { SearchService, SearchMatch } from '../search/searchService';
+import { getLangInfo } from '../language/languageMap';
+import { highlightLine } from '../highlight/highlighter';
 
 /** Handles messages that are common to both SidebarProvider and TabProvider.
  *  Returns true if the message was handled, false if the caller should continue processing. */
@@ -48,7 +51,19 @@ export function handleSearchMessage(
       rootPaths,
       { caseSensitive: message.caseSensitive, useRegex: message.useRegex, include: message.include }
     );
-    result.then((r) => {
+    result.then(async (r) => {
+      // Highlight the first MAX_MATCH_LINES matches per file (same cap the webview renders).
+      // Runs concurrently across all files; unknown languages get undefined → plain-text fallback.
+      const MAX_MATCH_LINES = 5;
+      await Promise.all(
+        Array.from(r.matches.entries()).map(async ([filePath, matches]) => {
+          const langName = getLangInfo(path.basename(filePath)).name;
+          for (const match of matches.slice(0, MAX_MATCH_LINES)) {
+            const html = await highlightLine(match.lineText, match.column, match.matchLength, langName);
+            if (html !== undefined) { match.highlightedHtml = html; }
+          }
+        })
+      );
       const matchesObj: Record<string, SearchMatch[]> = {};
       for (const [p, m] of r.matches) { matchesObj[p] = m; }
       postMessage({ type: 'searchResults', matches: matchesObj, fileCount: r.fileCount, matchCount: r.matchCount, truncated: r.truncated });

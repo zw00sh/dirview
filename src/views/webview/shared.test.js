@@ -1818,6 +1818,59 @@ describe('renderMatchLine', () => {
     li.querySelector('.match-line-row').click();
     expect(renderer._vscode.postMessage).toHaveBeenCalledWith({ command: 'openFile', path: '/a/foo.ts', line: 7 });
   });
+
+  it('uses highlightedHtml when present (sets innerHTML)', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+    const match = {
+      line: 5,
+      column: 0,
+      matchLength: 5,
+      lineText: 'const x = 1;',
+      highlightedHtml: '<span style="color:var(--shiki-token-keyword)">const</span> x = 1;',
+    };
+    const li = renderer.renderMatchLine(file, match, 1, []);
+    const textEl = li.querySelector('.match-line-text');
+    // innerHTML should contain the syntax-highlighted span from the backend
+    expect(textEl.innerHTML).toContain('shiki-token-keyword');
+    expect(textEl.innerHTML).toContain('const');
+    // Plain-text path should not be used — no extra TextNodes wrapping the match
+    expect(textEl.querySelector('.match-highlight')).toBeNull();
+  });
+
+  it('falls back to plain text when highlightedHtml is absent', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+    const match = { line: 1, column: 0, matchLength: 3, lineText: 'abc def' };
+    const li = renderer.renderMatchLine(file, match, 1, []);
+    // Plain-text path: match-highlight span should be present
+    expect(li.querySelector('.match-highlight')).not.toBeNull();
+    expect(li.querySelector('.match-highlight').textContent).toBe('abc');
+  });
+
+  it('highlightedHtml takes precedence over lineText when both present', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+    const match = {
+      line: 1,
+      column: 0,
+      matchLength: 3,
+      lineText: 'abc',
+      highlightedHtml: '<span class="match-highlight">abc</span>',
+    };
+    const li = renderer.renderMatchLine(file, match, 1, []);
+    const textEl = li.querySelector('.match-line-text');
+    // The highlight span should come from the pre-rendered HTML
+    expect(textEl.querySelector('.match-highlight')).not.toBeNull();
+    // Verify it's the innerHTML path (no additional text nodes from the plain path)
+    expect(textEl.childNodes.length).toBe(1);
+  });
 });
 
 // --- search: renderMoreMatchesRow ---

@@ -507,40 +507,47 @@
 
       const textEl = document.createElement('span');
       textEl.className = 'match-line-text';
-      // Trim leading whitespace; adjust column offset so highlight stays correct.
-      const rawText = match.lineText || '';
-      const trimmedStart = rawText.length - rawText.trimStart().length;
-      const lineText = rawText.trimStart();
-      const col = Math.max(0, (match.column || 0) - trimmedStart);
-      const len = match.matchLength || 0;
-      const MAX_LINE = 120;
 
-      if (lineText.length <= MAX_LINE) {
-        if (len > 0 && col + len <= lineText.length) {
-          textEl.appendChild(document.createTextNode(lineText.slice(0, col)));
-          const hl = document.createElement('span');
-          hl.className = 'match-highlight';
-          hl.textContent = lineText.slice(col, col + len);
-          textEl.appendChild(hl);
-          textEl.appendChild(document.createTextNode(lineText.slice(col + len)));
-        } else {
-          textEl.textContent = lineText;
-        }
+      if (match.highlightedHtml) {
+        // Backend pre-rendered syntax-highlighted HTML; already includes match-highlight span
+        // and truncation. Trusted server-generated markup — safe to set as innerHTML.
+        textEl.innerHTML = match.highlightedHtml;
       } else {
-        // Truncate: show context centered around the match
-        const half = Math.floor((MAX_LINE - len) / 2);
-        const start = Math.max(0, col - half);
-        const end = Math.min(lineText.length, col + len + half);
-        const prefix = (start > 0 ? '…' : '') + lineText.slice(start, col);
-        const suffix = lineText.slice(col + len, end) + (end < lineText.length ? '…' : '');
-        textEl.appendChild(document.createTextNode(prefix));
-        if (len > 0) {
-          const hl = document.createElement('span');
-          hl.className = 'match-highlight';
-          hl.textContent = lineText.slice(col, col + len);
-          textEl.appendChild(hl);
+        // Plain-text fallback: trim leading whitespace, highlight match substring manually.
+        const rawText = match.lineText || '';
+        const trimmedStart = rawText.length - rawText.trimStart().length;
+        const lineText = rawText.trimStart();
+        const col = Math.max(0, (match.column || 0) - trimmedStart);
+        const len = match.matchLength || 0;
+        const MAX_LINE = 120;
+
+        if (lineText.length <= MAX_LINE) {
+          if (len > 0 && col + len <= lineText.length) {
+            textEl.appendChild(document.createTextNode(lineText.slice(0, col)));
+            const hl = document.createElement('span');
+            hl.className = 'match-highlight';
+            hl.textContent = lineText.slice(col, col + len);
+            textEl.appendChild(hl);
+            textEl.appendChild(document.createTextNode(lineText.slice(col + len)));
+          } else {
+            textEl.textContent = lineText;
+          }
+        } else {
+          // Truncate: show context centered around the match
+          const half = Math.floor((MAX_LINE - len) / 2);
+          const start = Math.max(0, col - half);
+          const end = Math.min(lineText.length, col + len + half);
+          const prefix = (start > 0 ? '…' : '') + lineText.slice(start, col);
+          const suffix = lineText.slice(col + len, end) + (end < lineText.length ? '…' : '');
+          textEl.appendChild(document.createTextNode(prefix));
+          if (len > 0) {
+            const hl = document.createElement('span');
+            hl.className = 'match-highlight';
+            hl.textContent = lineText.slice(col, col + len);
+            textEl.appendChild(hl);
+          }
+          textEl.appendChild(document.createTextNode(suffix));
         }
-        textEl.appendChild(document.createTextNode(suffix));
       }
 
       row.appendChild(textEl);

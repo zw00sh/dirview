@@ -5,6 +5,9 @@ export interface SearchMatch {
   column: number;
   matchLength: number;
   lineText: string;
+  /** Pre-rendered syntax-highlighted HTML with match-highlight span injected. Set by the
+   *  backend after ripgrep resolves; absent for file-glob results or unknown languages. */
+  highlightedHtml?: string;
 }
 
 export interface SearchResult {

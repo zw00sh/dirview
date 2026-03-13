@@ -564,6 +564,18 @@ body {
   font-family: var(--vscode-editor-font-family, monospace);
   font-size: 11px;
   color: var(--vscode-descriptionForeground);
+  /* Shiki CSS-variables theme token colors mapped to approximate VSCode theme equivalents.
+     Tokens default to the foreground color when a variable isn't defined. */
+  --shiki-foreground: var(--vscode-editor-foreground, var(--vscode-foreground));
+  --shiki-token-keyword: var(--vscode-symbolIcon-keywordForeground, #569cd6);
+  --shiki-token-string: var(--vscode-debugTokenExpression-string, #ce9178);
+  --shiki-token-string-expression: var(--vscode-debugTokenExpression-string, #ce9178);
+  --shiki-token-comment: var(--vscode-descriptionForeground);
+  --shiki-token-function: var(--vscode-symbolIcon-functionForeground, #dcdcaa);
+  --shiki-token-constant: var(--vscode-debugTokenExpression-number, #4fc1ff);
+  --shiki-token-parameter: var(--vscode-symbolIcon-variableForeground, #9cdcfe);
+  --shiki-token-punctuation: var(--vscode-foreground);
+  --shiki-token-link: var(--vscode-textLink-foreground);
   white-space: pre;
   overflow: hidden;
   text-overflow: ellipsis;
