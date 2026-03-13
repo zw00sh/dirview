@@ -70,7 +70,11 @@
     if (!state.lastRoots) { return; }
     const modes = ['files', 'name', 'size'];
     const next = modes[(modes.indexOf(state.currentSortMode) + 1) % modes.length];
-    render(state.lastRoots, state.lastAutoRescanEnabled, next);
+    state.currentSortMode = next;
+    const sortNames = { files: 'by files', name: 'by name', size: 'by size' };
+    sortBtn.title = 'Sort: ' + (sortNames[next] || 'by files');
+    sortBtn.setAttribute('aria-label', sortBtn.title);
+    state.rerender();
   });
   toggleIgnoredBtn.addEventListener('click', () => {
     vscode.postMessage({ command: 'toggleIgnored', show: !currentShowIgnored });

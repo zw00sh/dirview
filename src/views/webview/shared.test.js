@@ -1428,4 +1428,147 @@ describe('delegated click handler', () => {
       expect(state.render).toHaveBeenCalled();
     });
   });
+
+  describe('lazy child rendering', () => {
+    // Build a tree that won't compact: root has two children (prevents single-child compaction).
+    // Each child has files so hasChildren is true.
+    const jsFile = (dir, name) => ({ name, path: `${dir}/${name}`, langName: 'JS', langColor: '#f1e05a', sizeBytes: 100 });
+
+    it('collapsed dir produces an empty children UL', () => {
+      const state = S.createState();
+      const childA = makeDir('/r/a', 'a', { files: [jsFile('/r/a', 'x.js')], totalFiles: 1, stats: [] });
+      const childB = makeDir('/r/b', 'b', { files: [jsFile('/r/b', 'y.js')], totalFiles: 1, stats: [] });
+      const root = makeDir('/r', 'r', { children: [childA, childB], totalFiles: 2, stats: [] });
+      state.expanded.set('/r', true);
+      state.expanded.set('/r/a', false);
+
+      const renderer = makeRenderer(state);
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(root, 0, 10, [], 300);
+
+      // /r/a is collapsed — its children UL should exist but be empty
+      const aLi = li.querySelector('[data-node-path="/r/a"]');
+      const childrenUl = aLi.querySelector('ul.children');
+      expect(childrenUl).toBeTruthy();
+      expect(childrenUl.children.length).toBe(0);
+      expect(childrenUl.classList.contains('open')).toBe(false);
+    });
+
+    it('expanded dir populates children normally', () => {
+      const state = S.createState();
+      const childA = makeDir('/r/a', 'a', { files: [jsFile('/r/a', 'x.js')], totalFiles: 1, stats: [] });
+      const childB = makeDir('/r/b', 'b', { files: [jsFile('/r/b', 'y.js')], totalFiles: 1, stats: [] });
+      const root = makeDir('/r', 'r', { children: [childA, childB], totalFiles: 2, stats: [] });
+      state.expanded.set('/r', true);
+      state.expanded.set('/r/a', true);
+
+      const renderer = makeRenderer(state);
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(root, 0, 10, [], 300);
+
+      const aLi = li.querySelector('[data-node-path="/r/a"]');
+      const childrenUl = aLi.querySelector('ul.children');
+      expect(childrenUl).toBeTruthy();
+      expect(childrenUl.children.length).toBeGreaterThan(0);
+      expect(childrenUl.classList.contains('open')).toBe(true);
+    });
+
+    it('clicking a collapsed dir with empty children triggers rerender', async () => {
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      const childA = makeDir('/r/a', 'a', { files: [jsFile('/r/a', 'x.js')], totalFiles: 1, stats: [] });
+      const childB = makeDir('/r/b', 'b', { files: [jsFile('/r/b', 'y.js')], totalFiles: 1, stats: [] });
+      const root = makeDir('/r', 'r', { children: [childA, childB], totalFiles: 2, stats: [] });
+      state.expanded.set('/r', true);
+      state.expanded.set('/r/a', false);
+
+      const renderer = makeRenderer(state);
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(root, 0, 10, [], 300);
+      renderer._rootEl.appendChild(li);
+
+      // Click /r/a dir row to expand
+      const aLi = li.querySelector('[data-node-path="/r/a"]');
+      const dirRow = aLi.querySelector('.dir-row');
+      dirRow.click();
+
+      expect(state.expanded.get('/r/a')).toBe(true);
+      // Should trigger rerender since children UL is empty
+      await awaitRerender();
+      expect(state.render).toHaveBeenCalled();
+    });
+
+    it('clicking an expanded dir with populated children does CSS-only toggle (no rerender)', () => {
+      const state = S.createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      const childA = makeDir('/r/a', 'a', { files: [jsFile('/r/a', 'x.js')], totalFiles: 1, stats: [] });
+      const childB = makeDir('/r/b', 'b', { files: [jsFile('/r/b', 'y.js')], totalFiles: 1, stats: [] });
+      const root = makeDir('/r', 'r', { children: [childA, childB], totalFiles: 2, stats: [] });
+      state.expanded.set('/r', true);
+      state.expanded.set('/r/a', true);
+
+      const renderer = makeRenderer(state);
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(root, 0, 10, [], 300);
+      renderer._rootEl.appendChild(li);
+
+      // Click /r/a to collapse — should NOT rerender (CSS-only toggle)
+      const aLi = li.querySelector('[data-node-path="/r/a"]');
+      const dirRow = aLi.querySelector('.dir-row');
+      dirRow.click();
+
+      expect(state.expanded.get('/r/a')).toBe(false);
+      expect(state.render).not.toHaveBeenCalled();
+      // Chevron and children class should be toggled
+      expect(aLi.querySelector('.chevron').className).toBe('chevron');
+      expect(aLi.querySelector('ul.children').className).toBe('children');
+    });
+
+    it('patch cycle with collapsed dirs preserves expanded state of other dirs', () => {
+      const state = S.createState();
+      const gcA = makeDir('/r/a/x', 'x', { files: [jsFile('/r/a/x', 'f.js')], totalFiles: 1, stats: [] });
+      const gcB = makeDir('/r/b/y', 'y', { files: [jsFile('/r/b/y', 'g.js')], totalFiles: 1, stats: [] });
+      const childA = makeDir('/r/a', 'a', { children: [gcA], totalFiles: 1, stats: [] });
+      const childB = makeDir('/r/b', 'b', { children: [gcB], totalFiles: 1, stats: [] });
+      const root = makeDir('/r', 'r', { children: [childA, childB], totalFiles: 2, stats: [] });
+      state.expanded.set('/r', true);
+      state.expanded.set('/r/a', true);
+      // /r/a compacts to /r/a/x since it has a single child — set expanded for the compacted path
+      state.expanded.set('/r/a/x', true);
+      state.expanded.set('/r/b', true);
+      // /r/b compacts to /r/b/y — set it collapsed
+      state.expanded.set('/r/b/y', false);
+
+      const renderer = makeRenderer(state);
+
+      // First render
+      renderer.beforeRender();
+      const oldTree = document.createElement('ul');
+      oldTree.className = 'tree';
+      oldTree.appendChild(renderer.renderDirNode(root, 0, 10, [], 300));
+      renderer._rootEl.appendChild(oldTree);
+
+      // /r/a/x (compacted from /r/a) should have children populated
+      // /r/b/y (compacted from /r/b) should be empty since collapsed
+      const axChildren = oldTree.querySelector('[data-node-path="/r/a/x"] > ul.children');
+      const byChildren = oldTree.querySelector('[data-node-path="/r/b/y"] > ul.children');
+      expect(axChildren).toBeTruthy();
+      expect(axChildren.children.length).toBeGreaterThan(0);
+      expect(byChildren).toBeTruthy();
+      expect(byChildren.children.length).toBe(0);
+
+      // Patch with same data
+      renderer.beforeRender();
+      const newTree = document.createElement('ul');
+      newTree.className = 'tree';
+      newTree.appendChild(renderer.renderDirNode(root, 0, 10, [], 300));
+      S.patchTreeChildren(oldTree, newTree);
+
+      // State should be preserved
+      expect(state.expanded.get('/r/a/x')).toBe(true);
+      expect(state.expanded.get('/r/b/y')).toBe(false);
+    });
+  });
 });

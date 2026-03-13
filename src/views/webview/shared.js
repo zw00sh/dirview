@@ -341,6 +341,17 @@
 
         const chevron = dirRow.querySelector('.chevron');
         const childrenEl = dirRow.nextElementSibling;
+
+        // Lazy rendering: if expanding and the children UL is empty (was rendered
+        // collapsed), we need a full rerender to populate the children DOM.
+        if (nowExpanded && childrenEl && !childrenEl.firstChild) {
+          state.rerender();
+          if (deps.onExpandChanged) {
+            deps.onExpandChanged([...state.expanded.values()].some(v => v));
+          }
+          return;
+        }
+
         if (chevron) { chevron.className = 'chevron' + (nowExpanded ? ' open' : ''); }
         if (childrenEl) { childrenEl.className = 'children' + (nowExpanded ? ' open' : ''); }
 
@@ -833,50 +844,50 @@
 
       li.appendChild(row);
 
-      // Children container
+      // Children container — lazy: only populate when expanded to avoid building
+      // collapsed subtrees during off-screen tree construction for patching.
       if (hasChildren) {
         const childrenEl = document.createElement('ul');
         childrenEl.className = 'children' + (isExpanded ? ' open' : '');
 
-        const nextAncestors = [...ancestors, { path: displayNode.path }];
+        if (isExpanded) {
+          const nextAncestors = [...ancestors, { path: displayNode.path }];
 
-        // Empty dir grouping (only when no filter active)
-        if (state.activeFilters.size === 0 && visibleChildren.length > 0) {
-          for (const group of groupEmptyDirs(visibleChildren)) {
-            if (group.type === 'emptyGroup') {
-              if (state.emptyGroupExpanded.has(group.nodes[0].path)) {
-                // Already expanded — render individual dirs
-                for (const n of group.nodes) {
-                  childrenEl.appendChild(renderDirNode(n, depth + 1, maxMetric, nextAncestors, clientWidth));
+          // Empty dir grouping (only when no filter active)
+          if (state.activeFilters.size === 0 && visibleChildren.length > 0) {
+            for (const group of groupEmptyDirs(visibleChildren)) {
+              if (group.type === 'emptyGroup') {
+                if (state.emptyGroupExpanded.has(group.nodes[0].path)) {
+                  // Already expanded — render individual dirs
+                  for (const n of group.nodes) {
+                    childrenEl.appendChild(renderDirNode(n, depth + 1, maxMetric, nextAncestors, clientWidth));
+                  }
+                } else {
+                  childrenEl.appendChild(renderEmptyGroupNode(group.nodes, depth + 1, maxMetric, nextAncestors));
                 }
               } else {
-                childrenEl.appendChild(renderEmptyGroupNode(group.nodes, depth + 1, maxMetric, nextAncestors));
+                childrenEl.appendChild(renderDirNode(group.node, depth + 1, maxMetric, nextAncestors, clientWidth));
               }
-            } else {
-              childrenEl.appendChild(renderDirNode(group.node, depth + 1, maxMetric, nextAncestors, clientWidth));
+            }
+          } else {
+            for (const child of visibleChildren) {
+              childrenEl.appendChild(renderDirNode(child, depth + 1, maxMetric, nextAncestors, clientWidth));
             }
           }
-        } else {
-          for (const child of visibleChildren) {
-            childrenEl.appendChild(renderDirNode(child, depth + 1, maxMetric, nextAncestors, clientWidth));
+
+          // File truncation
+          const shouldTruncate = state.truncateThreshold > 0 && visibleFiles.length > state.truncateThreshold && !state.truncationExpanded.has(displayNode.path);
+          const shownFiles = shouldTruncate ? visibleFiles.slice(0, state.truncateThreshold) : visibleFiles;
+          const hiddenFiles = shouldTruncate ? visibleFiles.slice(state.truncateThreshold) : [];
+
+          for (const file of shownFiles) {
+            childrenEl.appendChild(renderFileNode(file, depth + 1, nextAncestors));
+          }
+          if (hiddenFiles.length > 0) {
+            childrenEl.appendChild(renderTruncatedRow(hiddenFiles, depth + 1, nextAncestors, displayNode.path, maxMetric, clientWidth));
           }
         }
-
-        // File truncation
-        const shouldTruncate = state.truncateThreshold > 0 && visibleFiles.length > state.truncateThreshold && !state.truncationExpanded.has(displayNode.path);
-        const shownFiles = shouldTruncate ? visibleFiles.slice(0, state.truncateThreshold) : visibleFiles;
-        const hiddenFiles = shouldTruncate ? visibleFiles.slice(state.truncateThreshold) : [];
-
-        for (const file of shownFiles) {
-          childrenEl.appendChild(renderFileNode(file, depth + 1, nextAncestors));
-        }
-        if (hiddenFiles.length > 0) {
-          childrenEl.appendChild(renderTruncatedRow(hiddenFiles, depth + 1, nextAncestors, displayNode.path, maxMetric, clientWidth));
-        }
-
-        // Dir row click (toggle expand) is handled by the delegated click handler in
-        // createRenderer, which looks up this node from nodeMap via row.dataset.path.
-        // No per-row listener needed.
+        // When collapsed, childrenEl is left empty — children are rendered lazily on expand.
 
         li.appendChild(childrenEl);
       }
@@ -919,16 +930,23 @@
     legendEl.innerHTML = '';
     const items = document.createElement('div');
     items.className = 'legend-items';
+
+    // Delegated click handler — one listener on the container instead of per-item.
+    items.addEventListener('click', (e) => {
+      const item = e.target.closest('.legend-item[data-lang]');
+      if (item) { onToggle(item.dataset.lang); }
+    });
+
     for (const lang of stats) {
       const isActive = activeFilters.has(lang.name);
       const isInactive = activeFilters.size > 0 && !isActive;
       const item = document.createElement('div');
       item.className = 'legend-item' + (isActive ? ' active' : '') + (isInactive ? ' inactive' : '');
+      item.dataset.lang = lang.name;
       item.innerHTML =
         `<span class="legend-swatch" style="background:${lang.color}"></span>` +
         `<span class="legend-name">${escHtml(lang.name)}</span>` +
         `<span class="legend-count">${lang.count}</span>`;
-      item.addEventListener('click', () => onToggle(lang.name));
       items.appendChild(item);
     }
     legendEl.appendChild(items);
@@ -1262,16 +1280,18 @@
       rootEl.appendChild(treeEl);
     }
 
-    // Equalize .file-count widths so bars align across rows. Width is cleared on
-    // each patched node above so offsetWidth reflects the new natural width.
+    // Equalize .file-count widths so bars align across rows. Deferred to a rAF
+    // so the tree paints immediately without a forced synchronous layout reflow.
     const treeEl = rootEl.querySelector(':scope > ul.tree');
-    const counts = treeEl.querySelectorAll('.file-count');
-    if (counts.length) {
-      let max = 0;
-      for (const el of counts) { el.style.width = ''; }
-      for (const el of counts) { const w = el.offsetWidth; if (w > max) max = w; }
-      for (const el of counts) { el.style.width = max + 'px'; }
-    }
+    requestAnimationFrame(() => {
+      const counts = treeEl.querySelectorAll('.file-count');
+      if (counts.length) {
+        let max = 0;
+        for (const el of counts) { el.style.width = ''; }
+        for (const el of counts) { const w = el.offsetWidth; if (w > max) max = w; }
+        for (const el of counts) { el.style.width = max + 'px'; }
+      }
+    });
   }
 
   /**

@@ -35,13 +35,18 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
     });
 
     setupVisibilityReplay(webviewView, () =>
-      this.lastPayload ? { type: 'update', roots: this.lastPayload.roots, activeFilters: this.activeFilters } : undefined
+      this.lastPayload ? { type: 'update', roots: this.stripRoots(this.lastPayload.roots), activeFilters: this.activeFilters } : undefined
     );
   }
 
   update(payload: ScanUpdatePayload): void {
     this.lastPayload = payload;
-    this.view?.webview.postMessage({ type: 'update', roots: payload.roots, activeFilters: this.activeFilters });
+    this.view?.webview.postMessage({ type: 'update', roots: this.stripRoots(payload.roots), activeFilters: this.activeFilters });
+  }
+
+  /** Send only stats and totalFiles — the languages panel never reads children/files/paths. */
+  private stripRoots(roots: ScanUpdatePayload['roots']) {
+    return roots.map(r => ({ stats: r.stats, totalFiles: r.totalFiles }));
   }
 
   setFilter(langs: string[]): void {
