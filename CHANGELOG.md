@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0] — 2026-03-13
+
+### Added
+- Legend display toggle (`%` / `#`) in the Languages panel title bar and tab legend header — switch between raw file counts and percentages.
+- Dynamic sort mode icons in the sidebar title bar and tab toolbar — icon updates to reflect the active sort (files / name / size).
+- Incremental DOM patching for tree re-renders — only changed nodes are updated, reducing flicker and improving performance on large trees.
+- Scan abort: in-flight scans are cancelled when a newer scan is triggered, preventing stale results from overwriting fresh ones.
+- Lazy child rendering and deferred layout — tree children are rendered on first expand, cutting initial render cost.
+- Truncated file rows now show a proportional bar, sort-aware counts, and a tooltip.
+- Per-directory file-count column uses a fixed 44 px width so bars stay aligned across rows.
+
+### Fixed
+- Double-clicking the expand button no longer collapses the directory.
+- Sidebar truncation toggle is now isolated from tab views (toggling in the sidebar no longer affects open tabs).
+- Tab truncation toggle no longer bleeds into the sidebar state.
+- Truncated-row label is no longer ellipsised by the proportional bar.
+
 ## [0.4.0] — 2026-03-13
 
 ### Added
