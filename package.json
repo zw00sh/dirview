@@ -117,6 +117,16 @@
         "icon": "$(collapse-all)"
       },
       {
+        "command": "dirview.languagesShowPct",
+        "title": "Show Percentages",
+        "icon": { "light": "media/icon-pct-light.svg", "dark": "media/icon-pct-dark.svg" }
+      },
+      {
+        "command": "dirview.languagesShowCount",
+        "title": "Show Counts",
+        "icon": { "light": "media/icon-count-light.svg", "dark": "media/icon-count-dark.svg" }
+      },
+      {
         "command": "dirview.contextCopyPath",
         "title": "Copy Path"
       },
@@ -184,6 +194,16 @@
           "command": "dirview.collapseAll",
           "when": "view == dirview.sidebar",
           "group": "navigation@6"
+        },
+        {
+          "command": "dirview.languagesShowPct",
+          "when": "view == dirview.languages && !dirview.languagesShowPct",
+          "group": "navigation@1"
+        },
+        {
+          "command": "dirview.languagesShowCount",
+          "when": "view == dirview.languages && dirview.languagesShowPct",
+          "group": "navigation@1"
         }
       ],
       "webview/context": [

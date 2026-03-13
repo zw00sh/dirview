@@ -6,6 +6,7 @@
 
   let activeFilters = new Set();
   let currentStats = [];
+  let showPct = false;
 
   function render() {
     root.innerHTML = '';
@@ -21,7 +22,7 @@
       else { activeFilters.add(langName); }
       vscode.postMessage({ command: 'filter', langs: [...activeFilters] });
       render();
-    });
+    }, showPct);
   }
 
   window.addEventListener('message', (event) => {
@@ -31,9 +32,15 @@
       if (message.activeFilters !== undefined) {
         activeFilters = new Set(message.activeFilters);
       }
+      if (message.showPct !== undefined) {
+        showPct = message.showPct;
+      }
       render();
     } else if (message.type === 'filter') {
       activeFilters = new Set(message.langs || []);
+      render();
+    } else if (message.type === 'setDisplayMode') {
+      showPct = message.showPct;
       render();
     } else if (message.type === 'error') {
       root.innerHTML = `<div class="empty">Error: ${S.escHtml(message.message)}</div>`;

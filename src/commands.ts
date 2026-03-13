@@ -3,10 +3,12 @@ import * as path from 'path';
 import { Config } from './config';
 import { SidebarProvider } from './views/sidebarProvider';
 import { TabProvider } from './views/tabProvider';
+import { LanguagesProvider } from './views/languagesProvider';
 
 interface Providers {
   sidebar: SidebarProvider;
   tab: TabProvider;
+  languages: LanguagesProvider;
 }
 
 function resolveDirPath(relativePath: string, rootName: string): string | undefined {
@@ -22,7 +24,7 @@ export function registerCommands(
   doScan: () => void,
   getTruncateThreshold: () => number,
 ): void {
-  const { sidebar, tab } = providers;
+  const { sidebar, tab, languages } = providers;
 
   context.subscriptions.push(
     vscode.commands.registerCommand('dirview.toggleIgnored', async () => {
@@ -83,6 +85,13 @@ export function registerCommands(
     vscode.commands.registerCommand('dirview.collapseAll', () => {
       sidebar.collapseAll();
     })
+  );
+
+  // Both commands call the same toggle — the active one switches based on the
+  // dirview.languagesShowPct context key, so only one button is visible at a time.
+  context.subscriptions.push(
+    vscode.commands.registerCommand('dirview.languagesShowPct', () => languages.toggleDisplayMode()),
+    vscode.commands.registerCommand('dirview.languagesShowCount', () => languages.toggleDisplayMode()),
   );
 
   context.subscriptions.push(

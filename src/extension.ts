@@ -35,7 +35,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   sidebarProvider.onOpenDirInTab = (dirPath) => tabProvider.openForDir(dirPath);
   tabProvider.onOpenDirInTab = (dirPath) => tabProvider.openForDir(dirPath);
 
-  registerCommands(context, config, { sidebar: sidebarProvider, tab: tabProvider },
+  registerCommands(context, config, { sidebar: sidebarProvider, tab: tabProvider, languages: languagesProvider },
     () => coordinator.scan(),
     () => coordinator.getTruncateThreshold(),
   );

@@ -73,7 +73,7 @@ body {
 }
 
 .tab-legend-header {
-  padding: 4px 12px 4px 8px;
+  padding: 4px 8px 4px 8px;
   cursor: pointer;
   user-select: none;
   display: flex;
@@ -97,6 +97,7 @@ body {
   text-transform: uppercase;
   color: var(--vscode-descriptionForeground);
 }
+
 
 .tab-legend-wrap {
   padding: 4px 12px 6px;

@@ -245,6 +245,7 @@ export class TabProvider {
     <div id="legend-header" class="tab-legend-header">
       <span id="legend-chevron" class="tab-legend-header-chevron"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M6.146 3.146a.5.5 0 0 0 0 .707l4.146 4.146-4.146 4.146a.5.5 0 0 0 .707.707l4.5-4.5a.5.5 0 0 0 0-.707l-4.5-4.5a.5.5 0 0 0-.707 0Z"/></svg></span>
       <span class="tab-legend-header-title">Languages</span>
+      <button id="legend-display-toggle" class="tab-action" style="margin-left:auto" title="Show percentages" aria-label="Show percentages"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><text x="8" y="12.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-weight="600" font-size="13" fill="currentColor">%</text></svg></button>
     </div>
     <div id="legend" class="tab-legend-wrap"></div>
   </div>

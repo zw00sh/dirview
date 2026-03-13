@@ -5,6 +5,7 @@
   const legendSection = document.getElementById('legend-section');
   const legendHeader = document.getElementById('legend-header');
   const legendChevron = document.getElementById('legend-chevron');
+  const legendDisplayToggle = document.getElementById('legend-display-toggle');
   const legendEl = document.getElementById('legend');
   const root = document.getElementById('root');
   const tabTitleEl = document.getElementById('tab-title');
@@ -43,6 +44,11 @@
   // Tab-local truncation defaults (match config defaults)
   state.truncateThreshold = 4;
   let legendCollapsed = false;
+  let legendShowPct = false;
+
+  // SVG icons for the legend display toggle — typographic % and # glyphs, matching sidebar title bar icons
+  const SVG_PCT = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><text x="8" y="12.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', sans-serif" font-weight="600" font-size="13" fill="currentColor">%</text></svg>';
+  const SVG_HASH = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><text x="8" y="12.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', sans-serif" font-weight="600" font-size="13" fill="currentColor">#</text></svg>';
 
   // ── Toolbar button helpers ──────────────────────────────────────────────
 
@@ -97,6 +103,16 @@
     legendEl.style.display = legendCollapsed ? 'none' : '';
     legendChevron.style.transform = legendCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
   });
+  legendDisplayToggle.addEventListener('click', (e) => {
+    e.stopPropagation(); // Don't collapse the legend section when clicking the toggle
+    legendShowPct = !legendShowPct;
+    legendDisplayToggle.innerHTML = legendShowPct ? SVG_HASH : SVG_PCT;
+    legendDisplayToggle.title = legendShowPct ? 'Show counts' : 'Show percentages';
+    legendDisplayToggle.setAttribute('aria-label', legendDisplayToggle.title);
+    if (state.lastRoots) {
+      updateLegend(S.computeStats(state.lastRoots));
+    }
+  });
 
   // ── Legend ──────────────────────────────────────────────────────────────
 
@@ -117,7 +133,7 @@
     }
     legendSection.style.display = '';
     legendEl.style.display = legendCollapsed ? 'none' : '';
-    S.renderLegend(legendEl, stats, state.activeFilters, toggleFilter);
+    S.renderLegend(legendEl, stats, state.activeFilters, toggleFilter, legendShowPct);
   }
 
   // ── Tree ────────────────────────────────────────────────────────────────

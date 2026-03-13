@@ -930,8 +930,9 @@
   }
 
   // Render a filterable language legend into a container element.
+  // showPct: when true, displays percentage instead of raw file count.
   // Returns nothing; mutates legendEl in-place.
-  function renderLegend(legendEl, stats, activeFilters, onToggle) {
+  function renderLegend(legendEl, stats, activeFilters, onToggle, showPct) {
     legendEl.innerHTML = '';
     const items = document.createElement('div');
     items.className = 'legend-items';
@@ -948,10 +949,11 @@
       const item = document.createElement('div');
       item.className = 'legend-item' + (isActive ? ' active' : '') + (isInactive ? ' inactive' : '');
       item.dataset.lang = lang.name;
+      const displayValue = showPct ? lang.pct + '%' : lang.count;
       item.innerHTML =
         `<span class="legend-swatch" style="background:${lang.color}"></span>` +
         `<span class="legend-name">${escHtml(lang.name)}</span>` +
-        `<span class="legend-count">${lang.count}</span>`;
+        `<span class="legend-count">${displayValue}</span>`;
       items.appendChild(item);
     }
     legendEl.appendChild(items);

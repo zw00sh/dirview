@@ -8,6 +8,7 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
   private extensionUri: vscode.Uri;
   private lastPayload: ScanUpdatePayload | undefined;
   private activeFilters: string[] = [];
+  private showPct: boolean = false;
 
   onFilterChange: ((langs: string[]) => void) | undefined;
 
@@ -35,13 +36,19 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
     });
 
     setupVisibilityReplay(webviewView, () =>
-      this.lastPayload ? { type: 'update', roots: this.stripRoots(this.lastPayload.roots), activeFilters: this.activeFilters } : undefined
+      this.lastPayload ? { type: 'update', roots: this.stripRoots(this.lastPayload.roots), activeFilters: this.activeFilters, showPct: this.showPct } : undefined
     );
   }
 
   update(payload: ScanUpdatePayload): void {
     this.lastPayload = payload;
-    this.view?.webview.postMessage({ type: 'update', roots: this.stripRoots(payload.roots), activeFilters: this.activeFilters });
+    this.view?.webview.postMessage({ type: 'update', roots: this.stripRoots(payload.roots), activeFilters: this.activeFilters, showPct: this.showPct });
+  }
+
+  toggleDisplayMode(): void {
+    this.showPct = !this.showPct;
+    vscode.commands.executeCommand('setContext', 'dirview.languagesShowPct', this.showPct);
+    this.view?.webview.postMessage({ type: 'setDisplayMode', showPct: this.showPct });
   }
 
   /** Send only stats and totalFiles — the languages panel never reads children/files/paths. */
