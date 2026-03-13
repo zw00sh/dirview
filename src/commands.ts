@@ -55,16 +55,16 @@ export function registerCommands(
     vscode.commands.registerCommand('dirview.toggleTruncation', async () => {
       await config.setTruncationEnabled(true);
       const threshold = getTruncateThreshold();
+      // Only update the sidebar — each tab manages its own truncation state independently
       sidebar.updateTruncateThreshold(threshold);
-      tab.updateTruncation(threshold, true);
     })
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('dirview.toggleTruncationOff', async () => {
       await config.setTruncationEnabled(false);
+      // Only update the sidebar — each tab manages its own truncation state independently
       sidebar.updateTruncateThreshold(0);
-      tab.updateTruncation(0, false);
     })
   );
 
