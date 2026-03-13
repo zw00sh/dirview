@@ -65,6 +65,7 @@
   state.render = render;
 
   window.addEventListener('message', S.createMessageHandler(state, scanBar, root, {
+    vscode,
     render,
     onBeforeUpdate: (message) => {
       if (typeof message.truncateThreshold === 'number') {

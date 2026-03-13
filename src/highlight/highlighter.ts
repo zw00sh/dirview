@@ -1,5 +1,6 @@
 import { createHighlighter, createCssVariablesTheme, bundledLanguages, type Highlighter, type ThemedToken } from 'shiki';
-import { createJavaScriptRegexEngine } from 'shiki';
+import { createOnigurumaEngine } from 'shiki';
+import onigurumaWasm from '@shikijs/engine-oniguruma/wasm-inlined';
 
 // Map from linguist language names (used in languageMap.ts) to Shiki bundled language IDs.
 // Languages absent from this map fall back to plain-text rendering.
@@ -77,11 +78,16 @@ let highlighterPromise: Promise<Highlighter> | undefined;
 
 function getHighlighter(): Promise<Highlighter> {
   if (!highlighterPromise) {
-    highlighterPromise = createHighlighter({
-      langs: VALID_LANGS.map((id) => bundledLanguages[id as keyof typeof bundledLanguages]),
-      themes: [THEME],
-      engine: createJavaScriptRegexEngine(),
-    }).catch((err) => {
+    // Oniguruma (WASM) engine handles all TextMate grammar regex patterns natively,
+    // unlike the JS engine which fails on grammars requiring the `v` (unicode sets)
+    // flag unsupported in VSCode's embedded Node.js runtime.
+    highlighterPromise = createOnigurumaEngine(onigurumaWasm).then((engine) =>
+      createHighlighter({
+        langs: VALID_LANGS.map((id) => bundledLanguages[id as keyof typeof bundledLanguages]),
+        themes: [THEME],
+        engine,
+      })
+    ).catch((err) => {
       highlighterPromise = undefined; // allow retry on next call
       throw err;
     });

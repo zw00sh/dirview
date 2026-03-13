@@ -256,6 +256,7 @@
   // ── Message handler ─────────────────────────────────────────────────────
 
   const sharedHandler = S.createMessageHandler(state, scanBar, root, {
+    vscode,
     render,
     resolveUpdateSortMode: () => state.currentSortMode || 'files',
     onBeforeUpdate: (message) => {

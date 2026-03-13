@@ -266,7 +266,9 @@
   },
   "scripts": {
     "compile": "rm -rf out && node esbuild.mjs && node scripts/copyWebview.js",
+    "compile:dev": "rm -rf out && node esbuild.mjs --dev && node scripts/copyWebview.js --dev",
     "watch": "node scripts/watchAll.js",
+    "watch:dev": "node scripts/watchAll.js --dev",
     "watch:tsc": "tsc -watch -p ./",
     "copy-webview": "node scripts/copyWebview.js",
     "test": "vitest run"

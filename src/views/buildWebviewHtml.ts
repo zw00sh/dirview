@@ -8,6 +8,7 @@ export interface BuildWebviewHtmlOptions {
   bodyClass?: string;
   bodyAttrs?: string;
   bodyHtml?: string;   // inserted before <div id="root">
+  debug?: boolean;     // when true, adds 'unsafe-eval' to CSP for cross-frame debug bridge
 }
 
 export function buildWebviewHtml(
@@ -33,18 +34,20 @@ export function buildWebviewHtml(
 
   const bodyClassAttr = options.bodyClass ? ` class="${options.bodyClass}"` : '';
   const bodyExtraAttrs = options.bodyAttrs ? ` ${options.bodyAttrs}` : '';
+  const debugAttr = options.debug ? ' data-debug' : '';
   const bodyHtml = options.bodyHtml ? `\n${options.bodyHtml}` : '';
+  const scriptSrc = options.debug ? `'nonce-${nonce}' 'unsafe-eval'` : `'nonce-${nonce}'`;
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${scriptSrc};">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 ${styleLinks}
   <title>${options.title}</title>
 </head>
-<body${bodyClassAttr}${bodyExtraAttrs}>${bodyHtml}
+<body${bodyClassAttr}${bodyExtraAttrs}${debugAttr}>${bodyHtml}
   <div id="root"></div>
 ${scriptTags}
 </body>

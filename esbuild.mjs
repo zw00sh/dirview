@@ -1,5 +1,7 @@
 import * as esbuild from 'esbuild';
 
+const devMode = process.argv.includes('--dev');
+
 await esbuild.build({
   entryPoints: ['src/extension.ts'],
   bundle: true,
@@ -9,6 +11,9 @@ await esbuild.build({
   platform: 'node',
   sourcemap: false,
   minify: true,
+  // DEV_MODE is a compile-time constant. When false (production), esbuild's
+  // dead-code elimination strips all `if (DEV_MODE) { ... }` blocks entirely.
+  define: { DEV_MODE: String(devMode) },
 });
 
-console.log('esbuild: extension bundled → out/extension.js');
+console.log(`esbuild: extension bundled → out/extension.js (${devMode ? 'dev' : 'production'})`);

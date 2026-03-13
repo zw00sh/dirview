@@ -9,6 +9,7 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
   private lastPayload: ScanUpdatePayload | undefined;
   private activeFilters: string[] = [];
   private showPct: boolean = false;
+  debug = false;
 
   onFilterChange: ((langs: string[]) => void) | undefined;
 
@@ -65,11 +66,17 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
     this.view?.webview.postMessage({ type: 'error', message });
   }
 
+  /** Send a debugEval message to the webview (only works when debug=true). */
+  debugEval(script: string, id: number): void {
+    this.view?.webview.postMessage({ type: 'debugEval', script, id });
+  }
+
   private getHtml(webview: vscode.Webview): string {
     return buildWebviewHtml(webview, this.extensionUri, {
       scripts: ['shared.js', 'languages.js'],
       styles: ['languages.css'],
       title: 'Languages',
+      debug: this.debug,
     });
   }
 }

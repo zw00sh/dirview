@@ -564,23 +564,74 @@ body {
   font-family: var(--vscode-editor-font-family, monospace);
   font-size: 11px;
   color: var(--vscode-descriptionForeground);
-  /* Shiki CSS-variables theme token colors mapped to approximate VSCode theme equivalents.
-     Tokens default to the foreground color when a variable isn't defined. */
-  --shiki-foreground: var(--vscode-editor-foreground, var(--vscode-foreground));
-  --shiki-token-keyword: var(--vscode-symbolIcon-keywordForeground, #569cd6);
-  --shiki-token-string: var(--vscode-debugTokenExpression-string, #ce9178);
-  --shiki-token-string-expression: var(--vscode-debugTokenExpression-string, #ce9178);
-  --shiki-token-comment: var(--vscode-descriptionForeground);
-  --shiki-token-function: var(--vscode-symbolIcon-functionForeground, #dcdcaa);
-  --shiki-token-constant: var(--vscode-debugTokenExpression-number, #4fc1ff);
-  --shiki-token-parameter: var(--vscode-symbolIcon-variableForeground, #9cdcfe);
-  --shiki-token-punctuation: var(--vscode-foreground);
-  --shiki-token-link: var(--vscode-textLink-foreground);
   white-space: pre;
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
   min-width: 0;
+}
+
+/* Shiki CSS-variables theme — hardcoded token colors per theme kind.
+   VSCode doesn't expose TextMate token colors as CSS variables, so we can't
+   use var() fallbacks. Many symbolIcon variables (e.g. --vscode-symbolIcon-
+   keywordForeground) resolve to the same color as the editor foreground,
+   making them useless for syntax differentiation.
+   VSCode sets body.vscode-dark / body.vscode-light / body.vscode-high-contrast
+   on webview bodies, so we use those to switch palettes. */
+
+/* Dark themes (Dark+/Monokai defaults) */
+:root,
+body.vscode-dark {
+  --shiki-foreground: var(--vscode-editor-foreground);
+  --shiki-background: transparent;
+  --shiki-token-keyword: #569cd6;
+  --shiki-token-string: #ce9178;
+  --shiki-token-string-expression: #ce9178;
+  --shiki-token-comment: #6a9955;
+  --shiki-token-function: #dcdcaa;
+  --shiki-token-constant: #4fc1ff;
+  --shiki-token-parameter: #9cdcfe;
+  --shiki-token-punctuation: var(--vscode-editorBracketHighlight-foreground1, #d4d4d4);
+  --shiki-token-link: var(--vscode-textLink-foreground, #3794ff);
+  --shiki-token-changed: #e2c08d;
+  --shiki-token-deleted: #ce9178;
+  --shiki-token-inserted: #b5cea8;
+}
+
+/* Light themes (Light+/Quiet Light defaults) */
+body.vscode-light {
+  --shiki-foreground: var(--vscode-editor-foreground);
+  --shiki-background: transparent;
+  --shiki-token-keyword: #0000ff;
+  --shiki-token-string: #a31515;
+  --shiki-token-string-expression: #a31515;
+  --shiki-token-comment: #008000;
+  --shiki-token-function: #795e26;
+  --shiki-token-constant: #0070c1;
+  --shiki-token-parameter: #001080;
+  --shiki-token-punctuation: var(--vscode-editorBracketHighlight-foreground1, #000000);
+  --shiki-token-link: var(--vscode-textLink-foreground, #006ab1);
+  --shiki-token-changed: #895503;
+  --shiki-token-deleted: #a31515;
+  --shiki-token-inserted: #098658;
+}
+
+/* High contrast themes — use bright, saturated colors for accessibility */
+body.vscode-high-contrast {
+  --shiki-foreground: var(--vscode-editor-foreground);
+  --shiki-background: transparent;
+  --shiki-token-keyword: #569cd6;
+  --shiki-token-string: #ce9178;
+  --shiki-token-string-expression: #ce9178;
+  --shiki-token-comment: #7ca668;
+  --shiki-token-function: #dcdcaa;
+  --shiki-token-constant: #4fc1ff;
+  --shiki-token-parameter: #9cdcfe;
+  --shiki-token-punctuation: #d4d4d4;
+  --shiki-token-link: var(--vscode-textLink-foreground, #3794ff);
+  --shiki-token-changed: #e2c08d;
+  --shiki-token-deleted: #ce9178;
+  --shiki-token-inserted: #b5cea8;
 }
 
 .match-highlight {

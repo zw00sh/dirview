@@ -16,6 +16,8 @@ export class SearchProvider implements vscode.WebviewViewProvider {
   onSearchProgress?: () => void;
   onSearchClear?: () => void;
 
+  debug = false;
+
   constructor(extensionUri: vscode.Uri) {
     this.extensionUri = extensionUri;
   }
@@ -97,11 +99,17 @@ export class SearchProvider implements vscode.WebviewViewProvider {
     this.view?.webview.postMessage({ type: 'filterActive', active });
   }
 
+  /** Send a debugEval message to the webview (only works when debug=true). */
+  debugEval(script: string, id: number): void {
+    this.view?.webview.postMessage({ type: 'debugEval', script, id });
+  }
+
   private getHtml(webview: vscode.Webview): string {
     return buildWebviewHtml(webview, this.extensionUri, {
       scripts: ['shared.js', 'search.js'],
       styles: ['style.css', 'search.css'],
       title: 'Search',
+      debug: this.debug,
     });
   }
 }

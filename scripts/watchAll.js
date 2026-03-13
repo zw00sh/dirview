@@ -5,12 +5,22 @@ const fs = require('fs');
 const path = require('path');
 const { copyAssets } = require('./copyWebview');
 
+const devMode = process.argv.includes('--dev');
 const webviewDir = path.join(__dirname, '..', 'src', 'views', 'webview');
 
 // Initial copy
 copyAssets();
 
-// Start tsc in watch mode
+// Start esbuild + tsc in watch mode
+if (devMode) {
+  // In dev mode, also bundle with esbuild --dev for DEV_MODE=true
+  const esbuild = spawn('node', ['esbuild.mjs', '--dev'], {
+    stdio: 'inherit',
+    cwd: path.join(__dirname, '..'),
+  });
+  esbuild.on('exit', (code) => { if (code) console.error(`esbuild exited with code ${code}`); });
+}
+
 const tsc = spawn('npx', ['tsc', '-watch', '-p', './'], {
   stdio: 'inherit',
   cwd: path.join(__dirname, '..'),

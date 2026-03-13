@@ -16,6 +16,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const searchProvider = new SearchProvider(context.extensionUri);
   const tabProvider = new TabProvider(context.extensionUri);
 
+  if (DEV_MODE) {
+    sidebarProvider.debug = true;
+    languagesProvider.debug = true;
+    searchProvider.debug = true;
+    tabProvider.debug = true;
+  }
+
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('dirview.sidebar', sidebarProvider)
   );
@@ -70,6 +77,50 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     })
   );
+
+  if (DEV_MODE) {
+    let debugEvalId = 0;
+    // Pending eval promises keyed by id — resolved when a webview responds.
+    const pending = new Map<number, (value: string) => void>();
+
+    // Called by providers when a webview sends back a debugEvalResult.
+    const onDebugResult = (msg: { id?: number; result?: string; error?: string }) => {
+      const id = msg.id;
+      if (id === undefined) { return; }
+      const value = msg.error ? `ERROR: ${msg.error}` : (msg.result ?? '');
+      console.log(`[dirview:debugEval] #${id} →`, value);
+      const resolve = pending.get(id);
+      if (resolve) { pending.delete(id); resolve(value); }
+    };
+    sidebarProvider.onDebugResult = onDebugResult;
+    tabProvider.onDebugResult = onDebugResult;
+
+    const debugEval = (script: string): Promise<string> => {
+      const id = ++debugEvalId;
+      return new Promise((resolve) => {
+        pending.set(id, resolve);
+        sidebarProvider.debugEval(script, id);
+        tabProvider.debugEval(script, id);
+        // Timeout: resolve with error if no webview responds within 3s.
+        setTimeout(() => {
+          if (pending.has(id)) {
+            pending.delete(id);
+            resolve(`[timeout] no webview responded to debugEval #${id}`);
+          }
+        }, 3000);
+      });
+    };
+
+    context.subscriptions.push(
+      vscode.commands.registerCommand('dirview.debugEval', debugEval)
+    );
+
+    // Expose on globalThis so the Node inspector (port 9223) can call it directly:
+    //   globalThis.__dirviewDebugEval('document.title')
+    // Also expose the vscode commands API for arbitrary command execution.
+    (globalThis as any).__dirviewDebugEval = debugEval;
+    (globalThis as any).__dirviewExecCommand = vscode.commands.executeCommand.bind(vscode.commands);
+  }
 
   await coordinator.scan();
 

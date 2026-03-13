@@ -1569,6 +1569,30 @@
           state.searchActive = true;
           if (state.searchBar_updateStatus) { state.searchBar_updateStatus(); }
           break;
+        /* @DEV_START */
+        case 'debugEval': {
+          // Cross-frame debug bridge: evals a script string and returns the result
+          // to the extension host AND to the parent frame (so CDP can read it).
+          // Only functional when CSP includes 'unsafe-eval' (Development mode).
+          // Double-gated: body must have data-debug attribute AND CSP must allow eval.
+          // Stripped entirely from production builds by copyWebview.js.
+          if (!document.body.hasAttribute('data-debug')) { break; }
+          const id = message.id;
+          try {
+            // eslint-disable-next-line no-eval
+            const result = eval(message.script);
+            const serialized = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
+            if (deps.vscode) { deps.vscode.postMessage({ command: 'debugEvalResult', id, result: serialized }); }
+            // Also post to parent chain so the renderer (CDP) can read results.
+            window.parent.postMessage({ type: 'dirview-debug-result', id, result: serialized }, '*');
+          } catch (err) {
+            const errStr = String(err);
+            if (deps.vscode) { deps.vscode.postMessage({ command: 'debugEvalResult', id, error: errStr }); }
+            window.parent.postMessage({ type: 'dirview-debug-result', id, error: errStr }, '*');
+          }
+          break;
+        }
+        /* @DEV_END */
       }
     };
   }
