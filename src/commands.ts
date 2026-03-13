@@ -38,11 +38,16 @@ export function registerCommands(
     })
   );
 
+  // Three separate commands for each sort mode — each shows a different icon via the
+  // dirview.sortMode context key. All handlers are identical: advance to the next mode.
+  const cycleSortHandler = async () => {
+    const newMode = await config.cycleSortMode();
+    sidebar.updateSortMode(newMode);
+  };
   context.subscriptions.push(
-    vscode.commands.registerCommand('dirview.cycleSort', async () => {
-      const newMode = await config.cycleSortMode();
-      sidebar.updateSortMode(newMode);
-    })
+    vscode.commands.registerCommand('dirview.cycleSortFiles', cycleSortHandler),
+    vscode.commands.registerCommand('dirview.cycleSortName', cycleSortHandler),
+    vscode.commands.registerCommand('dirview.cycleSortSize', cycleSortHandler),
   );
 
   context.subscriptions.push(

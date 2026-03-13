@@ -71,9 +71,10 @@
     const modes = ['files', 'name', 'size'];
     const next = modes[(modes.indexOf(state.currentSortMode) + 1) % modes.length];
     state.currentSortMode = next;
-    const sortNames = { files: 'by files', name: 'by name', size: 'by size' };
-    sortBtn.title = 'Sort: ' + (sortNames[next] || 'by files');
+    const sortNames = { files: 'by file count', name: 'by name', size: 'by size' };
+    sortBtn.title = 'Sort: ' + (sortNames[next] || 'by file count');
     sortBtn.setAttribute('aria-label', sortBtn.title);
+    sortBtn.innerHTML = { files: S.SVG_SORT_FILES, name: S.SVG_SORT_NAME, size: S.SVG_SORT_SIZE }[next] || S.SVG_SORT_FILES;
     state.rerender();
   });
   toggleIgnoredBtn.addEventListener('click', () => {
@@ -126,9 +127,10 @@
     state.lastAutoRescanEnabled = autoRescanEnabled;
     state.currentSortMode = sortMode || 'files';
 
-    const sortNames = { files: 'by files', name: 'by name', size: 'by size' };
-    sortBtn.title = 'Sort: ' + (sortNames[state.currentSortMode] || 'by files');
+    const sortNames = { files: 'by file count', name: 'by name', size: 'by size' };
+    sortBtn.title = 'Sort: ' + (sortNames[state.currentSortMode] || 'by file count');
     sortBtn.setAttribute('aria-label', sortBtn.title);
+    sortBtn.innerHTML = { files: S.SVG_SORT_FILES, name: S.SVG_SORT_NAME, size: S.SVG_SORT_SIZE }[state.currentSortMode] || S.SVG_SORT_FILES;
 
     // Toolbar title: clickable breadcrumb showing current directory path + dimmed sort indicator.
     // The './' prefix is rendered via CSS ::before on .tab-title, positioned absolutely so it
@@ -184,12 +186,6 @@
     trailingSlash.className = 'ancestor-path-sep';
     trailingSlash.textContent = ' /';
     tabTitleEl.appendChild(trailingSlash);
-
-    // Dimmed sort indicator after the breadcrumb
-    const sortLabel = document.createElement('span');
-    sortLabel.className = 'tab-title-sort';
-    sortLabel.textContent = '(' + (sortNames[state.currentSortMode] || 'by files') + ')';
-    tabTitleEl.appendChild(sortLabel);
 
     updateLegend(roots ? S.computeStats(state.lastRoots) : []);
 

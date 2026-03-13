@@ -77,9 +77,19 @@
         "icon": "$(eye-closed)"
       },
       {
-        "command": "dirview.cycleSort",
-        "title": "Cycle Sort Order (Files / Name / Size)",
+        "command": "dirview.cycleSortFiles",
+        "title": "Sort: by files",
         "icon": "$(list-ordered)"
+      },
+      {
+        "command": "dirview.cycleSortName",
+        "title": "Sort: by name",
+        "icon": "$(case-sensitive)"
+      },
+      {
+        "command": "dirview.cycleSortSize",
+        "title": "Sort: by size",
+        "icon": "$(database)"
       },
       {
         "command": "dirview.toggleTruncation",
@@ -136,8 +146,18 @@
           "group": "navigation@2"
         },
         {
-          "command": "dirview.cycleSort",
-          "when": "view == dirview.sidebar",
+          "command": "dirview.cycleSortFiles",
+          "when": "view == dirview.sidebar && dirview.sortMode == files",
+          "group": "navigation@1"
+        },
+        {
+          "command": "dirview.cycleSortName",
+          "when": "view == dirview.sidebar && dirview.sortMode == name",
+          "group": "navigation@1"
+        },
+        {
+          "command": "dirview.cycleSortSize",
+          "when": "view == dirview.sidebar && dirview.sortMode == size",
           "group": "navigation@1"
         },
         {

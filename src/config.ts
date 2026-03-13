@@ -37,12 +37,14 @@ export class Config {
     const idx = SORT_CYCLE.indexOf(current);
     const next = SORT_CYCLE[(idx + 1) % SORT_CYCLE.length];
     await this.context.workspaceState.update('dirview.sortMode', next);
+    await vscode.commands.executeCommand('setContext', 'dirview.sortMode', next);
     return next;
   }
 
   async init(): Promise<void> {
     await vscode.commands.executeCommand('setContext', 'dirview.showIgnored', this.showIgnored);
     await vscode.commands.executeCommand('setContext', 'dirview.truncationEnabled', this.truncationEnabled);
+    await vscode.commands.executeCommand('setContext', 'dirview.sortMode', this.sortMode);
     await vscode.commands.executeCommand('setContext', 'dirview.allExpanded', false);
   }
 }

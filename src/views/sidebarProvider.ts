@@ -16,16 +16,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this.extensionUri = extensionUri;
   }
 
-  private getSortDescription(sortMode: SortMode): string {
-    if (sortMode === 'name') { return 'name'; }
-    if (sortMode === 'size') { return 'size'; }
-    return 'count';
-  }
-
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
     this.view.title = 'Tree';
-    this.view.description = this.lastUpdate ? this.getSortDescription(this.lastUpdate.sortMode) : 'count';
 
     webviewView.webview.options = {
       enableScripts: true,
@@ -62,7 +55,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   update(payload: ScanUpdatePayload): void {
     this.lastUpdate = payload;
     const { roots, autoRescanEnabled, sortMode, truncateThreshold } = payload;
-    if (this.view) { this.view.description = this.getSortDescription(sortMode); }
     this.view?.webview.postMessage({ type: 'update', roots, autoRescanEnabled, sortMode, truncateThreshold });
   }
 
@@ -77,7 +69,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   updateSortMode(sortMode: SortMode): void {
     if (!this.lastUpdate) { return; }
     this.lastUpdate = { ...this.lastUpdate, sortMode };
-    if (this.view) { this.view.description = this.getSortDescription(sortMode); }
     // Lightweight message: no need to re-serialize the full tree when only the
     // sort mode changed. The webview re-renders from cached roots.
     this.view?.webview.postMessage({ type: 'updateSortMode', sortMode });
