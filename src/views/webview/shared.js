@@ -462,25 +462,19 @@
       return li;
     }
 
-    function renderTruncatedRow(hiddenFiles, depth, ancestors, dirPath, childrenEl) {
+    function renderTruncatedRow(hiddenFiles, depth, ancestors, dirPath, childrenEl, maxMetric, clientWidth) {
       const li = document.createElement('li');
       const row = document.createElement('div');
       row.className = 'dir-row truncated-row';
+      // Use a synthetic path so the delegated tooltip handler can look up this row's stats.
+      const truncKey = dirPath + '\0truncated';
+      row.dataset.path = truncKey;
       row.appendChild(renderIndentGuides(depth, ancestors));
 
       const slot = document.createElement('span');
       slot.className = 'chevron';
       slot.innerHTML = SVG_PLUS;
       row.appendChild(slot);
-
-      const label = document.createElement('span');
-      label.className = 'dir-name';
-      label.textContent = `${hiddenFiles.length} more file${hiddenFiles.length !== 1 ? 's' : ''}`;
-      row.appendChild(label);
-
-      const spacer = document.createElement('div');
-      spacer.className = 'bar-spacer';
-      row.appendChild(spacer);
 
       // Colored dots for unique language types among hidden files
       const langMap = new Map();
@@ -491,6 +485,16 @@
         }
       }
       const langs = Array.from(langMap.entries()).sort((a, b) => b[1].count - a[1].count);
+
+      // Register synthetic node for tooltip hover
+      nodeMap.set(truncKey, {
+        node: {
+          totalFiles: hiddenFiles.length,
+          stats: langs.map(([name, { color, count }]) => ({ name, color, count })),
+        },
+        hasChildren: false,
+      });
+
       const dotsEl = document.createElement('span');
       dotsEl.className = 'truncated-dots';
       for (const [langName, { color }] of langs.slice(0, 5)) {
@@ -502,12 +506,59 @@
       }
       row.appendChild(dotsEl);
 
+      const label = document.createElement('span');
+      label.className = 'dir-name';
+      label.textContent = `${hiddenFiles.length} more file${hiddenFiles.length !== 1 ? 's' : ''}`;
+      row.appendChild(label);
+
+      const spacer = document.createElement('div');
+      spacer.className = 'bar-spacer';
+      row.appendChild(spacer);
+
+      // Proportional bar showing language makeup of hidden files
+      if (langs.length > 0 && maxMetric > 0) {
+        const totalCount = hiddenFiles.length;
+        const totalBytes = hiddenFiles.reduce((s, f) => s + (f.sizeBytes || 0), 0);
+        const metric = state.currentSortMode === 'size' ? totalBytes : totalCount;
+        const pct = metric / maxMetric;
+        const cw = clientWidth || root.clientWidth || opts.barFallbackWidth || 300;
+        const maxBarWidth = Math.min(cw * (opts.barFactor || 0.4), opts.barMaxWidth || 200);
+        const minBarWidth = opts.barMinWidth || 12;
+        const barWrapWidth = Math.max((opts.barSqrt ? Math.sqrt(pct) : pct) * maxBarWidth, minBarWidth);
+
+        const barWrap = document.createElement('div');
+        barWrap.className = 'bar-wrap';
+        barWrap.style.width = barWrapWidth + 'px';
+
+        const bar = document.createElement('div');
+        bar.className = 'bar';
+
+        for (const [, { color, count }] of langs) {
+          const segPct = (count / totalCount) * 100;
+          const seg = document.createElement('div');
+          seg.className = 'bar-segment';
+          seg.style.width = segPct + '%';
+          seg.style.backgroundColor = color;
+          bar.appendChild(seg);
+        }
+
+        barWrap.appendChild(bar);
+        row.appendChild(barWrap);
+      }
+
+      // Right column: file count or size depending on sort mode
       if (!opts.hideCounts) {
         const totalBytes = hiddenFiles.reduce((s, f) => s + (f.sizeBytes || 0), 0);
-        const sizeEl = document.createElement('span');
-        sizeEl.className = 'file-count';
-        sizeEl.textContent = totalBytes > 0 ? formatBytes(totalBytes) : '';
-        row.appendChild(sizeEl);
+        const metaEl = document.createElement('span');
+        metaEl.className = 'file-count';
+        if (state.currentSortMode === 'size') {
+          metaEl.textContent = totalBytes > 0 ? formatBytes(totalBytes) : '';
+          metaEl.title = hiddenFiles.length + ' files';
+        } else {
+          metaEl.textContent = String(hiddenFiles.length);
+          metaEl.title = totalBytes > 0 ? formatBytes(totalBytes) : '';
+        }
+        row.appendChild(metaEl);
       }
 
       row.addEventListener('click', () => {
@@ -515,6 +566,17 @@
         li.remove();
         for (const file of hiddenFiles) {
           childrenEl.appendChild(renderFileNode(file, depth, ancestors));
+        }
+        // Re-equalize .file-count widths after new rows are added
+        const treeEl = root.querySelector('.tree');
+        if (treeEl) {
+          const counts = treeEl.querySelectorAll('.file-count');
+          if (counts.length) {
+            let max = 0;
+            for (const el of counts) { el.style.width = ''; }
+            for (const el of counts) { const w = el.offsetWidth; if (w > max) max = w; }
+            for (const el of counts) { el.style.width = max + 'px'; }
+          }
         }
       });
 
@@ -807,7 +869,7 @@
           childrenEl.appendChild(renderFileNode(file, depth + 1, nextAncestors));
         }
         if (hiddenFiles.length > 0) {
-          childrenEl.appendChild(renderTruncatedRow(hiddenFiles, depth + 1, nextAncestors, displayNode.path, childrenEl));
+          childrenEl.appendChild(renderTruncatedRow(hiddenFiles, depth + 1, nextAncestors, displayNode.path, childrenEl, maxMetric, clientWidth));
         }
 
         // Dir row click (toggle expand) is handled by the delegated click handler in
@@ -1032,7 +1094,7 @@
       const hiddenFiles = shouldTruncate ? visibleFiles.slice(state.truncateThreshold) : [];
       for (const file of shownFiles) { treeEl.appendChild(renderer.renderFileNode(file, 0, [])); }
       if (hiddenFiles.length > 0) {
-        treeEl.appendChild(renderer.renderTruncatedRow(hiddenFiles, 0, [], r.path, treeEl));
+        treeEl.appendChild(renderer.renderTruncatedRow(hiddenFiles, 0, [], r.path, treeEl, maxMetric, clientWidth));
       }
     }
   }
