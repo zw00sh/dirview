@@ -1661,3 +1661,293 @@ describe('delegated click handler', () => {
     });
   });
 });
+
+// --- search: dirMatchesSearch ---
+
+describe('dirMatchesSearch', () => {
+  it('returns true when searchResults is null', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const node = makeDir('/a', 'a', { files: [{ path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
+    expect(renderer.dirMatchesSearch(node)).toBe(true);
+  });
+
+  it('returns true when a direct file is in searchResults', () => {
+    const state = S.createState();
+    state.searchResults = new Map([['/a/foo.ts', []]]);
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const node = makeDir('/a', 'a', { files: [{ path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
+    expect(renderer.dirMatchesSearch(node)).toBe(true);
+  });
+
+  it('returns false when no file matches', () => {
+    const state = S.createState();
+    state.searchResults = new Map([['/other/file.ts', []]]);
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const node = makeDir('/a', 'a', { files: [{ path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
+    expect(renderer.dirMatchesSearch(node)).toBe(false);
+  });
+
+  it('returns true when a descendant file matches', () => {
+    const state = S.createState();
+    state.searchResults = new Map([['/a/b/nested.ts', []]]);
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const nested = makeDir('/a/b', 'b', { files: [{ path: '/a/b/nested.ts', name: 'nested.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
+    const node = makeDir('/a', 'a', { children: [nested] });
+    expect(renderer.dirMatchesSearch(node)).toBe(true);
+  });
+
+  it('caches results: returns same value on repeated calls', () => {
+    const state = S.createState();
+    state.searchResults = new Map([['/a/foo.ts', []]]);
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const node = makeDir('/a', 'a', { files: [{ path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
+    expect(renderer.dirMatchesSearch(node)).toBe(true);
+    expect(renderer.dirMatchesSearch(node)).toBe(true); // from cache
+  });
+
+  it('cache is reset by beforeRender', () => {
+    const state = S.createState();
+    state.searchResults = new Map([['/a/foo.ts', []]]);
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+    const node = makeDir('/a', 'a', { files: [file] });
+    expect(renderer.dirMatchesSearch(node)).toBe(true);
+    // Change search results and reset cache
+    state.searchResults = new Map([['/other.ts', []]]);
+    renderer.beforeRender();
+    expect(renderer.dirMatchesSearch(node)).toBe(false);
+  });
+});
+
+// --- search: renderMatchLine ---
+
+describe('renderMatchLine', () => {
+  it('renders line number and text', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+    const match = { line: 42, column: 6, matchLength: 3, lineText: 'const api = true;' };
+    const li = renderer.renderMatchLine(file, match, 1, []);
+    const row = li.querySelector('.match-line-row');
+    expect(row).not.toBeNull();
+    expect(row.dataset.action).toBe('openFileAtLine');
+    expect(row.dataset.path).toBe('/a/foo.ts');
+    expect(row.dataset.line).toBe('42');
+    expect(li.querySelector('.match-line-number').textContent).toBe('42');
+    const highlight = li.querySelector('.match-highlight');
+    expect(highlight).not.toBeNull();
+    expect(highlight.textContent).toBe('api');
+  });
+
+  it('renders text without highlight when matchLength is 0', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+    const match = { line: 1, column: 0, matchLength: 0, lineText: 'plain text' };
+    const li = renderer.renderMatchLine(file, match, 1, []);
+    expect(li.querySelector('.match-highlight')).toBeNull();
+    expect(li.querySelector('.match-line-text').textContent).toBe('plain text');
+  });
+
+  it('clicking openFileAtLine posts openFile with line number', () => {
+    const state = S.createState();
+    state.lastRoots = [];
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+    const match = { line: 7, column: 0, matchLength: 3, lineText: 'abc def' };
+    const li = renderer.renderMatchLine(file, match, 1, []);
+    renderer._rootEl.appendChild(li);
+    li.querySelector('.match-line-row').click();
+    expect(renderer._vscode.postMessage).toHaveBeenCalledWith({ command: 'openFile', path: '/a/foo.ts', line: 7 });
+  });
+});
+
+// --- search: renderMoreMatchesRow ---
+
+describe('renderMoreMatchesRow', () => {
+  it('renders the count label', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderMoreMatchesRow(3, 1, []);
+    expect(li.querySelector('.match-more-label').textContent).toBe('3 more matches');
+  });
+
+  it('uses singular form for count=1', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderMoreMatchesRow(1, 1, []);
+    expect(li.querySelector('.match-more-label').textContent).toBe('1 more match');
+  });
+});
+
+// --- search: rendering integration ---
+
+describe('search rendering integration', () => {
+  function makeFile(path, name = null) {
+    return { path, name: name || path.split('/').pop(), langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+  }
+
+  it('renders match lines under matched files', () => {
+    const state = S.createState();
+    state.searchResults = new Map([
+      ['/r/foo.ts', [{ line: 5, column: 0, matchLength: 3, lineText: 'abc def' }]],
+    ]);
+    state.render = vi.fn();
+    state.lastRoots = [];
+    const file = makeFile('/r/foo.ts');
+    const dir = makeDir('/r', 'r', { files: [file], totalFiles: 1, stats: [] });
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderDirNode(dir, 0, 10, [], 300);
+    const matchLines = li.querySelectorAll('.match-line-row');
+    expect(matchLines.length).toBe(1);
+    expect(matchLines[0].dataset.line).toBe('5');
+  });
+
+  it('does not render match lines for filename-only results (empty matches array)', () => {
+    const state = S.createState();
+    state.searchResults = new Map([['/r/foo.ts', []]]);
+    state.render = vi.fn();
+    state.lastRoots = [];
+    const file = makeFile('/r/foo.ts');
+    const dir = makeDir('/r', 'r', { files: [file], totalFiles: 1, stats: [] });
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderDirNode(dir, 0, 10, [], 300);
+    expect(li.querySelectorAll('.match-line-row').length).toBe(0);
+  });
+
+  it('hides files not in searchResults', () => {
+    const state = S.createState();
+    state.searchResults = new Map([['/r/match.ts', []]]);
+    state.render = vi.fn();
+    state.lastRoots = [];
+    const f1 = makeFile('/r/match.ts');
+    const f2 = makeFile('/r/nomatch.ts');
+    const dir = makeDir('/r', 'r', { files: [f1, f2], totalFiles: 2, stats: [] });
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderDirNode(dir, 0, 10, [], 300);
+    const fileRows = li.querySelectorAll('.file-row');
+    expect(fileRows.length).toBe(1);
+    expect(fileRows[0].dataset.path).toBe('/r/match.ts');
+  });
+
+  it('auto-expands directories when searchResults is set', () => {
+    const state = S.createState();
+    state.searchResults = new Map([['/r/sub/file.ts', []]]);
+    state.render = vi.fn();
+    state.lastRoots = [];
+    const file = makeFile('/r/sub/file.ts');
+    const sub = makeDir('/r/sub', 'sub', { files: [file], totalFiles: 1, stats: [] });
+    const root = makeDir('/r', 'r', { children: [sub], totalFiles: 1, stats: [] });
+    // depth=0 dirs auto-expand anyway; check depth=1 dir
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const rootLi = renderer.renderDirNode(root, 0, 10, [], 300);
+    // The child sub-directory should also be expanded (isExpanded is true when searchResults != null)
+    const subChildren = rootLi.querySelector('[data-node-path="/r/sub"] > ul.children');
+    expect(subChildren).not.toBeNull();
+    expect(subChildren.classList.contains('open')).toBe(true);
+  });
+
+  it('disables file truncation when search is active', () => {
+    const state = S.createState();
+    state.truncateThreshold = 2;
+    state.searchResults = new Map([
+      ['/r/a.ts', []],
+      ['/r/b.ts', []],
+      ['/r/c.ts', []],
+    ]);
+    state.render = vi.fn();
+    state.lastRoots = [];
+    const files = [makeFile('/r/a.ts'), makeFile('/r/b.ts'), makeFile('/r/c.ts')];
+    const dir = makeDir('/r', 'r', { files, totalFiles: 3, stats: [] });
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderDirNode(dir, 0, 10, [], 300);
+    // All 3 files should be shown (truncation disabled in search mode)
+    expect(li.querySelectorAll('.file-row').length).toBe(3);
+    expect(li.querySelector('.truncated-row')).toBeNull();
+  });
+
+  it('caps match lines at 5 per file and shows more-matches row', () => {
+    const state = S.createState();
+    const matches = [1, 2, 3, 4, 5, 6, 7].map(line => ({ line, column: 0, matchLength: 1, lineText: 'x' }));
+    state.searchResults = new Map([['/r/foo.ts', matches]]);
+    state.render = vi.fn();
+    state.lastRoots = [];
+    const file = makeFile('/r/foo.ts');
+    const dir = makeDir('/r', 'r', { files: [file], totalFiles: 1, stats: [] });
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderDirNode(dir, 0, 10, [], 300);
+    expect(li.querySelectorAll('.match-line-row').length).toBe(5);
+    const moreRow = li.querySelector('.match-more-label');
+    expect(moreRow).not.toBeNull();
+    expect(moreRow.textContent).toBe('2 more matches');
+  });
+});
+
+// --- search: createMessageHandler searchResults/searchProgress ---
+
+describe('createMessageHandler search messages', () => {
+  function makeHandlerEnv() {
+    const state = S.createState();
+    const scanBar = { show: vi.fn() };
+    const rootEl = document.createElement('div');
+    document.body.appendChild(rootEl);
+    state.render = vi.fn((roots) => { state.lastRoots = roots; });
+    state.lastRoots = [makeDir('/ws', 'ws', {})];
+    const handler = S.createMessageHandler(state, scanBar, rootEl, { render: state.render });
+    return { state, scanBar, rootEl, handler };
+  }
+
+  it('searchProgress sets searchActive and calls searchBar_updateStatus', () => {
+    const { state, handler } = makeHandlerEnv();
+    const updateStatus = vi.fn();
+    state.searchBar_updateStatus = updateStatus;
+    handler({ data: { type: 'searchProgress' } });
+    expect(state.searchActive).toBe(true);
+    expect(updateStatus).toHaveBeenCalledOnce();
+  });
+
+  it('searchResults with matches sets state and triggers rerender', async () => {
+    const { state, handler } = makeHandlerEnv();
+    handler({ data: { type: 'searchResults', matches: { '/a/foo.ts': [{ line: 1, column: 0, matchLength: 3, lineText: 'abc' }] }, fileCount: 1, matchCount: 1, truncated: false } });
+    expect(state.searchResults).toBeInstanceOf(Map);
+    expect(state.searchResults.has('/a/foo.ts')).toBe(true);
+    expect(state.searchActive).toBe(false);
+    expect(state.searchFileCount).toBe(1);
+    expect(state.searchMatchCount).toBe(1);
+    await awaitRerender();
+    expect(state.render).toHaveBeenCalled();
+  });
+
+  it('searchResults with null clears search state', async () => {
+    const { state, handler } = makeHandlerEnv();
+    state.searchResults = new Map([['/a/foo.ts', []]]);
+    handler({ data: { type: 'searchResults', matches: null } });
+    expect(state.searchResults).toBeNull();
+    expect(state.searchActive).toBe(false);
+  });
+
+  it('searchResults with matches clears expanded state', () => {
+    const { state, handler } = makeHandlerEnv();
+    state.expanded.set('/some/dir', true);
+    handler({ data: { type: 'searchResults', matches: { '/a/foo.ts': [] }, fileCount: 1, matchCount: 0, truncated: false } });
+    expect(state.expanded.size).toBe(0);
+  });
+});

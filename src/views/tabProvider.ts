@@ -2,12 +2,15 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { DirNode, ScanUpdatePayload } from '../scanner/types';
 import { buildWebviewHtml } from './buildWebviewHtml';
-import { handleCommonMessage } from './providerUtils';
+import { handleCommonMessage, handleSearchMessage } from './providerUtils';
+import { SearchService } from '../search/searchService';
 
 export class TabProvider {
   // Map from directory path (relative to workspace root, '' for root) → WebviewPanel.
   // Each entry is a separate editor tab showing that directory's subtree.
   private panels: Map<string, vscode.WebviewPanel> = new Map();
+  // Per-panel search service: independent search state per tab.
+  private searchServices: Map<string, SearchService> = new Map();
   private extensionUri: vscode.Uri;
   // Raw scan data, stored once and used to derive per-panel subtrees on demand.
   private lastPayload: ScanUpdatePayload | undefined;
@@ -68,6 +71,15 @@ export class TabProvider {
     return node ? [node] : [];
   }
 
+  /** Returns the rg root paths for a given dirPath.
+   *  Root tabs search across all workspace folders; dir tabs are scoped to their subtree. */
+  private getRootPaths(dirPath: string): string[] {
+    if (dirPath === '') {
+      return vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath) ?? [];
+    }
+    return [dirPath];
+  }
+
   /** Opens the root-level breakdown tab (or focuses it if already open). */
   openOrFocus(): void {
     this.openForDir('');
@@ -96,13 +108,25 @@ export class TabProvider {
       }
     );
 
+    const searchService = new SearchService();
+    this.searchServices.set(dirPath, searchService);
+
     panel.iconPath = {
       light: vscode.Uri.joinPath(this.extensionUri, 'media', 'dirview-icon-light.svg'),
       dark: vscode.Uri.joinPath(this.extensionUri, 'media', 'dirview-icon-dark.svg'),
     };
     panel.webview.html = this.getHtml(panel.webview);
 
-    panel.webview.onDidReceiveMessage((message: { command: string; path?: string; show?: boolean; enabled?: boolean }) => {
+    panel.webview.onDidReceiveMessage((message: { command: string; path?: string; line?: number; show?: boolean; enabled?: boolean; pattern?: string; caseSensitive?: boolean; useRegex?: boolean; include?: string; glob?: string }) => {
+      // Search messages — scoped to this panel's dirPath for subtree-only results.
+      let currentPath: string | undefined;
+      for (const [dp, p] of this.panels) {
+        if (p === panel) { currentPath = dp; break; }
+      }
+      const rootPaths = this.getRootPaths(currentPath ?? '');
+      const svc = currentPath !== undefined ? (this.searchServices.get(currentPath) ?? searchService) : searchService;
+      if (handleSearchMessage(message, svc, (msg) => panel.webview.postMessage(msg), rootPaths)) { return; }
+
       if (handleCommonMessage(message, {
         onRefresh: this.onRefresh,
         onOpenDirInTab: this.onOpenDirInTab,
@@ -123,7 +147,13 @@ export class TabProvider {
         }
         if (currentPath === undefined || message.path === currentPath) { return; }
         const targetPath = message.path;
-        // Re-key the panel under its new root path.
+        // Re-key the panel and its search service under the new root path.
+        const oldService = this.searchServices.get(currentPath);
+        if (oldService) {
+          oldService.cancel();
+          this.searchServices.delete(currentPath);
+          this.searchServices.set(targetPath, oldService);
+        }
         this.panels.delete(currentPath);
         this.panels.set(targetPath, panel);
         panel.title = targetPath === '' ? 'Breakdown' : path.basename(targetPath);
@@ -163,7 +193,13 @@ export class TabProvider {
 
     panel.onDidDispose(() => {
       for (const [dp, p] of this.panels) {
-        if (p === panel) { this.panels.delete(dp); break; }
+        if (p === panel) {
+          // Cancel any running search for this panel and clean up its service.
+          this.searchServices.get(dp)?.cancel();
+          this.searchServices.delete(dp);
+          this.panels.delete(dp);
+          break;
+        }
       }
     });
 
@@ -248,6 +284,13 @@ export class TabProvider {
       <button id="legend-display-toggle" class="tab-action" style="margin-left:auto" title="Show percentages" aria-label="Show percentages"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><text x="8" y="12.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-weight="600" font-size="13" fill="currentColor">%</text></svg></button>
     </div>
     <div id="legend" class="tab-legend-wrap"></div>
+  </div>
+  <div id="search-section" class="tab-search-section">
+    <div id="search-header" class="tab-search-header">
+      <span id="search-chevron" class="tab-search-header-chevron"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M6.146 3.146a.5.5 0 0 0 0 .707l4.146 4.146-4.146 4.146a.5.5 0 0 0 .707.707l4.5-4.5a.5.5 0 0 0 0-.707l-4.5-4.5a.5.5 0 0 0-.707 0Z"/></svg></span>
+      <span class="tab-search-header-title">Search</span>
+    </div>
+    <div id="search-content" class="tab-search-content"></div>
   </div>
   <div class="tab-toolbar">
     <div class="tab-toolbar-left">

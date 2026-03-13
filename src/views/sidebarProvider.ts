@@ -11,6 +11,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   onRefresh?: () => void;
   onOpenDirInTab?: (dirPath: string) => void;
+  onFocusSearch?: () => void;
 
   constructor(extensionUri: vscode.Uri) {
     this.extensionUri = extensionUri;
@@ -29,7 +30,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this.getHtml(webviewView.webview);
 
-    webviewView.webview.onDidReceiveMessage((message: { command: string; path?: string }) => {
+    webviewView.webview.onDidReceiveMessage((message: { command: string; path?: string; line?: number }) => {
+      if (message.command === 'focusSearch') {
+        this.onFocusSearch?.();
+        return;
+      }
       handleCommonMessage(message, {
         onRefresh: this.onRefresh,
         onOpenDirInTab: this.onOpenDirInTab,
@@ -74,6 +79,21 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this.view?.webview.postMessage({ type: 'updateSortMode', sortMode });
   }
 
+
+  /** Forward full search results from the search fold to the tree webview. */
+  postSearchResults(data: { matches: Record<string, any[]> | null; fileCount: number; matchCount: number; truncated: boolean }): void {
+    this.view?.webview.postMessage({ type: 'searchResults', ...data });
+  }
+
+  /** Notify the tree webview that a search is in progress. */
+  postSearchProgress(): void {
+    this.view?.webview.postMessage({ type: 'searchProgress' });
+  }
+
+  /** Clear the active search in the tree webview. */
+  clearSearch(): void {
+    this.view?.webview.postMessage({ type: 'searchResults', matches: null });
+  }
 
   setFilter(langs: string[]): void {
     this.view?.webview.postMessage({ type: 'filter', langs });

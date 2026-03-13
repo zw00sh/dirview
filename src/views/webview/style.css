@@ -399,3 +399,176 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ── Search bar ──────────────────────────────────────────────────────────── */
+
+.search-bar {
+  border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, var(--vscode-panel-border, transparent));
+  padding: 4px 4px 2px;
+}
+
+.search-input-row {
+  display: flex;
+  align-items: center;
+  height: 24px;
+}
+
+/* Shared border container wrapping the text input + toggle buttons,
+ * matching VSCode's native search panel input style. */
+.search-input-container {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  height: 24px;
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.search-input-container:focus-within {
+  border-color: var(--vscode-focusBorder);
+  outline: none;
+}
+
+.search-main-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: var(--vscode-input-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  padding: 1px 4px;
+  outline: none;
+}
+
+/* The filter input below the main row keeps its own border */
+.search-input {
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 2px;
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  padding: 1px 4px;
+  outline: none;
+  min-width: 0;
+}
+
+.search-input:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+.search-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  padding: 0;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.search-toggle:hover {
+  color: var(--vscode-foreground);
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.search-toggle.active {
+  color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
+  background: var(--vscode-inputOption-activeBackground);
+  border: 1px solid var(--vscode-inputOption-activeBorder, transparent);
+}
+
+.search-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 0 1px;
+}
+
+.search-filter-label {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.search-filter-input {
+  flex: 1;
+  height: 18px;
+  font-size: 11px;
+}
+
+.search-status {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  padding: 2px 2px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Match lines (search result rows under file nodes) ───────────────────── */
+
+.match-line-row {
+  display: flex;
+  align-items: baseline;
+  padding: 0;
+  cursor: pointer;
+  gap: 4px;
+  min-height: 18px;
+  overflow: hidden;
+}
+
+.match-line-row:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.match-line-number {
+  flex-shrink: 0;
+  min-width: 28px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--vscode-editorLineNumber-foreground, var(--vscode-descriptionForeground));
+  opacity: 0.7;
+  padding-right: 4px;
+}
+
+.match-line-text {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.match-highlight {
+  background: var(--vscode-editor-findMatchHighlightBackground, rgba(255, 255, 0, 0.3));
+  border-radius: 2px;
+}
+
+.match-more-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 16px;
+  overflow: hidden;
+}
+
+.match-more-label {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  opacity: 0.6;
+  font-style: italic;
+}

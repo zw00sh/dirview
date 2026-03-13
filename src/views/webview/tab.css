@@ -7,7 +7,7 @@ body {
   overflow: hidden;
 }
 
-.tab-legend-section, .tab-toolbar {
+.tab-legend-section, .tab-search-section, .tab-toolbar {
   flex-shrink: 0;
 }
 
@@ -100,6 +100,45 @@ body {
 
 .tab-legend-wrap {
   padding: 4px 12px 6px;
+}
+
+.tab-search-section {
+  border-bottom: 1px solid var(--vscode-sideBar-border, rgba(128,128,128,0.2));
+}
+
+.tab-search-header {
+  padding: 4px 8px 4px 8px;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tab-search-header:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.tab-search-header-chevron {
+  display: inline-flex;
+  color: var(--vscode-icon-foreground);
+  transition: transform 0.1s;
+}
+
+.tab-search-header-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+}
+
+.tab-search-content {
+  padding: 0 12px 4px;
+}
+
+/* Search bar inside the tab section has no bottom border (section provides it). */
+.tab-search-content .search-bar {
+  border-bottom: none;
+  padding: 0 0 2px;
 }
 
 .tab-legend-wrap .legend-items {

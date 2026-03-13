@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.1] — 2026-03-13
+
+### Changed
+- New extension icon: stacked segmented bars with language colors, replacing the old folder-with-bars design. Updated across marketplace, activity bar, and tab title.
+
 ## [0.5.0] — 2026-03-13
 
 ### Added

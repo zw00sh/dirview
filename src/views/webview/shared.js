@@ -25,6 +25,11 @@
   const SVG_SORT_NAME = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M4.02602 3.34176C4.16218 2.93404 4.83818 2.93398 4.97426 3.34176L6.97426 9.34274C6.97526 9.34674 6.97817 9.35544 6.97817 9.35544L7.97426 12.3427C8.06126 12.6047 7.91984 12.8875 7.65786 12.9756C7.60486 12.9926 7.55165 13.0009 7.49965 13.0009C7.29082 13.0008 7.09602 12.868 7.02602 12.6591L6.14028 10.0009H2.86L1.97426 12.6591C1.88728 12.919 1.60634 13.0634 1.34243 12.9746C1.08043 12.8866 0.93902 12.6038 1.02602 12.3418L2.02211 9.35544C2.02311 9.35144 2.02602 9.34274 2.02602 9.34274L4.02602 3.34176ZM3.19399 8.99997H5.80629L4.49965 5.08102L3.19399 8.99997Z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M11.8581 6.66794C13.165 6.73296 13.9427 7.48427 13.9967 8.69626L13.9997 8.83297V12.5078C13.9957 12.7568 13.809 12.9621 13.568 12.9951L13.4997 13C13.2469 12.9998 13.0376 12.8121 13.0045 12.5683L12.9997 12.5V12.4297C12.3407 12.8066 11.7316 13 11.1666 13C9.94081 12.9998 8.99965 12.1369 8.99965 10.833C8.99967 9.68299 9.79211 8.82889 11.1061 8.66989C11.7279 8.59493 12.3589 8.64164 12.9987 8.80954C12.9915 8.07194 12.6279 7.70704 11.8082 7.66598C11.1672 7.63398 10.7158 7.72415 10.4518 7.90915C10.2258 8.06799 9.91347 8.01301 9.75551 7.78708C9.59671 7.56115 9.65178 7.24878 9.87758 7.09079C10.3165 6.78283 10.9138 6.64715 11.6666 6.6611L11.8581 6.66794ZM12.7965 9.8154C12.2587 9.66749 11.7361 9.62551 11.2262 9.68747C10.4042 9.78747 9.99868 10.2244 9.99868 10.8574C9.99884 11.5881 10.474 12.0242 11.1657 12.0244C11.6196 12.0244 12.1777 11.8137 12.8336 11.3818L12.9987 11.2695V9.87594L12.7965 9.8154Z"/></svg>';
   const SVG_SORT_SIZE = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M8 1C5.149 1 3 2.075 3 3.5V12.5C3 13.925 5.149 15 8 15C10.851 15 13 13.925 13 12.5V3.5C13 2.075 10.851 1 8 1ZM8 2C10.441 2 12 2.888 12 3.5C12 4.112 10.441 5 8 5C5.559 5 4 4.112 4 3.5C4 2.888 5.558 2 8 2ZM8 14C5.558 14 4 13.111 4 12.5V5.021C5.21405 5.71872 6.60095 6.05816 8 6C9.39905 6.05816 10.7859 5.71872 12 5.021V12.5C12 13.111 10.441 14 8 14Z"/></svg>';
 
+  // Search bar icons
+  const SVG_SEARCH = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M11.999 11.292l3.854 3.854-.707.707-3.854-3.854A5.5 5.5 0 1 1 12 6.5a5.474 5.474 0 0 1-.001 4.792zM6.5 11a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9z"/></svg>';
+  const SVG_REGEX = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><text x="1" y="13" font-family="monospace" font-size="12" fill="currentColor">.*</text></svg>';
+  const SVG_CLOSE = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z"/></svg>';
+
   function escHtml(str) {
     return str
       .replace(/&/g, '&amp;')
@@ -242,6 +247,11 @@
           return;
         }
 
+        if (action === 'openFileAtLine') {
+          vscode.postMessage({ command: 'openFile', path, line: parseInt(actionEl.dataset.line, 10) });
+          return;
+        }
+
         tooltip.style.display = 'none';
 
         if (action === 'expandDir') {
@@ -449,6 +459,103 @@
         container.appendChild(guide);
       }
       return container;
+    }
+
+    // WeakMap cache for search-result matching — reset by beforeRender() each render cycle.
+    // Prevents redundant recursive tree walks when the same node is checked multiple times.
+    let _searchMatchCache = new WeakMap();
+
+    // Returns true if any descendant file of node has a path in state.searchResults.
+    // Short-circuits as soon as a match is found; results are memoized in _searchMatchCache.
+    function dirMatchesSearch(node) {
+      if (!state.searchResults) { return true; }
+      const cached = _searchMatchCache.get(node);
+      if (cached !== undefined) { return cached; }
+      for (const f of (node.files || [])) {
+        if (state.searchResults.has(f.path)) {
+          _searchMatchCache.set(node, true);
+          return true;
+        }
+      }
+      for (const c of (node.children || [])) {
+        if (dirMatchesSearch(c)) {
+          _searchMatchCache.set(node, true);
+          return true;
+        }
+      }
+      _searchMatchCache.set(node, false);
+      return false;
+    }
+
+    // Renders a single match line beneath a file row in search-results mode.
+    // file: FileNode (needed for path/line target), match: { line, column, matchLength, lineText }
+    function renderMatchLine(file, match, depth, ancestors) {
+      const li = document.createElement('li');
+      const row = document.createElement('div');
+      row.className = 'match-line-row';
+      // data-action + data-path + data-line use the delegated click handler in createRenderer.
+      row.dataset.action = 'openFileAtLine';
+      row.dataset.path = file.path;
+      row.dataset.line = String(match.line);
+      row.appendChild(renderIndentGuides(depth, ancestors));
+
+      const lineNumEl = document.createElement('span');
+      lineNumEl.className = 'match-line-number';
+      lineNumEl.textContent = String(match.line);
+      row.appendChild(lineNumEl);
+
+      const textEl = document.createElement('span');
+      textEl.className = 'match-line-text';
+      const lineText = match.lineText || '';
+      const col = match.column || 0;
+      const len = match.matchLength || 0;
+      const MAX_LINE = 120;
+
+      if (lineText.length <= MAX_LINE) {
+        if (len > 0 && col + len <= lineText.length) {
+          textEl.appendChild(document.createTextNode(lineText.slice(0, col)));
+          const hl = document.createElement('span');
+          hl.className = 'match-highlight';
+          hl.textContent = lineText.slice(col, col + len);
+          textEl.appendChild(hl);
+          textEl.appendChild(document.createTextNode(lineText.slice(col + len)));
+        } else {
+          textEl.textContent = lineText;
+        }
+      } else {
+        // Truncate: show context centered around the match
+        const half = Math.floor((MAX_LINE - len) / 2);
+        const start = Math.max(0, col - half);
+        const end = Math.min(lineText.length, col + len + half);
+        const prefix = (start > 0 ? '…' : '') + lineText.slice(start, col);
+        const suffix = lineText.slice(col + len, end) + (end < lineText.length ? '…' : '');
+        textEl.appendChild(document.createTextNode(prefix));
+        if (len > 0) {
+          const hl = document.createElement('span');
+          hl.className = 'match-highlight';
+          hl.textContent = lineText.slice(col, col + len);
+          textEl.appendChild(hl);
+        }
+        textEl.appendChild(document.createTextNode(suffix));
+      }
+
+      row.appendChild(textEl);
+      li.appendChild(row);
+      return li;
+    }
+
+    // Renders a "N more matches" summary row when match lines are capped at 5 per file.
+    function renderMoreMatchesRow(count, depth, ancestors) {
+      const li = document.createElement('li');
+      const row = document.createElement('div');
+      row.className = 'match-more-row';
+      row.appendChild(renderIndentGuides(depth, ancestors));
+      const label = document.createElement('span');
+      label.className = 'match-more-label';
+      label.textContent = `${count} more match${count !== 1 ? 'es' : ''}`;
+      row.appendChild(label);
+      li.appendChild(row);
+      return li;
     }
 
     function renderFileNode(file, depth, ancestors) {
@@ -659,12 +766,17 @@
       while (true) {
         const children = displayNode.children;
         const files = displayNode.files || [];
-        const vChildren = state.activeFilters.size > 0
+        let vChildren = state.activeFilters.size > 0
           ? children.filter(c => dirMatchesFilter(c))
           : children;
-        const vFiles = state.activeFilters.size > 0
+        let vFiles = state.activeFilters.size > 0
           ? files.filter(f => state.activeFilters.has(f.langName))
           : files;
+        // Also apply search filter when active — only compact through dirs with a single matching child.
+        if (state.searchResults) {
+          vChildren = vChildren.filter(c => dirMatchesSearch(c));
+          vFiles = vFiles.filter(f => state.searchResults.has(f.path));
+        }
         if (vChildren.length === 1 && vFiles.length === 0) {
           displayName += ' / ' + vChildren[0].name;
           compactSegments.push({ name: vChildren[0].name, path: vChildren[0].path });
@@ -679,18 +791,19 @@
       // used by nodeMap, state.expanded, and the dir-row's data-path attribute.
       li.dataset.nodePath = displayNode.path;
 
-      const isExpanded = state.expanded.get(displayNode.path) ?? (state.activeFilters.size > 0 || depth === 0);
-      // Record implicit depth-0 expansion so button state reflects reality after initial render
-      if (!state.expanded.has(displayNode.path) && depth === 0 && state.activeFilters.size === 0) {
+      const isExpanded = state.expanded.get(displayNode.path) ?? (state.activeFilters.size > 0 || state.searchResults !== null || depth === 0);
+      // Record implicit depth-0 expansion so button state reflects reality after initial render.
+      // Skip during active filter/search to avoid recording ephemeral auto-expanded state.
+      if (!state.expanded.has(displayNode.path) && depth === 0 && state.activeFilters.size === 0 && !state.searchResults) {
         state.expanded.set(displayNode.path, true);
       }
 
       const sortedChildren = sortDirs(displayNode.children, state.currentSortMode);
       const sortedFiles = sortFiles(displayNode.files || []);
 
-      // Apply language filter
-      const visibleChildren = getVisibleChildren(sortedChildren, state.activeFilters, dirMatchesFilter);
-      const visibleFiles = getVisibleFiles(sortedFiles, state.activeFilters);
+      // Apply language filter and search results filter
+      const visibleChildren = getVisibleChildren(sortedChildren, state.activeFilters, dirMatchesFilter, state.searchResults, c => dirMatchesSearch(c));
+      const visibleFiles = getVisibleFiles(sortedFiles, state.activeFilters, state.searchResults);
 
       const hasChildren = visibleChildren.length > 0 || visibleFiles.length > 0;
 
@@ -864,8 +977,8 @@
         if (isExpanded) {
           const nextAncestors = [...ancestors, { path: displayNode.path }];
 
-          // Empty dir grouping (only when no filter active)
-          if (state.activeFilters.size === 0 && visibleChildren.length > 0) {
+          // Empty dir grouping (only when no filter and no search active)
+          if (state.activeFilters.size === 0 && !state.searchResults && visibleChildren.length > 0) {
             for (const group of groupEmptyDirs(visibleChildren)) {
               if (group.type === 'emptyGroup') {
                 if (state.emptyGroupExpanded.has(group.nodes[0].path)) {
@@ -886,13 +999,26 @@
             }
           }
 
-          // File truncation
-          const shouldTruncate = state.truncateThreshold > 0 && visibleFiles.length > state.truncateThreshold && !state.truncationExpanded.has(displayNode.path);
+          // File truncation — disabled when search is active (all matched files must be shown).
+          const shouldTruncate = !state.searchResults && state.truncateThreshold > 0 && visibleFiles.length > state.truncateThreshold && !state.truncationExpanded.has(displayNode.path);
           const shownFiles = shouldTruncate ? visibleFiles.slice(0, state.truncateThreshold) : visibleFiles;
           const hiddenFiles = shouldTruncate ? visibleFiles.slice(state.truncateThreshold) : [];
 
           for (const file of shownFiles) {
             childrenEl.appendChild(renderFileNode(file, depth + 1, nextAncestors));
+            // Render inline match lines under this file when content search is active.
+            if (state.searchResults?.has(file.path)) {
+              const fileMatches = state.searchResults.get(file.path);
+              if (fileMatches.length > 0) {
+                const MAX_MATCH_LINES = 5;
+                for (const m of fileMatches.slice(0, MAX_MATCH_LINES)) {
+                  childrenEl.appendChild(renderMatchLine(file, m, depth + 2, nextAncestors));
+                }
+                if (fileMatches.length > MAX_MATCH_LINES) {
+                  childrenEl.appendChild(renderMoreMatchesRow(fileMatches.length - MAX_MATCH_LINES, depth + 2, nextAncestors));
+                }
+              }
+            }
           }
           if (hiddenFiles.length > 0) {
             childrenEl.appendChild(renderTruncatedRow(hiddenFiles, depth + 1, nextAncestors, displayNode.path, maxMetric, clientWidth));
@@ -908,8 +1034,9 @@
 
     return {
       // Called at the start of each full renderTree pass to flush stale node references.
-      beforeRender() { nodeMap.clear(); },
-      dirMatchesFilter, renderIndentGuides, renderFileNode, renderTruncatedRow, renderEmptyGroupNode, renderDirNode,
+      beforeRender() { nodeMap.clear(); _searchMatchCache = new WeakMap(); },
+      dirMatchesFilter, dirMatchesSearch, renderIndentGuides, renderFileNode,
+      renderMatchLine, renderMoreMatchesRow, renderTruncatedRow, renderEmptyGroupNode, renderDirNode,
     };
   }
 
@@ -982,6 +1109,15 @@
       currentRootName: '',
       /** Workspace folder name sent by tabProvider. Empty in sidebar (falls back to currentRootName). */
       workspaceFolderName: '',
+      // Search state — local to each webview instance, not synced with host.
+      /** @type {Map<string, Array>|null} Absolute path → match array. null = no active search. */
+      searchResults: null,
+      searchActive: false,
+      searchTruncated: false,
+      searchFileCount: 0,
+      searchMatchCount: 0,
+      /** @type {Function|null} Called by message handler to refresh search bar status text. */
+      searchBar_updateStatus: null,
     };
     state.scanBar = null;           // Set by main.js / tab.js after creation
     state._rerenderPending = false; // Deduplication flag: collapse rapid calls into one render
@@ -1081,11 +1217,18 @@
   }
 
   // Filter helpers — shared by renderDirNode and renderRoots.
-  function getVisibleChildren(sortedChildren, activeFilters, matchFn) {
-    return activeFilters.size > 0 ? sortedChildren.filter(matchFn) : sortedChildren;
+  // searchResults and searchMatchFn are optional; omit them for callers that don't need search filtering.
+  function getVisibleChildren(sortedChildren, activeFilters, matchFn, searchResults, searchMatchFn) {
+    let dirs = sortedChildren;
+    if (activeFilters.size > 0) { dirs = dirs.filter(matchFn); }
+    if (searchResults && searchMatchFn) { dirs = dirs.filter(searchMatchFn); }
+    return dirs;
   }
-  function getVisibleFiles(sortedFiles, activeFilters) {
-    return activeFilters.size > 0 ? sortedFiles.filter(f => activeFilters.has(f.langName)) : sortedFiles;
+  function getVisibleFiles(sortedFiles, activeFilters, searchResults) {
+    let files = sortedFiles;
+    if (activeFilters.size > 0) { files = files.filter(f => activeFilters.has(f.langName)); }
+    if (searchResults) { files = files.filter(f => searchResults.has(f.path)); }
+    return files;
   }
 
   // Renders the root-level tree rows into treeEl. Shared between sidebar and tab views.
@@ -1103,9 +1246,9 @@
       }
       const sortedChildren = sortDirs(r.children, state.currentSortMode);
       const sortedFiles = sortFiles(r.files || []);
-      const visibleChildren = getVisibleChildren(sortedChildren, state.activeFilters, c => renderer.dirMatchesFilter(c));
-      const visibleFiles = getVisibleFiles(sortedFiles, state.activeFilters);
-      if (state.activeFilters.size === 0 && visibleChildren.length > 0) {
+      const visibleChildren = getVisibleChildren(sortedChildren, state.activeFilters, c => renderer.dirMatchesFilter(c), state.searchResults, c => renderer.dirMatchesSearch(c));
+      const visibleFiles = getVisibleFiles(sortedFiles, state.activeFilters, state.searchResults);
+      if (state.activeFilters.size === 0 && !state.searchResults && visibleChildren.length > 0) {
         for (const group of groupEmptyDirs(visibleChildren)) {
           if (group.type === 'emptyGroup') {
             if (state.emptyGroupExpanded.has(group.nodes[0].path)) {
@@ -1122,10 +1265,26 @@
           treeEl.appendChild(renderer.renderDirNode(child, 0, maxMetric, [], clientWidth));
         }
       }
-      const shouldTruncate = state.truncateThreshold > 0 && visibleFiles.length > state.truncateThreshold && !state.truncationExpanded.has(r.path);
+      // File truncation — disabled when search is active.
+      const shouldTruncate = !state.searchResults && state.truncateThreshold > 0 && visibleFiles.length > state.truncateThreshold && !state.truncationExpanded.has(r.path);
       const shownFiles = shouldTruncate ? visibleFiles.slice(0, state.truncateThreshold) : visibleFiles;
       const hiddenFiles = shouldTruncate ? visibleFiles.slice(state.truncateThreshold) : [];
-      for (const file of shownFiles) { treeEl.appendChild(renderer.renderFileNode(file, 0, [])); }
+      for (const file of shownFiles) {
+        treeEl.appendChild(renderer.renderFileNode(file, 0, []));
+        // Render inline match lines for root-level files when content search is active.
+        if (state.searchResults?.has(file.path)) {
+          const fileMatches = state.searchResults.get(file.path);
+          if (fileMatches.length > 0) {
+            const MAX_MATCH_LINES = 5;
+            for (const m of fileMatches.slice(0, MAX_MATCH_LINES)) {
+              treeEl.appendChild(renderer.renderMatchLine(file, m, 1, []));
+            }
+            if (fileMatches.length > MAX_MATCH_LINES) {
+              treeEl.appendChild(renderer.renderMoreMatchesRow(fileMatches.length - MAX_MATCH_LINES, 1, []));
+            }
+          }
+        }
+      }
       if (hiddenFiles.length > 0) {
         treeEl.appendChild(renderer.renderTruncatedRow(hiddenFiles, 0, [], r.path, maxMetric, clientWidth));
       }
@@ -1381,19 +1540,282 @@
           scanBar.show(false);
           rootEl.innerHTML = `<div class="error">Error: ${escHtml(message.message)}</div>`;
           break;
+        case 'searchResults':
+          // Deserialise the plain-object map sent by providerUtils into a real Map.
+          state.searchResults = message.matches
+            ? new Map(Object.entries(message.matches))
+            : null;
+          state.searchActive = false;
+          state.searchTruncated = message.truncated || false;
+          state.searchFileCount = message.fileCount || 0;
+          state.searchMatchCount = message.matchCount || 0;
+          // Auto-expand all dirs so matching files are visible.
+          if (state.searchResults && state.searchResults.size > 0) { state.expanded.clear(); }
+          if (state.searchBar_updateStatus) { state.searchBar_updateStatus(); }
+          if (state.lastRoots) { state.rerender(); }
+          break;
+        case 'searchProgress':
+          state.searchActive = true;
+          if (state.searchBar_updateStatus) { state.searchBar_updateStatus(); }
+          break;
       }
     };
+  }
+
+  /**
+   * Creates the search bar UI element.
+   * Detects whether a query is a glob/filename search or a content search,
+   * and posts the appropriate command to the host (search / searchFiles / clearSearch).
+   *
+   * @param {object} state — shared webview state (reads/writes searchResults, searchActive, etc.)
+   * @param {object} vscode — VS Code webview API
+   * @returns {{ el: HTMLElement, focus: Function, clear: Function, show: Function, hide: Function }}
+   */
+  /**
+   * Creates the search bar UI.
+   * @param {object} state — shared webview state
+   * @param {object} vscode — VS Code webview API
+   * @param {object} [options]
+   * @param {boolean} [options.standalone] — true when used in the standalone search fold:
+   *   disables the Cmd+F global listener (the fold is focused via searchProvider.focusInput())
+   *   and provides setStatus(data) for externally-driven status updates.
+   */
+  function createSearchBar(state, vscode, options) {
+    const standalone = !!(options && options.standalone);
+    const el = document.createElement('div');
+    el.className = 'search-bar';
+
+    // ── Main input row: input + toggle buttons inside a shared border ──────
+    // This matches VSCode's native search panel (Aa, .*, and × inside the border).
+    const inputRow = document.createElement('div');
+    inputRow.className = 'search-input-row';
+
+    const inputContainer = document.createElement('div');
+    inputContainer.className = 'search-input-container';
+
+    const mainInput = document.createElement('input');
+    mainInput.type = 'text';
+    mainInput.className = 'search-main-input';
+    mainInput.placeholder = 'Search file contents…';
+    mainInput.setAttribute('aria-label', 'Search');
+    inputContainer.appendChild(mainInput);
+
+    // Case-sensitive toggle — reuses the "Aa" sort icon (same codicon)
+    const caseBtn = document.createElement('button');
+    caseBtn.className = 'search-toggle';
+    caseBtn.title = 'Case Sensitive';
+    caseBtn.setAttribute('aria-label', 'Case Sensitive');
+    caseBtn.innerHTML = SVG_SORT_NAME;
+    let caseSensitive = false;
+    inputContainer.appendChild(caseBtn);
+
+    // Regex mode toggle
+    const regexBtn = document.createElement('button');
+    regexBtn.className = 'search-toggle';
+    regexBtn.title = 'Use Regular Expression';
+    regexBtn.setAttribute('aria-label', 'Use Regular Expression');
+    regexBtn.innerHTML = SVG_REGEX;
+    let useRegex = false;
+    inputContainer.appendChild(regexBtn);
+
+    // Clear button — only visible when there's a query, sits inside the container border
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'search-toggle';
+    clearBtn.title = 'Clear Search (Escape)';
+    clearBtn.setAttribute('aria-label', 'Clear Search');
+    clearBtn.innerHTML = SVG_CLOSE;
+    clearBtn.style.display = 'none';
+    inputContainer.appendChild(clearBtn);
+
+    inputRow.appendChild(inputContainer);
+    el.appendChild(inputRow);
+
+    // ── Files to include row — always visible (no collapsible toggle) ──────
+    const includeRow = document.createElement('div');
+    includeRow.className = 'search-filter-row';
+    const includeLabel = document.createElement('label');
+    includeLabel.className = 'search-filter-label';
+    includeLabel.textContent = 'files to include';
+    const includeInput = document.createElement('input');
+    includeInput.type = 'text';
+    includeInput.className = 'search-input search-filter-input';
+    includeInput.placeholder = 'e.g. src/**/*.ts';
+    includeInput.setAttribute('aria-label', 'Files to include');
+    includeRow.appendChild(includeLabel);
+    includeRow.appendChild(includeInput);
+    el.appendChild(includeRow);
+
+    // ── Status line ────────────────────────────────────────────────────────
+    const statusEl = document.createElement('div');
+    statusEl.className = 'search-status';
+    statusEl.style.display = 'none';
+    el.appendChild(statusEl);
+
+    // ── State ──────────────────────────────────────────────────────────────
+    let debounceTimer = null;
+
+    // updateStatus reads from state (used in non-standalone/tab mode where createMessageHandler
+    // keeps state.searchActive / state.searchResults / etc. up to date).
+    function updateStatus() {
+      if (state.searchActive) {
+        statusEl.textContent = 'Searching…';
+        statusEl.style.display = '';
+      } else if (state.searchResults === null) {
+        statusEl.style.display = 'none';
+      } else if (state.searchResults.size === 0) {
+        const q = mainInput.value.trim() || includeInput.value.trim();
+        statusEl.textContent = q ? 'No results' : '';
+        statusEl.style.display = q ? '' : 'none';
+      } else {
+        const hasLineMatches = state.searchMatchCount > 0;
+        const trunc = state.searchTruncated ? ' (truncated)' : '';
+        if (hasLineMatches) {
+          statusEl.textContent = `${state.searchMatchCount} result${state.searchMatchCount !== 1 ? 's' : ''} in ${state.searchFileCount} file${state.searchFileCount !== 1 ? 's' : ''}${trunc}`;
+        } else {
+          statusEl.textContent = `${state.searchFileCount} file${state.searchFileCount !== 1 ? 's' : ''}${trunc}`;
+        }
+        statusEl.style.display = '';
+      }
+    }
+
+    // setStatus is the externally-driven variant used by the standalone search fold.
+    // Called with the searchStatus message data from the host (no state dependency).
+    function setStatus(data) {
+      if (data.active) {
+        statusEl.textContent = 'Searching…';
+        statusEl.style.display = '';
+      } else if (!data.matches) {
+        statusEl.style.display = 'none';
+      } else if (Object.keys(data.matches).length === 0) {
+        const q = mainInput.value.trim() || includeInput.value.trim();
+        statusEl.textContent = q ? 'No results' : '';
+        statusEl.style.display = q ? '' : 'none';
+      } else {
+        const hasLineMatches = (data.matchCount ?? 0) > 0;
+        const trunc = data.truncated ? ' (truncated)' : '';
+        if (hasLineMatches) {
+          statusEl.textContent = `${data.matchCount} result${data.matchCount !== 1 ? 's' : ''} in ${data.fileCount} file${data.fileCount !== 1 ? 's' : ''}${trunc}`;
+        } else {
+          statusEl.textContent = `${data.fileCount} file${data.fileCount !== 1 ? 's' : ''}${trunc}`;
+        }
+        statusEl.style.display = '';
+      }
+    }
+
+    // Wire state.searchBar_updateStatus so the message handler can call it (non-standalone only).
+    if (!standalone) {
+      state.searchBar_updateStatus = updateStatus;
+    }
+
+    function triggerSearch() {
+      const pattern = mainInput.value.trim();
+      const includeGlob = includeInput.value.trim();
+
+      clearBtn.style.display = (pattern || includeGlob) ? '' : 'none';
+
+      if (!pattern && !includeGlob) {
+        vscode.postMessage({ command: 'clearSearch' });
+        return;
+      }
+
+      // Detection logic: glob chars or path separators in the main input → filename search.
+      const isGlobPattern = /[*?/]/.test(pattern);
+
+      if (!pattern && includeGlob) {
+        // Include glob with no content query → filename-only search.
+        vscode.postMessage({ command: 'searchFiles', glob: includeGlob });
+      } else if (pattern && isGlobPattern) {
+        // Main input looks like a glob/path → filename-only search.
+        vscode.postMessage({ command: 'searchFiles', glob: pattern });
+      } else {
+        // Content search.
+        vscode.postMessage({
+          command: 'search',
+          pattern,
+          caseSensitive,
+          useRegex,
+          include: includeGlob || undefined,
+        });
+      }
+    }
+
+    function clearSearch() {
+      mainInput.value = '';
+      includeInput.value = '';
+      clearBtn.style.display = 'none';
+      statusEl.style.display = 'none';
+      vscode.postMessage({ command: 'clearSearch' });
+    }
+
+    // ── Event listeners ────────────────────────────────────────────────────
+
+    caseBtn.addEventListener('click', () => {
+      caseSensitive = !caseSensitive;
+      caseBtn.classList.toggle('active', caseSensitive);
+      if (mainInput.value.trim() || includeInput.value.trim()) { triggerSearch(); }
+    });
+
+    regexBtn.addEventListener('click', () => {
+      useRegex = !useRegex;
+      regexBtn.classList.toggle('active', useRegex);
+      if (mainInput.value.trim() || includeInput.value.trim()) { triggerSearch(); }
+    });
+
+    clearBtn.addEventListener('click', clearSearch);
+
+    mainInput.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      clearBtn.style.display = mainInput.value ? '' : 'none';
+      if (!mainInput.value && !includeInput.value) {
+        vscode.postMessage({ command: 'clearSearch' });
+        return;
+      }
+      debounceTimer = setTimeout(triggerSearch, 300);
+    });
+
+    includeInput.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(triggerSearch, 300);
+    });
+
+    // Escape: clear search
+    mainInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        clearSearch();
+        mainInput.blur();
+      }
+    });
+
+    // Cmd+F / Ctrl+F — focus the search input from anywhere in the webview.
+    // Not wired in standalone mode: the fold is focused via searchProvider.focusInput().
+    if (!standalone) {
+      window.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+          e.preventDefault();
+          mainInput.focus();
+          mainInput.select();
+        }
+      });
+    }
+
+    function focus() { mainInput.focus(); mainInput.select(); }
+    function show() { mainInput.focus(); }
+    function hide() { clearSearch(); }
+
+    return { el, focus, clear: clearSearch, show, hide, updateStatus, setStatus };
   }
 
   window.DirviewShared = {
     SVG_CHEVRON, SVG_PLUS, SVG_WARNING,
     SVG_EYE, SVG_EYE_CLOSED, SVG_FOLD, SVG_UNFOLD, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_OPEN_IN_TAB,
     SVG_SORT_FILES, SVG_SORT_NAME, SVG_SORT_SIZE,
+    SVG_SEARCH, SVG_REGEX, SVG_CLOSE,
     escHtml, formatBytes, sortDirs, sortFiles, computeMaxMetric, groupEmptyDirs,
     createScanBar, createTooltip, createRenderer,
     computeStats, renderLegend, createState,
     walkExpand, walkCollapse, tieredExpandAll, tieredCollapseAll, renderRoots,
     createRescanWarning, renderTree, createMessageHandler,
-    patchTreeChildren, patchDirLi,
+    patchTreeChildren, patchDirLi, createSearchBar,
   };
 })();

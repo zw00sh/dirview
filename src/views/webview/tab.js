@@ -7,6 +7,10 @@
   const legendChevron = document.getElementById('legend-chevron');
   const legendDisplayToggle = document.getElementById('legend-display-toggle');
   const legendEl = document.getElementById('legend');
+  const searchSection = document.getElementById('search-section');
+  const searchHeaderEl = document.getElementById('search-header');
+  const searchChevronEl = document.getElementById('search-chevron');
+  const searchContentEl = document.getElementById('search-content');
   const root = document.getElementById('root');
   const tabTitleEl = document.getElementById('tab-title');
   const sortBtn = document.getElementById('tab-sort');
@@ -19,6 +23,14 @@
   const tooltip = S.createTooltip();
   const state = S.createState();
   state.scanBar = scanBar;
+
+  // Mount search bar inside the collapsible search section.
+  const searchBar = S.createSearchBar(state, vscode);
+  searchContentEl.appendChild(searchBar.el);
+
+  let searchCollapsed = false;
+  // Initialise chevron to match expanded state (chevron rotated 90° = expanded).
+  searchChevronEl.style.transform = 'rotate(90deg)';
 
   const renderer = S.createRenderer(state, {
     vscode,
@@ -102,6 +114,11 @@
     legendCollapsed = !legendCollapsed;
     legendEl.style.display = legendCollapsed ? 'none' : '';
     legendChevron.style.transform = legendCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
+  });
+  searchHeaderEl.addEventListener('click', () => {
+    searchCollapsed = !searchCollapsed;
+    searchContentEl.style.display = searchCollapsed ? 'none' : '';
+    searchChevronEl.style.transform = searchCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
   });
   legendDisplayToggle.addEventListener('click', (e) => {
     e.stopPropagation(); // Don't collapse the legend section when clicking the toggle
