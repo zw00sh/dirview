@@ -111,9 +111,10 @@ export class TabProvider {
         vscode.commands.executeCommand(message.show ? 'dirview.toggleIgnored' : 'dirview.toggleIgnoredOff');
       } else if (message.command === 'toggleTruncation') {
         const enabled: boolean = message.enabled ?? true;
-        // Dispatch through the registered command so config is persisted and both
-        // sidebar and all tabs are updated consistently (mirrors toggleIgnored).
-        vscode.commands.executeCommand(enabled ? 'dirview.toggleTruncation' : 'dirview.toggleTruncationOff');
+        // Tab truncation is view-local — only update tab panels, not the sidebar.
+        // (Unlike toggleIgnored which triggers a rescan affecting all views.)
+        const threshold = enabled ? (this.lastPayload?.truncateThreshold ?? 4) : 0;
+        this.updateTruncation(threshold, enabled);
       } else if (message.command === 'navigateToDir' && typeof message.path === 'string') {
         // Find the current dirPath for this panel by searching the map by reference.
         let currentPath: string | undefined;
