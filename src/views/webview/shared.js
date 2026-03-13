@@ -522,16 +522,20 @@
       for (const f of hiddenFiles) {
         if (f.langName) {
           const ex = langMap.get(f.langName);
-          if (ex) { ex.count++; } else { langMap.set(f.langName, { color: f.langColor, count: 1 }); }
+          if (ex) { ex.count++; ex.sizeBytes += (f.sizeBytes || 0); }
+          else { langMap.set(f.langName, { color: f.langColor, count: 1, sizeBytes: f.sizeBytes || 0 }); }
         }
       }
-      const langs = Array.from(langMap.entries()).sort((a, b) => b[1].count - a[1].count);
+      const isSizeSort = state.currentSortMode === 'size';
+      const langs = Array.from(langMap.entries()).sort((a, b) =>
+        isSizeSort ? b[1].sizeBytes - a[1].sizeBytes : b[1].count - a[1].count
+      );
 
       // Register synthetic node for tooltip hover
       nodeMap.set(truncKey, {
         node: {
           totalFiles: hiddenFiles.length,
-          stats: langs.map(([name, { color, count }]) => ({ name, color, count })),
+          stats: langs.map(([name, { color, count, sizeBytes }]) => ({ name, color, count, sizeBytes })),
         },
         hasChildren: false,
       });
@@ -574,8 +578,10 @@
         const bar = document.createElement('div');
         bar.className = 'bar';
 
-        for (const [, { color, count }] of langs) {
-          const segPct = (count / totalCount) * 100;
+        for (const [, { color, count, sizeBytes }] of langs) {
+          const segMetric = isSizeSort ? sizeBytes : count;
+          const segTotal = isSizeSort ? totalBytes : totalCount;
+          const segPct = (segMetric / segTotal) * 100;
           const seg = document.createElement('div');
           seg.className = 'bar-segment';
           seg.style.width = segPct + '%';

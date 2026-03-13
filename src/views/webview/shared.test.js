@@ -982,6 +982,61 @@ describe('delegated click handler', () => {
     });
   });
 
+  // -- Truncated row bar segment weights --
+
+  describe('renderTruncatedRow bar segment weights', () => {
+    it('uses file count for segment widths when sort mode is "files"', () => {
+      const state = S.createState();
+      state.currentSortMode = 'files';
+      const renderer = makeRenderer(state);
+      // JS: 3 files, 100 bytes each; CSS: 1 file, 900 bytes
+      const hiddenFiles = [
+        { name: 'a.js', path: '/d/a.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 100 },
+        { name: 'b.js', path: '/d/b.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 100 },
+        { name: 'c.js', path: '/d/c.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 100 },
+        { name: 'd.css', path: '/d/d.css', langName: 'CSS', langColor: '#563d7c', sizeBytes: 900 },
+      ];
+      const li = renderer.renderTruncatedRow(hiddenFiles, 0, [], '/d', 10, 300);
+      const segments = li.querySelectorAll('.bar-segment');
+      // By count: JS=75%, CSS=25%
+      expect(segments[0].style.width).toBe('75%');
+      expect(segments[1].style.width).toBe('25%');
+    });
+
+    it('uses byte size for segment widths when sort mode is "size"', () => {
+      const state = S.createState();
+      state.currentSortMode = 'size';
+      const renderer = makeRenderer(state);
+      // JS: 3 files, 100 bytes each (300 total); CSS: 1 file, 900 bytes
+      const hiddenFiles = [
+        { name: 'a.js', path: '/d/a.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 100 },
+        { name: 'b.js', path: '/d/b.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 100 },
+        { name: 'c.js', path: '/d/c.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 100 },
+        { name: 'd.css', path: '/d/d.css', langName: 'CSS', langColor: '#563d7c', sizeBytes: 900 },
+      ];
+      const li = renderer.renderTruncatedRow(hiddenFiles, 0, [], '/d', 1200, 300);
+      const segments = li.querySelectorAll('.bar-segment');
+      // By size: CSS=75% (900/1200), JS=25% (300/1200) — CSS is larger so sorted first
+      expect(segments[0].style.width).toBe('75%');
+      expect(segments[1].style.width).toBe('25%');
+    });
+
+    it('sorts langs by size descending when sort mode is "size"', () => {
+      const state = S.createState();
+      state.currentSortMode = 'size';
+      const renderer = makeRenderer(state);
+      const hiddenFiles = [
+        { name: 'a.js', path: '/d/a.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 100 },
+        { name: 'b.css', path: '/d/b.css', langName: 'CSS', langColor: '#563d7c', sizeBytes: 900 },
+      ];
+      const li = renderer.renderTruncatedRow(hiddenFiles, 0, [], '/d', 1000, 300);
+      const segments = li.querySelectorAll('.bar-segment');
+      // CSS (900B) should be first segment (larger)
+      expect(segments[0].style.backgroundColor).toBe('rgb(86, 61, 124)'); // CSS color
+      expect(segments[1].style.backgroundColor).toBe('rgb(241, 224, 90)'); // JS color
+    });
+  });
+
   // -- File open --
 
   describe('openFile action', () => {
