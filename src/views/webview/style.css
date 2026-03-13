@@ -207,13 +207,11 @@ body {
   font-size: 11px;
   color: var(--vscode-descriptionForeground);
   white-space: nowrap;
-  width: 52px;
+  width: auto;
   text-align: left;
   padding-right: 8px;
 }
 
-/* Size mode needs wider column for "884 KB" etc. in dir rows */
-.tree.sort-size .file-count { width: 72px; }
 
 /* Sidebar has no count column — pad rows (not the tree) so hover highlight reaches the panel edge */
 .tree.sidebar .dir-row,
