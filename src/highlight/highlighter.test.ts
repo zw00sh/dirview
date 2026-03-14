@@ -101,6 +101,43 @@ describe('buildHighlightedHtml', () => {
     expect(html).not.toContain('match-highlight');
     expect(html).toContain('short');
   });
+
+  it('visible window truncates tokens before and after', () => {
+    // "abcdefghij" — show only chars 3..7 ("defgh")
+    const tokens = [tok('abcde', '#569cd6'), tok('fghij', '#ce9178')];
+    const html = buildHighlightedHtml(tokens, 0, 0, 3, 7);
+    expect(html).toContain('\u2026'); // leading ellipsis
+    expect(html).toContain('de');
+    expect(html).toContain('fg');
+    expect(html).not.toContain('abc');
+    expect(html).not.toContain('hij');
+  });
+
+  it('visible window preserves match highlight', () => {
+    // "hello world test" — match "world" (col=6, len=5), window [3, 14)
+    const tokens = [tok('hello ', '#569cd6'), tok('world', '#ce9178'), tok(' test')];
+    const html = buildHighlightedHtml(tokens, 6, 5, 3, 14);
+    expect(html).toContain('match-highlight');
+    expect(html).toContain('world');
+    // leading ellipsis (window starts at 3, not 0)
+    expect(html.startsWith('\u2026')).toBe(true);
+    // trailing ellipsis (window ends at 14, total is 16)
+    expect(html.endsWith('\u2026')).toBe(true);
+  });
+
+  it('no ellipsis when window covers entire line', () => {
+    const tokens = [tok('short')];
+    const html = buildHighlightedHtml(tokens, 0, 5, 0, 5);
+    expect(html).not.toContain('\u2026');
+  });
+
+  it('no window params renders full line (backward compat)', () => {
+    const tokens = [tok('full line', '#569cd6')];
+    const html = buildHighlightedHtml(tokens, 0, 4);
+    expect(html).toContain('full');
+    expect(html).toContain(' line');
+    expect(html).not.toContain('\u2026');
+  });
 });
 
 describe('resolveShikiLang', () => {

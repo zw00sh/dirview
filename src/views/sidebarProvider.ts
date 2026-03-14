@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { DirNode, ScanUpdatePayload } from '../scanner/types';
 import { SortMode } from '../config';
-import { buildWebviewHtml } from './buildWebviewHtml';
+import { buildWebviewHtml, SHARED_SCRIPTS } from './buildWebviewHtml';
 import { handleCommonMessage, setupVisibilityReplay } from './providerUtils';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
@@ -96,6 +96,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this.view?.webview.postMessage({ type: 'searchResultsBatch', ...data });
   }
 
+  /** Forward syntax highlight patches for a previously delivered batch. */
+  postSearchResultsHighlight(data: { patches: Array<{ path: string; idx: number; html: string }> }): void {
+    this.view?.webview.postMessage({ type: 'searchResultsHighlight', ...data });
+  }
+
   /** Signal that all search result batches have been delivered. */
   postSearchResultsDone(data: { fileCount: number; matchCount: number; truncated: boolean }): void {
     this.view?.webview.postMessage({ type: 'searchResultsDone', ...data });
@@ -134,7 +139,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   private getHtml(webview: vscode.Webview): string {
     return buildWebviewHtml(webview, this.extensionUri, {
-      scripts: ['shared.js', 'main.js'],
+      scripts: [...SHARED_SCRIPTS, 'main.js'],
       styles: ['style.css'],
       title: 'Directory Breakdown',
       bodyAttrs: `data-vscode-context='{"preventDefaultContextMenuItems": true}'`,

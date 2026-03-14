@@ -34,8 +34,10 @@ export function updateTheme(kind: number): void {
   loadedLangs = new Map(); // grammars must be reloaded with the new highlighter
 }
 
-// Max line length to syntax-highlight; longer lines are truncated to context around the match
-const MAX_LINE = 120;
+// Max visible characters in the rendered match line
+const MAX_DISPLAY = 120;
+// Lines longer than this are skipped entirely (too expensive to tokenize)
+const MAX_HIGHLIGHT = 256;
 
 // Lazy singleton — created on first call to highlightLine()
 let highlighterPromise: Promise<Highlighter> | undefined;
@@ -91,54 +93,89 @@ function renderSpan(content: string, color: string | undefined): string {
  * Builds a flat HTML string from Shiki tokens with a match highlight injected.
  * The match highlight spans character range [col, col+len). Syntax-color spans
  * are nested inside `<span class="match-highlight">` where they overlap.
+ *
+ * When `visibleStart`/`visibleEnd` are provided, only the characters within
+ * [visibleStart, visibleEnd) are emitted, with `…` ellipsis at the boundaries.
+ * The full token stream is still iterated so that syntax colors are correct.
  */
-export function buildHighlightedHtml(tokens: ThemedToken[], col: number, len: number): string {
+export function buildHighlightedHtml(
+  tokens: ThemedToken[], col: number, len: number,
+  visibleStart?: number, visibleEnd?: number
+): string {
   const matchEnd = col + len;
+  const hasWindow = visibleStart !== undefined && visibleEnd !== undefined;
   let pos = 0;
   let html = '';
   let inMatch = false;
+
+  if (hasWindow && visibleStart! > 0) { html += '\u2026'; } // leading ellipsis
 
   for (const token of tokens) {
     const tokenLen = token.content.length;
     const tokenEnd = pos + tokenLen;
 
-    // Fast path: token entirely before or after match range
-    if (tokenEnd <= col || pos >= matchEnd) {
-      if (inMatch) { html += '</span>'; inMatch = false; }
-      html += renderSpan(token.content, token.color);
+    // Skip tokens entirely outside the visible window
+    if (hasWindow && tokenEnd <= visibleStart!) { pos = tokenEnd; continue; }
+    if (hasWindow && pos >= visibleEnd!) { pos = tokenEnd; continue; }
+
+    // Determine the slice of this token that falls within the visible window
+    let sliceStart = 0;
+    let sliceEnd = tokenLen;
+    if (hasWindow) {
+      if (pos < visibleStart!) { sliceStart = visibleStart! - pos; }
+      if (tokenEnd > visibleEnd!) { sliceEnd = visibleEnd! - pos; }
+    }
+
+    // The visible portion of the token, in terms of absolute positions
+    const absStart = pos + sliceStart;
+    const absEnd = pos + sliceEnd;
+
+    // Close match-highlight if we've moved past the match range
+    if (inMatch && absStart >= matchEnd) { html += '</span>'; inMatch = false; }
+
+    // Fast path: visible portion entirely before or after match range
+    if (absEnd <= col || absStart >= matchEnd) {
+      html += renderSpan(token.content.slice(sliceStart, sliceEnd), token.color);
       pos = tokenEnd;
       continue;
     }
 
-    // Token overlaps with match range — split at boundaries
-    let offset = 0; // position within token.content
+    // Token's visible portion overlaps with match range — split at boundaries
+    let offset = sliceStart;
 
-    // Part before match start
-    if (pos < col) {
+    // Part before match start (within visible window)
+    if (absStart < col) {
       const take = col - pos;
-      html += renderSpan(token.content.slice(0, take), token.color);
+      html += renderSpan(token.content.slice(offset, take), token.color);
       offset = take;
     }
 
     // Open match-highlight if not already open
     if (!inMatch) { html += '<span class="match-highlight">'; inMatch = true; }
 
-    // Part inside match range
-    const insideEnd = Math.min(tokenLen, matchEnd - pos);
+    // Part inside match range (within visible window)
+    const insideEnd = Math.min(sliceEnd, matchEnd - pos);
     html += renderSpan(token.content.slice(offset, insideEnd), token.color);
 
-    // Close match-highlight if token extends past match end
-    if (tokenEnd > matchEnd) {
+    // Close match-highlight if token extends past match end (within visible window)
+    if (absEnd > matchEnd) {
       html += '</span>';
       inMatch = false;
-      html += renderSpan(token.content.slice(insideEnd), token.color);
+      html += renderSpan(token.content.slice(insideEnd, sliceEnd), token.color);
     }
 
     pos = tokenEnd;
   }
 
   if (inMatch) { html += '</span>'; }
+  if (hasWindow && visibleEnd! < totalLength(tokens)) { html += '\u2026'; } // trailing ellipsis
   return html;
+}
+
+function totalLength(tokens: ThemedToken[]): number {
+  let n = 0;
+  for (const t of tokens) { n += t.content.length; }
+  return n;
 }
 
 /**
@@ -162,31 +199,31 @@ export async function highlightLine(
   // Trim leading whitespace; adjust column to stay in sync
   const trimmedStart = rawText.length - rawText.trimStart().length;
   const lineText = rawText.trimStart();
-  let adjustedCol = Math.max(0, col - trimmedStart);
+  const adjustedCol = Math.max(0, col - trimmedStart);
 
-  // Truncate to context window centered around the match (mirrors renderMatchLine logic)
-  let text = lineText;
-  if (lineText.length > MAX_LINE) {
-    const half = Math.floor((MAX_LINE - len) / 2);
-    const start = Math.max(0, adjustedCol - half);
-    const end = Math.min(lineText.length, adjustedCol + len + half);
-    const prefix = start > 0 ? '…' : '';
-    const suffix = end < lineText.length ? '…' : '';
-    text = prefix + lineText.slice(start, end) + suffix;
-    // '…' is one JS character
-    adjustedCol = adjustedCol - start + prefix.length;
-  }
+  // Skip highlighting for very long lines (too expensive to tokenize)
+  if (lineText.length > MAX_HIGHLIGHT) { return undefined; }
 
   try {
     const h = await getHighlighter();
     await ensureLangLoaded(h, shikiLang);
-    const { tokens } = h.codeToTokens(text, {
+    const { tokens } = h.codeToTokens(lineText, {
       lang: shikiLang,
       theme: currentThemeName,
       includeExplanation: false,
     });
     const lineTokens = tokens[0] ?? [];
-    return buildHighlightedHtml(lineTokens, adjustedCol, len);
+
+    // Compute visible window if line exceeds display limit
+    let visibleStart: number | undefined;
+    let visibleEnd: number | undefined;
+    if (lineText.length > MAX_DISPLAY) {
+      const half = Math.floor((MAX_DISPLAY - len) / 2);
+      visibleStart = Math.max(0, adjustedCol - half);
+      visibleEnd = Math.min(lineText.length, adjustedCol + len + half);
+    }
+
+    return buildHighlightedHtml(lineTokens, adjustedCol, len, visibleStart, visibleEnd);
   } catch {
     return undefined;
   }

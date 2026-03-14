@@ -49,16 +49,20 @@ export function handleSearchMessage(
     const MAX_MATCH_LINES = 5;
     const CONCURRENCY = 10;
 
-    // Highlights the first MAX_MATCH_LINES matches per file with concurrency limiting,
-    // strips lineText beyond the render cap, and returns a serialisable object.
-    async function highlightAndSerialize(batch: Map<string, SearchMatch[]>): Promise<Record<string, SearchMatch[]>> {
+    // Syntax-highlights the first MAX_MATCH_LINES matches per file with concurrency limiting.
+    // Returns a list of { path, idx, html } patches to be sent as a separate message, so
+    // callers can deliver plain-text batches immediately without waiting for Shiki.
+    async function highlightBatch(batch: Map<string, SearchMatch[]>): Promise<Array<{ path: string; idx: number; html: string }>> {
       const executing = new Set<Promise<void>>();
+      const patches: Array<{ path: string; idx: number; html: string }> = [];
       for (const [filePath, matches] of batch) {
         const task = (async () => {
           const langName = getLangInfo(path.basename(filePath)).name;
-          for (const match of matches.slice(0, MAX_MATCH_LINES)) {
-            const html = await highlightLine(match.lineText, match.column, match.matchLength, langName);
-            if (html !== undefined) { match.highlightedHtml = html; }
+          for (let i = 0; i < Math.min(matches.length, MAX_MATCH_LINES); i++) {
+            const lineText = matches[i].lineText;
+            if (lineText === undefined) { continue; }
+            const html = await highlightLine(lineText, matches[i].column, matches[i].matchLength, langName);
+            if (html !== undefined) { patches.push({ path: filePath, idx: i, html }); }
           }
         })();
         const p = task.then(() => { executing.delete(p); });
@@ -66,12 +70,7 @@ export function handleSearchMessage(
         if (executing.size >= CONCURRENCY) { await Promise.race(executing); }
       }
       await Promise.all(executing);
-      const obj: Record<string, SearchMatch[]> = {};
-      for (const [p, m] of batch) {
-        for (let i = MAX_MATCH_LINES; i < m.length; i++) { delete m[i].lineText; }
-        obj[p] = m;
-      }
-      return obj;
+      return patches;
     }
 
     // Track in-flight batch highlights so we can wait for them before sending 'done'.
@@ -83,16 +82,33 @@ export function handleSearchMessage(
       {
         caseSensitive: message.caseSensitive, useRegex: message.useRegex, include: message.include,
         onBatch: (batch, totals) => {
-          const p = highlightAndSerialize(batch).then((matchesObj) => {
-            postMessage({ type: 'searchResultsBatch', matches: matchesObj, fileCount: totals.fileCount, matchCount: totals.matchCount });
+          // Strip lineText from matches beyond the render cap before serialising.
+          for (const [, matches] of batch) {
+            for (let i = MAX_MATCH_LINES; i < matches.length; i++) { delete matches[i].lineText; }
+          }
+          // Send plain-text batch immediately — no waiting for syntax highlighting.
+          if (searchService.getGeneration() !== searchGen) { return; }
+          const plainObj: Record<string, SearchMatch[]> = {};
+          for (const [p, m] of batch) { plainObj[p] = m; }
+          postMessage({ type: 'searchResultsBatch', matches: plainObj, fileCount: totals.fileCount, matchCount: totals.matchCount });
+          // Asynchronously highlight and post a patch once done.
+          const highlightPromise = highlightBatch(batch).then((patches) => {
+            if (searchService.getGeneration() !== searchGen) { return; }
+            if (patches.length > 0) {
+              postMessage({ type: 'searchResultsHighlight', patches });
+            }
           });
-          pendingBatches.push(p);
+          pendingBatches.push(highlightPromise);
         },
       }
     );
+    // Snapshot generation *after* searchWorkspace (which calls cancel() internally,
+    // bumping the generation). This matches the generation the search is actually using.
+    const searchGen = searchService.getGeneration();
     result.then(async (r) => {
       // Wait for all in-flight batch highlights to complete before signalling done.
       await Promise.all(pendingBatches);
+      if (searchService.getGeneration() !== searchGen) { return; }
       postMessage({ type: 'searchResultsDone', fileCount: r.fileCount, matchCount: r.matchCount, truncated: r.truncated });
     }).catch((err: Error) => {
       postMessage({ type: 'searchResults', matches: null, error: String(err) });

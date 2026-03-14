@@ -1,6 +1,12 @@
 import * as vscode from 'vscode';
 import { getNonce } from './getNonce';
 
+/** Shared script files loaded before any view-specific script (main.js, tab.js, etc.). */
+export const SHARED_SCRIPTS = [
+  'shared-icons.js', 'shared-utils.js', 'shared-state.js',
+  'shared-renderer.js', 'shared.js',
+];
+
 export interface BuildWebviewHtmlOptions {
   scripts: string[];   // filenames relative to out/webview/, e.g. ['shared.js', 'main.js']
   styles: string[];    // filenames relative to out/webview/, e.g. ['style.css']

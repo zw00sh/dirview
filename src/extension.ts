@@ -44,6 +44,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // results to the tree fold via sidebarProvider's postMessage methods.
   searchProvider.onSearchResults = (data) => sidebarProvider.postSearchResults(data);
   searchProvider.onSearchResultsBatch = (data) => sidebarProvider.postSearchResultsBatch(data);
+  searchProvider.onSearchResultsHighlight = (data) => sidebarProvider.postSearchResultsHighlight(data);
   searchProvider.onSearchResultsDone = (data) => sidebarProvider.postSearchResultsDone(data);
   searchProvider.onSearchProgress = () => sidebarProvider.postSearchProgress();
   searchProvider.onSearchClear = () => sidebarProvider.clearSearch();

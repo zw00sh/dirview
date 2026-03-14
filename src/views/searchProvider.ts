@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { buildWebviewHtml } from './buildWebviewHtml';
+import { buildWebviewHtml, SHARED_SCRIPTS } from './buildWebviewHtml';
 import { handleSearchMessage } from './providerUtils';
 import { SearchService } from '../search/searchService';
 
@@ -14,6 +14,7 @@ export class SearchProvider implements vscode.WebviewViewProvider {
   // Callbacks wired in extension.ts to forward results to the tree fold.
   onSearchResults?: (data: { matches: Record<string, any[]> | null; fileCount: number; matchCount: number; truncated: boolean }) => void;
   onSearchResultsBatch?: (data: { matches: Record<string, any[]>; fileCount: number; matchCount: number }) => void;
+  onSearchResultsHighlight?: (data: { patches: Array<{ path: string; idx: number; html: string }> }) => void;
   onSearchResultsDone?: (data: { fileCount: number; matchCount: number; truncated: boolean }) => void;
   onSearchProgress?: () => void;
   onSearchClear?: () => void;
@@ -65,6 +66,9 @@ export class SearchProvider implements vscode.WebviewViewProvider {
             fileCount: msg.fileCount ?? 0,
             matchCount: msg.matchCount ?? 0,
           });
+        } else if (msg.type === 'searchResultsHighlight') {
+          // Forward highlight patches to the tree fold; no status update needed.
+          this.onSearchResultsHighlight?.({ patches: msg.patches ?? [] });
         } else if (msg.type === 'searchResultsDone') {
           this.onSearchResultsDone?.({
             fileCount: msg.fileCount ?? 0,
@@ -134,7 +138,7 @@ export class SearchProvider implements vscode.WebviewViewProvider {
 
   private getHtml(webview: vscode.Webview): string {
     return buildWebviewHtml(webview, this.extensionUri, {
-      scripts: ['shared.js', 'search.js'],
+      scripts: [...SHARED_SCRIPTS, 'search.js'],
       styles: ['style.css', 'search.css'],
       title: 'Search',
       debug: this.debug,

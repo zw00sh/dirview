@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { DirNode, ScanUpdatePayload } from '../scanner/types';
-import { buildWebviewHtml } from './buildWebviewHtml';
+import { buildWebviewHtml, SHARED_SCRIPTS } from './buildWebviewHtml';
 import { handleCommonMessage, handleSearchMessage } from './providerUtils';
 import { SearchService } from '../search/searchService';
 
@@ -285,7 +285,7 @@ export class TabProvider {
 
   private getHtml(webview: vscode.Webview): string {
     return buildWebviewHtml(webview, this.extensionUri, {
-      scripts: ['shared.js', 'tab.js'],
+      scripts: [...SHARED_SCRIPTS, 'tab.js'],
       styles: ['style.css', 'languages.css', 'tab.css'],
       title: 'Breakdown',
       bodyClass: 'tab-view',

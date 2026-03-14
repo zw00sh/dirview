@@ -269,7 +269,8 @@ body {
 }
 
 /* Scan progress bar — uses transform on a pseudo-element so the animation
-   runs on the compositor thread and won't freeze when render() blocks. */
+   runs on the compositor thread and won't freeze when render() blocks.
+   Also reused for search progress (no separate element needed). */
 .scan-progress {
   position: fixed;
   top: 0;
@@ -277,6 +278,7 @@ body {
   right: 0;
   height: 2px;
   overflow: hidden;
+  pointer-events: none;
   z-index: 1000;
   display: none;
 }
@@ -539,7 +541,7 @@ body {
 .match-line-row {
   display: flex;
   align-items: baseline;
-  padding: 0;
+  padding: 0 57px 0 0; /* right padding aligns text truncation with file-count column boundary (file-dot 9px + gap 4px + file-count 44px) */
   cursor: pointer;
   gap: 4px;
   min-height: 18px;
@@ -583,6 +585,7 @@ body {
   gap: 4px;
   min-height: 16px;
   overflow: hidden;
+  padding-right: 57px; /* aligns with file-count column boundary */
 }
 
 .match-more-label {
@@ -590,4 +593,10 @@ body {
   color: var(--vscode-descriptionForeground);
   opacity: 0.6;
   font-style: italic;
+}
+
+/* Sidebar has no count column — reduce right padding to file-dot (9px) + sidebar row padding (8px) */
+.tree.sidebar .match-line-row,
+.tree.sidebar .match-more-row {
+  padding-right: 17px;
 }

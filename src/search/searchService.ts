@@ -48,6 +48,10 @@ export class SearchService {
     }
   }
 
+  /** Returns the current search generation. Callers can snapshot this value
+   *  and compare later to detect whether a newer search has been started. */
+  getGeneration(): number { return this.generation; }
+
   cancel(): void {
     if (this.currentProcess) {
       this.currentProcess.kill();
