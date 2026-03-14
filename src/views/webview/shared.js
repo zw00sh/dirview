@@ -73,19 +73,7 @@
       const hiddenFiles = shouldTruncate ? visibleFiles.slice(state.truncateThreshold) : [];
       for (const file of shownFiles) {
         treeEl.appendChild(renderer.renderFileNode(file, 0, []));
-        // Render inline match lines for root-level files when content search is active.
-        if (state.searchResults?.has(file.path)) {
-          const fileMatches = state.searchResults.get(file.path);
-          if (fileMatches.length > 0) {
-            const MAX_MATCH_LINES = 5;
-            for (const m of fileMatches.slice(0, MAX_MATCH_LINES)) {
-              treeEl.appendChild(renderer.renderMatchLine(file, m, 1, []));
-            }
-            if (fileMatches.length > MAX_MATCH_LINES) {
-              treeEl.appendChild(renderer.renderMoreMatchesRow(fileMatches.length - MAX_MATCH_LINES, 1, [], file.path));
-            }
-          }
-        }
+        renderer.renderFileMatches(treeEl, file, 1, []);
       }
       if (hiddenFiles.length > 0) {
         treeEl.appendChild(renderer.renderTruncatedRow(hiddenFiles, 0, [], r.path, maxMetric, clientWidth));
@@ -331,15 +319,12 @@
           ? new Map(Object.entries(message.matches))
           : null;
         state.searchActive = false;
-        state.searchTruncated = message.truncated || false;
-        state.searchFileCount = message.fileCount || 0;
-        state.searchMatchCount = message.matchCount || 0;
         if (state.scanBar) { state.scanBar.show(false); }
         // Selectively expand only dirs that contain matches (avoids rendering entire tree).
         if (state.searchResults && state.searchResults.size > 0 && state.lastRoots) {
           expandMatchedDirs(state, state.lastRoots, state.searchResults, state.activeFilters);
         }
-        if (state.searchBar_updateStatus) { state.searchBar_updateStatus(); }
+        updateSearchStatus(state, message);
         if (state.lastRoots) { state.rerender(); }
       },
       searchResultsBatch(message) {
@@ -347,21 +332,14 @@
         const newFilePaths = new Set(Object.keys(message.matches || {}));
         if (!state.searchResults) { state.searchResults = new Map(); }
         for (const [p, m] of Object.entries(message.matches || {})) { state.searchResults.set(p, m); }
-        state.searchFileCount = message.fileCount || 0;
-        state.searchMatchCount = message.matchCount || 0;
+        updateSearchStatus(state, message);
         // Incrementally expand only dirs containing newly arrived files — avoids full tree
         // walk on every batch. searchProgress must have cleared expanded first.
         if (newFilePaths.size > 0 && state.lastRoots) {
           expandBatchFiles(state, state.lastRoots, newFilePaths);
         }
-        if (state.searchBar_updateStatus) { state.searchBar_updateStatus(); }
         // Throttle: coalesce rapid batch arrivals into at most one render per 300ms.
-        if (state.lastRoots && !state._searchRenderTimer) {
-          state._searchRenderTimer = setTimeout(() => {
-            state._searchRenderTimer = null;
-            state.rerender();
-          }, 300);
-        }
+        scheduleSearchRender(state);
       },
       searchResultsHighlight(message) {
         // Syntax highlight patches arrive after the plain-text batch has already rendered.
@@ -373,12 +351,7 @@
             fileMatches[idx].highlightedHtml = html;
           }
         }
-        if (state.lastRoots && !state._searchRenderTimer) {
-          state._searchRenderTimer = setTimeout(() => {
-            state._searchRenderTimer = null;
-            state.rerender();
-          }, 300);
-        }
+        scheduleSearchRender(state);
       },
       searchResultsDone(message) {
         // Final signal after all batches have been delivered.
@@ -386,11 +359,8 @@
         // so the tree filters to empty rather than falling back to showing the full tree.
         if (state.searchResults === null) { state.searchResults = new Map(); }
         state.searchActive = false;
-        state.searchTruncated = message.truncated || false;
-        state.searchFileCount = message.fileCount || 0;
-        state.searchMatchCount = message.matchCount || 0;
         if (state.scanBar) { state.scanBar.show(false); }
-        if (state.searchBar_updateStatus) { state.searchBar_updateStatus(); }
+        updateSearchStatus(state, message);
         // Cancel any pending throttled render and do a final immediate render.
         if (state._searchRenderTimer) { clearTimeout(state._searchRenderTimer); state._searchRenderTimer = null; }
         if (state.lastRoots) { state.rerender(); }
@@ -699,51 +669,61 @@
     return { el, focus, clear: clearSearch, show, hide, updateStatus, setStatus, updateFilterWarning };
   }
 
+  // Updates search-result counters on state and triggers the search bar status display.
+  // Called by searchResults, searchResultsBatch, and searchResultsDone handlers.
+  function updateSearchStatus(state, message) {
+    state.searchFileCount = message.fileCount || 0;
+    state.searchMatchCount = message.matchCount || 0;
+    state.searchTruncated = message.truncated || false;
+    if (state.searchBar_updateStatus) { state.searchBar_updateStatus(); }
+  }
+
+  // Schedules a throttled re-render after search results/highlight patches arrive.
+  // Coalesces rapid arrivals into at most one render per 300ms.
+  function scheduleSearchRender(state) {
+    if (state.lastRoots && !state._searchRenderTimer) {
+      state._searchRenderTimer = setTimeout(() => {
+        state._searchRenderTimer = null;
+        state.rerender();
+      }, 300);
+    }
+  }
+
+  // Walks the tree and expands any directory that contains a file matching matchFn.
+  // If clearFirst is true, clears state.expanded before walking (full rebuild from scratch).
+  // If false, only adds to the existing expanded map (incremental batch update).
+  function walkMatchingDirs(state, roots, matchFn, clearFirst) {
+    if (clearFirst) { state.expanded.clear(); }
+    function walk(node) {
+      let hasMatch = false;
+      for (const f of (node.files || [])) {
+        if (matchFn(f)) { hasMatch = true; break; }
+      }
+      for (const child of (node.children || [])) {
+        if (walk(child)) { hasMatch = true; }
+      }
+      if (hasMatch) { state.expanded.set(compactedPath(node), true); }
+      return hasMatch;
+    }
+    for (const r of roots) { walk(r); }
+  }
+
   // Incrementally expands dirs for a new batch of file paths, without clearing state.expanded.
   // Called on each searchResultsBatch; searchProgress must clear expanded first so this
   // only needs to add newly matched dirs rather than rebuilding from all results.
   // O(dir_nodes) per batch — far cheaper than expandMatchedDirs(O(file_nodes × batches)).
   function expandBatchFiles(state, roots, newFilePaths) {
-    function walk(node) {
-      let hasNew = false;
-      for (const f of (node.files || [])) {
-        if (newFilePaths.has(f.path) && (state.activeFilters.size === 0 || state.activeFilters.has(f.langName))) {
-          hasNew = true;
-          break;
-        }
-      }
-      for (const child of (node.children || [])) {
-        if (walk(child)) { hasNew = true; }
-      }
-      if (hasNew) { state.expanded.set(compactedPath(node), true); }
-      return hasNew;
-    }
-    for (const r of roots) { walk(r); }
+    walkMatchingDirs(state, roots, f =>
+      newFilePaths.has(f.path) && (state.activeFilters.size === 0 || state.activeFilters.has(f.langName)),
+      false);
   }
 
   // Pre-populates state.expanded so only directories containing search matches are expanded.
   // Full rebuild from all results — used for non-streaming searchResults and clearSearch.
-  // Returns true if any descendant matches, allowing the caller to expand ancestors.
   function expandMatchedDirs(state, roots, searchResults, activeFilters) {
-    state.expanded.clear();
-    function walk(node) {
-      let hasMatch = false;
-      for (const f of (node.files || [])) {
-        if (searchResults.has(f.path) && (activeFilters.size === 0 || activeFilters.has(f.langName))) {
-          hasMatch = true;
-          break;
-        }
-      }
-      for (const child of (node.children || [])) {
-        if (walk(child)) { hasMatch = true; }
-      }
-      if (hasMatch) {
-        const cp = compactedPath(node);
-        state.expanded.set(cp, true);
-      }
-      return hasMatch;
-    }
-    for (const r of roots) { walk(r); }
+    walkMatchingDirs(state, roots, f =>
+      searchResults.has(f.path) && (activeFilters.size === 0 || activeFilters.has(f.langName)),
+      true);
   }
 
   window.DirviewShared = {
@@ -766,6 +746,8 @@
     createRenderer: R.createRenderer,
     // Local to this file
     renderRoots, createRescanWarning, renderTree, createMessageHandler,
-    patchTreeChildren, patchDirLi, createSearchBar, expandMatchedDirs, expandBatchFiles,
+    patchTreeChildren, patchDirLi, createSearchBar,
+    walkMatchingDirs, expandMatchedDirs, expandBatchFiles,
+    updateSearchStatus, scheduleSearchRender,
   };
 })();

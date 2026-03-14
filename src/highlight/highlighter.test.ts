@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildHighlightedHtml, resolveShikiLang } from './highlighter';
+import { buildHighlightedHtml, resolveShikiLang, trimLeadingWhitespace, computeVisibleWindow } from './highlighter';
 import type { ThemedToken } from 'shiki';
 
 function tok(content: string, color?: string): ThemedToken {
@@ -159,5 +159,69 @@ describe('resolveShikiLang', () => {
 
   it('handles languages that are already lowercase', () => {
     expect(resolveShikiLang('css')).toBe('css');
+  });
+});
+
+describe('trimLeadingWhitespace', () => {
+  it('returns unchanged text and col when there is no leading whitespace', () => {
+    const { lineText, adjustedCol } = trimLeadingWhitespace('hello', 2);
+    expect(lineText).toBe('hello');
+    expect(adjustedCol).toBe(2);
+  });
+
+  it('trims leading spaces and adjusts column', () => {
+    const { lineText, adjustedCol } = trimLeadingWhitespace('   hello', 5);
+    expect(lineText).toBe('hello');
+    expect(adjustedCol).toBe(2); // 5 - 3 trimmed = 2
+  });
+
+  it('clamps adjustedCol to 0 when match falls entirely within trimmed whitespace', () => {
+    const { lineText, adjustedCol } = trimLeadingWhitespace('   hello', 1);
+    expect(lineText).toBe('hello');
+    expect(adjustedCol).toBe(0); // 1 - 3 = -2, clamped to 0
+  });
+
+  it('handles tabs as whitespace', () => {
+    const { lineText, adjustedCol } = trimLeadingWhitespace('\thello', 3);
+    expect(lineText).toBe('hello');
+    expect(adjustedCol).toBe(2); // 3 - 1 tab = 2
+  });
+
+  it('returns empty string for all-whitespace input', () => {
+    const { lineText, adjustedCol } = trimLeadingWhitespace('   ', 0);
+    expect(lineText).toBe('');
+    expect(adjustedCol).toBe(0);
+  });
+});
+
+describe('computeVisibleWindow', () => {
+  it('returns null when line fits within maxDisplay', () => {
+    expect(computeVisibleWindow(80, 10, 5, 120)).toBeNull();
+    expect(computeVisibleWindow(120, 10, 5, 120)).toBeNull(); // exactly at limit
+  });
+
+  it('returns a window when line exceeds maxDisplay', () => {
+    const win = computeVisibleWindow(200, 100, 5, 120);
+    expect(win).not.toBeNull();
+    expect(win!.start).toBeGreaterThanOrEqual(0);
+    expect(win!.end).toBeLessThanOrEqual(200);
+    expect(win!.end - win!.start).toBeLessThanOrEqual(120 + 5); // roughly bounded
+  });
+
+  it('clamps start to 0 when match is near the beginning', () => {
+    const win = computeVisibleWindow(200, 2, 5, 120);
+    expect(win!.start).toBe(0);
+  });
+
+  it('clamps end to lineLength when match is near the end', () => {
+    const win = computeVisibleWindow(200, 198, 5, 120);
+    expect(win!.end).toBe(200); // clamped, not 203
+  });
+
+  it('centers window around the match', () => {
+    const win = computeVisibleWindow(300, 150, 10, 120);
+    // half = floor((120 - 10) / 2) = 55; start = max(0, 150 - 55) = 95; end = min(300, 160 + 55) = 215
+    expect(win!.start).toBe(95);
+    expect(win!.end).toBe(215);
   });
 });

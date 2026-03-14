@@ -77,6 +77,25 @@ async function ensureLangLoaded(h: Highlighter, shikiLang: string): Promise<void
   return p;
 }
 
+/** Trims leading whitespace from a raw line and adjusts the match column accordingly. */
+export function trimLeadingWhitespace(rawText: string, col: number): { lineText: string; adjustedCol: number } {
+  const trimmedStart = rawText.length - rawText.trimStart().length;
+  return { lineText: rawText.trimStart(), adjustedCol: Math.max(0, col - trimmedStart) };
+}
+
+/**
+ * Returns a visible window `{ start, end }` when `lineLength > maxDisplay`, centered on the match,
+ * or null if the line fits within `maxDisplay` characters and no windowing is needed.
+ * Must stay in sync with computeVisibleWindow in shared-renderer.js.
+ */
+export function computeVisibleWindow(
+  lineLength: number, col: number, matchLen: number, maxDisplay: number
+): { start: number; end: number } | null {
+  if (lineLength <= maxDisplay) { return null; }
+  const half = Math.floor((maxDisplay - matchLen) / 2);
+  return { start: Math.max(0, col - half), end: Math.min(lineLength, col + matchLen + half) };
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -196,10 +215,7 @@ export async function highlightLine(
   const shikiLang = resolveShikiLang(langName);
   if (!shikiLang) { return undefined; }
 
-  // Trim leading whitespace; adjust column to stay in sync
-  const trimmedStart = rawText.length - rawText.trimStart().length;
-  const lineText = rawText.trimStart();
-  const adjustedCol = Math.max(0, col - trimmedStart);
+  const { lineText, adjustedCol } = trimLeadingWhitespace(rawText, col);
 
   // Skip highlighting for very long lines (too expensive to tokenize)
   if (lineText.length > MAX_HIGHLIGHT) { return undefined; }
@@ -214,16 +230,8 @@ export async function highlightLine(
     });
     const lineTokens = tokens[0] ?? [];
 
-    // Compute visible window if line exceeds display limit
-    let visibleStart: number | undefined;
-    let visibleEnd: number | undefined;
-    if (lineText.length > MAX_DISPLAY) {
-      const half = Math.floor((MAX_DISPLAY - len) / 2);
-      visibleStart = Math.max(0, adjustedCol - half);
-      visibleEnd = Math.min(lineText.length, adjustedCol + len + half);
-    }
-
-    return buildHighlightedHtml(lineTokens, adjustedCol, len, visibleStart, visibleEnd);
+    const win = computeVisibleWindow(lineText.length, adjustedCol, len, MAX_DISPLAY);
+    return buildHighlightedHtml(lineTokens, adjustedCol, len, win?.start, win?.end);
   } catch {
     return undefined;
   }

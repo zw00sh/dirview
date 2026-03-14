@@ -541,7 +541,7 @@ body {
 .match-line-row {
   display: flex;
   align-items: baseline;
-  padding: 0 57px 0 0; /* right padding aligns text truncation with file-count column boundary (file-dot 9px + gap 4px + file-count 44px) */
+  padding: 1px 57px 1px 0; /* vertical 1px matches dir/file-row, allowing indent guide ::before (-1px overlap) to show; right aligns with file-count column */
   cursor: pointer;
   gap: 4px;
   min-height: 18px;
@@ -585,7 +585,7 @@ body {
   gap: 4px;
   min-height: 16px;
   overflow: hidden;
-  padding-right: 57px; /* aligns with file-count column boundary */
+  padding: 1px 57px 1px 0; /* vertical 1px matches dir/file-row for indent guide continuity */
 }
 
 .match-more-label {
@@ -598,5 +598,5 @@ body {
 /* Sidebar has no count column — reduce right padding to file-dot (9px) + sidebar row padding (8px) */
 .tree.sidebar .match-line-row,
 .tree.sidebar .match-more-row {
-  padding-right: 17px;
+  padding: 1px 17px 1px 0;
 }

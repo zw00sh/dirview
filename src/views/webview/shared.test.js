@@ -2515,3 +2515,177 @@ describe('expandBatchFiles — orphan paths', () => {
     expect(state.expanded.size).toBe(0);
   });
 });
+
+// --- walkMatchingDirs ---
+
+describe('walkMatchingDirs', () => {
+  function makeTree() {
+    return [
+      makeDir('/ws', 'ws', {
+        children: [
+          makeDir('/ws/src', 'src', {
+            files: [{ path: '/ws/src/a.ts', name: 'a.ts', langName: 'TypeScript' }],
+            children: [
+              makeDir('/ws/src/lib', 'lib', {
+                files: [{ path: '/ws/src/lib/b.ts', name: 'b.ts', langName: 'TypeScript' }],
+              }),
+            ],
+          }),
+        ],
+      }),
+    ];
+  }
+
+  it('expands ancestors of matched files', () => {
+    const state = S.createState();
+    S.walkMatchingDirs(state, makeTree(), f => f.path === '/ws/src/lib/b.ts', false);
+    expect(state.expanded.get('/ws/src/lib')).toBe(true);
+    expect(state.expanded.get('/ws/src')).toBe(true);
+  });
+
+  it('does not expand dirs with no matching files', () => {
+    const state = S.createState();
+    S.walkMatchingDirs(state, makeTree(), f => f.path === '/nonexistent.ts', false);
+    expect(state.expanded.size).toBe(0);
+  });
+
+  it('clearFirst=true clears state.expanded before walking', () => {
+    const state = S.createState();
+    state.expanded.set('/ws/src', true); // pre-existing
+    S.walkMatchingDirs(state, makeTree(), f => f.path === '/ws/src/lib/b.ts', true);
+    // '/ws/src' should still be expanded (matched via descendant), not missing
+    expect(state.expanded.get('/ws/src')).toBe(true);
+    // but the clear happened — any path NOT matching is gone
+    // (confirm by adding a path that wouldn't match)
+    const state2 = S.createState();
+    state2.expanded.set('/unrelated/path', true);
+    S.walkMatchingDirs(state2, makeTree(), () => false, true);
+    expect(state2.expanded.has('/unrelated/path')).toBe(false);
+  });
+
+  it('clearFirst=false preserves existing expanded state', () => {
+    const state = S.createState();
+    state.expanded.set('/unrelated/path', true);
+    S.walkMatchingDirs(state, makeTree(), () => false, false);
+    expect(state.expanded.has('/unrelated/path')).toBe(true);
+  });
+
+  it('is a no-op for empty roots', () => {
+    const state = S.createState();
+    expect(() => S.walkMatchingDirs(state, [], () => true, false)).not.toThrow();
+    expect(state.expanded.size).toBe(0);
+  });
+});
+
+// --- scheduleSearchRender ---
+
+describe('scheduleSearchRender', () => {
+  it('schedules a render after 300ms', async () => {
+    const state = S.createState();
+    const rerender = vi.fn();
+    state.rerender = rerender;
+    state.lastRoots = [makeDir('/ws', 'ws', {})];
+    S.scheduleSearchRender(state);
+    expect(rerender).not.toHaveBeenCalled();
+    await new Promise(r => setTimeout(r, 350));
+    expect(rerender).toHaveBeenCalledOnce();
+    expect(state._searchRenderTimer).toBeNull();
+  });
+
+  it('does not schedule a second timer when one is already pending', async () => {
+    const state = S.createState();
+    const rerender = vi.fn();
+    state.rerender = rerender;
+    state.lastRoots = [makeDir('/ws', 'ws', {})];
+    S.scheduleSearchRender(state);
+    S.scheduleSearchRender(state); // second call — should be a no-op
+    await new Promise(r => setTimeout(r, 350));
+    expect(rerender).toHaveBeenCalledOnce(); // only fired once
+  });
+
+  it('is a no-op when state.lastRoots is null', async () => {
+    const state = S.createState();
+    const rerender = vi.fn();
+    state.rerender = rerender;
+    state.lastRoots = null;
+    S.scheduleSearchRender(state);
+    await new Promise(r => setTimeout(r, 350));
+    expect(rerender).not.toHaveBeenCalled();
+    expect(state._searchRenderTimer).toBeNull();
+  });
+});
+
+// --- renderFileMatches ---
+
+describe('renderFileMatches', () => {
+  function makeFile(path) {
+    return { path, name: path.split('/').pop(), langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+  }
+
+  function makeMatch(line, col = 0, len = 3) {
+    return { line, column: col, matchLength: len, lineText: 'abc def ghi' };
+  }
+
+  it('appends nothing when searchResults is null', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+    expect(container.children.length).toBe(0);
+  });
+
+  it('appends nothing when file has no matches', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    state.searchResults = new Map([['/ws/a.ts', []]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+    expect(container.children.length).toBe(0);
+  });
+
+  it('appends up to 5 match-line rows', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    const file = makeFile('/ws/a.ts');
+    state.searchResults = new Map([['/ws/a.ts', [
+      makeMatch(1), makeMatch(2), makeMatch(3), makeMatch(4), makeMatch(5),
+    ]]]);
+    renderer.renderFileMatches(container, file, 1, []);
+    // 5 match-line rows, no "more matches" row
+    expect(container.querySelectorAll('.match-line-row').length).toBe(5);
+    expect(container.querySelectorAll('.match-more-row').length).toBe(0);
+  });
+
+  it('appends a "more matches" row when there are more than 5 matches', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    const file = makeFile('/ws/a.ts');
+    state.searchResults = new Map([['/ws/a.ts', [
+      makeMatch(1), makeMatch(2), makeMatch(3), makeMatch(4), makeMatch(5), makeMatch(6), makeMatch(7),
+    ]]]);
+    renderer.renderFileMatches(container, file, 1, []);
+    expect(container.querySelectorAll('.match-line-row').length).toBe(5);
+    const moreRow = container.querySelector('.match-more-row');
+    expect(moreRow).not.toBeNull();
+    expect(moreRow.textContent).toContain('2 more match');
+  });
+
+  it('appends nothing when file path is not in searchResults', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    state.searchResults = new Map([['/ws/other.ts', [makeMatch(1)]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+    expect(container.children.length).toBe(0);
+  });
+});

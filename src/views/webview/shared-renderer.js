@@ -4,6 +4,24 @@
 (function () {
   'use strict';
 
+  const MAX_MATCH_LINES = 5;
+  const MAX_MATCH_LINE_DISPLAY = 120;
+
+  /** Trims leading whitespace from a raw line and adjusts the match column accordingly.
+   *  Must stay in sync with trimLeadingWhitespace in highlighter.ts. */
+  function trimLeadingWhitespace(rawText, col) {
+    const trimmedStart = rawText.length - rawText.trimStart().length;
+    return { lineText: rawText.trimStart(), adjustedCol: Math.max(0, col - trimmedStart) };
+  }
+
+  /** Returns { start, end } visible window when lineLength > maxDisplay, or null if it fits.
+   *  Must stay in sync with computeVisibleWindow in highlighter.ts. */
+  function computeVisibleWindow(lineLength, col, matchLen, maxDisplay) {
+    if (lineLength <= maxDisplay) { return null; }
+    const half = Math.floor((maxDisplay - matchLen) / 2);
+    return { start: Math.max(0, col - half), end: Math.min(lineLength, col + matchLen + half) };
+  }
+
   const { SVG_CHEVRON, SVG_PLUS, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_OPEN_IN_TAB } = window._DirviewIcons;
   const {
     escHtml, formatBytes, sortDirs, sortFiles, groupEmptyDirs,
@@ -355,13 +373,11 @@
       } else {
         // Plain-text fallback: trim leading whitespace, highlight match substring manually.
         const rawText = match.lineText || '';
-        const trimmedStart = rawText.length - rawText.trimStart().length;
-        const lineText = rawText.trimStart();
-        const col = Math.max(0, (match.column || 0) - trimmedStart);
+        const { lineText, adjustedCol: col } = trimLeadingWhitespace(rawText, match.column || 0);
         const len = match.matchLength || 0;
-        const MAX_LINE = 120;
+        const win = computeVisibleWindow(lineText.length, col, len, MAX_MATCH_LINE_DISPLAY);
 
-        if (lineText.length <= MAX_LINE) {
+        if (!win) {
           if (len > 0 && col + len <= lineText.length) {
             textEl.appendChild(document.createTextNode(lineText.slice(0, col)));
             const hl = document.createElement('span');
@@ -374,11 +390,8 @@
           }
         } else {
           // Truncate: show context centered around the match
-          const half = Math.floor((MAX_LINE - len) / 2);
-          const start = Math.max(0, col - half);
-          const end = Math.min(lineText.length, col + len + half);
-          const prefix = (start > 0 ? '\u2026' : '') + lineText.slice(start, col);
-          const suffix = lineText.slice(col + len, end) + (end < lineText.length ? '\u2026' : '');
+          const prefix = (win.start > 0 ? '\u2026' : '') + lineText.slice(win.start, col);
+          const suffix = lineText.slice(col + len, win.end) + (win.end < lineText.length ? '\u2026' : '');
           textEl.appendChild(document.createTextNode(prefix));
           if (len > 0) {
             const hl = document.createElement('span');
@@ -852,19 +865,7 @@
 
           for (const file of shownFiles) {
             childrenEl.appendChild(renderFileNode(file, depth + 1, nextAncestors));
-            // Render inline match lines under this file when content search is active.
-            if (state.searchResults?.has(file.path)) {
-              const fileMatches = state.searchResults.get(file.path);
-              if (fileMatches.length > 0) {
-                const MAX_MATCH_LINES = 5;
-                for (const m of fileMatches.slice(0, MAX_MATCH_LINES)) {
-                  childrenEl.appendChild(renderMatchLine(file, m, depth + 2, nextAncestors));
-                }
-                if (fileMatches.length > MAX_MATCH_LINES) {
-                  childrenEl.appendChild(renderMoreMatchesRow(fileMatches.length - MAX_MATCH_LINES, depth + 2, nextAncestors, file.path));
-                }
-              }
-            }
+            renderFileMatches(childrenEl, file, depth + 2, nextAncestors);
           }
           if (hiddenFiles.length > 0) {
             childrenEl.appendChild(renderTruncatedRow(hiddenFiles, depth + 1, nextAncestors, displayNode.path, maxMetric, clientWidth));
@@ -878,11 +879,25 @@
       return li;
     }
 
+    // Renders inline match lines beneath a file row when content search is active.
+    // Appends up to MAX_MATCH_LINES match-line rows, then a "N more matches" row if needed.
+    function renderFileMatches(container, file, depth, ancestors) {
+      if (!state.searchResults?.has(file.path)) { return; }
+      const fileMatches = state.searchResults.get(file.path);
+      if (!fileMatches || fileMatches.length === 0) { return; }
+      for (const m of fileMatches.slice(0, MAX_MATCH_LINES)) {
+        container.appendChild(renderMatchLine(file, m, depth, ancestors));
+      }
+      if (fileMatches.length > MAX_MATCH_LINES) {
+        container.appendChild(renderMoreMatchesRow(fileMatches.length - MAX_MATCH_LINES, depth, ancestors, file.path));
+      }
+    }
+
     return {
       // Called at the start of each full renderTree pass to flush stale node references.
       beforeRender() { nodeMap.clear(); _searchMatchCache = new WeakMap(); },
       dirMatchesFilter, dirMatchesSearch, renderIndentGuides, renderFileNode,
-      renderMatchLine, renderMoreMatchesRow, renderTruncatedRow, renderEmptyGroupNode, renderDirNode,
+      renderMatchLine, renderMoreMatchesRow, renderFileMatches, renderTruncatedRow, renderEmptyGroupNode, renderDirNode,
     };
   }
 
