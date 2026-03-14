@@ -1829,12 +1829,12 @@ describe('renderMatchLine', () => {
       column: 0,
       matchLength: 5,
       lineText: 'const x = 1;',
-      highlightedHtml: '<span style="color:var(--shiki-token-keyword)">const</span> x = 1;',
+      highlightedHtml: '<span style="color:#569cd6">const</span> x = 1;',
     };
     const li = renderer.renderMatchLine(file, match, 1, []);
     const textEl = li.querySelector('.match-line-text');
     // innerHTML should contain the syntax-highlighted span from the backend
-    expect(textEl.innerHTML).toContain('shiki-token-keyword');
+    expect(textEl.innerHTML).toContain('#569cd6');
     expect(textEl.innerHTML).toContain('const');
     // Plain-text path should not be used — no extra TextNodes wrapping the match
     expect(textEl.querySelector('.match-highlight')).toBeNull();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getLangInfo } from './languageMap';
+import { getLangInfo, groupMap } from './languageMap';
 
 describe('getLangInfo', () => {
   it('returns correct info for .ts extension', () => {
@@ -72,5 +72,17 @@ describe('getLangInfo', () => {
   it('handles uppercase extensions case-insensitively', () => {
     const info = getLangInfo('MAIN.TS');
     expect(info.name).toBe('TypeScript');
+  });
+});
+
+describe('groupMap', () => {
+  it('maps variant languages to their group parent', () => {
+    expect(groupMap.get('Maven POM')).toBe('XML');
+    expect(groupMap.get('JSON with Comments')).toBe('JSON');
+  });
+
+  it('does not include languages that are their own group', () => {
+    expect(groupMap.get('TypeScript')).toBeUndefined();
+    expect(groupMap.get('XML')).toBeUndefined();
   });
 });

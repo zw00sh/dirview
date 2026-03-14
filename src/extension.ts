@@ -6,6 +6,7 @@ import { TabProvider } from './views/tabProvider';
 import { Config } from './config';
 import { ScanCoordinator } from './scanCoordinator';
 import { registerCommands } from './commands';
+import { updateTheme } from './highlight/highlighter';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const config = new Config(context);
@@ -63,6 +64,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   coordinator.startWatcher(context);
+
+  // Set initial Shiki theme to match VSCode's active color theme, and update on changes
+  updateTheme(vscode.window.activeColorTheme.kind);
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveColorTheme(e => {
+      updateTheme(e.kind);
+    })
+  );
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => coordinator.scan())

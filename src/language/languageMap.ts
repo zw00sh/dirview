@@ -3,6 +3,7 @@ const languages = require('linguist-languages') as Record<string, {
   color?: string;
   extensions?: string[];
   filenames?: string[];
+  group?: string;
 }>;
 
 export interface LangInfo {
@@ -33,6 +34,8 @@ const PREFERRED = new Map<string, string>([
 // Build lookup maps at module load time
 const byExtension = new Map<string, LangInfo>();
 const byFilename = new Map<string, LangInfo>();
+// Maps linguist language names to their group parent (e.g. 'Maven POM' → 'XML')
+export const groupMap = new Map<string, string>();
 
 for (const [langName, lang] of Object.entries(languages)) {
   const color = lang.color ?? '#8b8b8b';
@@ -47,6 +50,8 @@ for (const [langName, lang] of Object.entries(languages)) {
       }
     }
   }
+
+  if (lang.group) { groupMap.set(langName, lang.group); }
 
   if (lang.filenames) {
     for (const fn of lang.filenames) {

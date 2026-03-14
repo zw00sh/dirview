@@ -1,74 +1,37 @@
-import { createHighlighter, createCssVariablesTheme, bundledLanguages, type Highlighter, type ThemedToken } from 'shiki';
+import { createHighlighter, bundledLanguages, bundledThemes, type Highlighter, type ThemedToken } from 'shiki';
 import { createOnigurumaEngine } from 'shiki';
 import onigurumaWasm from '@shikijs/engine-oniguruma/wasm-inlined';
+import { groupMap } from '../language/languageMap';
 
-// Map from linguist language names (used in languageMap.ts) to Shiki bundled language IDs.
-// Languages absent from this map fall back to plain-text rendering.
-const LANG_TO_SHIKI: Record<string, string> = {
-  'TypeScript': 'typescript',
-  'JavaScript': 'javascript',
-  'TSX': 'tsx',
-  'Python': 'python',
-  'Rust': 'rust',
-  'Go': 'go',
-  'Java': 'java',
-  'C': 'c',
-  'C++': 'cpp',
-  'C#': 'csharp',
-  'Ruby': 'ruby',
-  'PHP': 'php',
-  'Swift': 'swift',
-  'Kotlin': 'kotlin',
-  'HTML': 'html',
-  'CSS': 'css',
-  'SCSS': 'scss',
-  'Less': 'less',
-  'JSON': 'json',
-  'YAML': 'yaml',
-  'TOML': 'toml',
-  'Markdown': 'markdown',
-  'Shell': 'bash',
-  'Bash': 'bash',
-  'PowerShell': 'powershell',
-  'SQL': 'sql',
-  'GraphQL': 'graphql',
-  'Dockerfile': 'dockerfile',
-  'XML': 'xml',
-  'Lua': 'lua',
-  'Perl': 'perl',
-  'Scala': 'scala',
-  'Elixir': 'elixir',
-  'Erlang': 'erlang',
-  'Haskell': 'haskell',
-  'OCaml': 'ocaml',
-  'F#': 'fsharp',
-  'Clojure': 'clojure',
-  'Dart': 'dart',
-  'Vue': 'vue',
-  'Svelte': 'svelte',
-  'R': 'r',
-  'Makefile': 'makefile',
-  'Zig': 'zig',
-  'Nix': 'nix',
-};
-
-// Only keep langs that are actually in Shiki's bundled set
 const BUNDLED_LANG_IDS = new Set(Object.keys(bundledLanguages));
-const VALID_LANGS = Object.entries(LANG_TO_SHIKI)
-  .filter(([, shikiId]) => BUNDLED_LANG_IDS.has(shikiId))
-  .map(([, shikiId]) => shikiId as keyof typeof bundledLanguages);
-const VALID_LANG_SET = new Set(VALID_LANGS);
 
-// Build a corrected map containing only langs we can actually load
-const resolvedLangMap: Record<string, string> = {};
-for (const [linguist, shikiId] of Object.entries(LANG_TO_SHIKI)) {
-  if (VALID_LANG_SET.has(shikiId as keyof typeof bundledLanguages)) {
-    resolvedLangMap[linguist] = shikiId;
+/** Resolve a linguist language name to a Shiki grammar ID, or undefined if unsupported. */
+export function resolveShikiLang(langName: string): string | undefined {
+  const lower = langName.toLowerCase();
+  if (BUNDLED_LANG_IDS.has(lower)) { return lower; }
+  // Fallback: check linguist group (e.g., "Maven POM" → "XML" → "xml")
+  const group = groupMap.get(langName);
+  if (group) {
+    const groupLower = group.toLowerCase();
+    if (BUNDLED_LANG_IDS.has(groupLower)) { return groupLower; }
   }
+  return undefined;
 }
 
-const THEME = createCssVariablesTheme();
-const THEME_NAME = THEME.name;
+// Track current theme based on VSCode's active color theme kind.
+// ColorThemeKind: 1=Light, 2=Dark, 3=HighContrast, 4=HighContrastLight
+let currentThemeName: string = 'dark-plus';
+
+/**
+ * Updates the Shiki theme to match the active VSCode color theme kind.
+ * Lazily re-creates the highlighter on the next highlight call if the theme changed.
+ */
+export function updateTheme(kind: number): void {
+  const name = (kind === 1 || kind === 4) ? 'light-plus' : 'dark-plus';
+  if (name === currentThemeName && highlighterPromise) { return; }
+  currentThemeName = name;
+  highlighterPromise = undefined; // lazy re-create on next highlight call
+}
 
 // Max line length to syntax-highlight; longer lines are truncated to context around the match
 const MAX_LINE = 120;
@@ -83,8 +46,8 @@ function getHighlighter(): Promise<Highlighter> {
     // flag unsupported in VSCode's embedded Node.js runtime.
     highlighterPromise = createOnigurumaEngine(onigurumaWasm).then((engine) =>
       createHighlighter({
-        langs: VALID_LANGS.map((id) => bundledLanguages[id as keyof typeof bundledLanguages]),
-        themes: [THEME],
+        langs: Object.values(bundledLanguages),
+        themes: [bundledThemes[currentThemeName as keyof typeof bundledThemes]],
         engine,
       })
     ).catch((err) => {
@@ -102,7 +65,7 @@ function escapeHtml(s: string): string {
 function renderSpan(content: string, color: string | undefined): string {
   if (!content) { return ''; }
   const escaped = escapeHtml(content);
-  return color && color !== 'var(--shiki-foreground)'
+  return color
     ? `<span style="color:${color}">${escaped}</span>`
     : escaped;
 }
@@ -176,7 +139,7 @@ export async function highlightLine(
   len: number,
   langName: string
 ): Promise<string | undefined> {
-  const shikiLang = resolvedLangMap[langName];
+  const shikiLang = resolveShikiLang(langName);
   if (!shikiLang) { return undefined; }
 
   // Trim leading whitespace; adjust column to stay in sync
@@ -201,7 +164,7 @@ export async function highlightLine(
     const h = await getHighlighter();
     const { tokens } = h.codeToTokens(text, {
       lang: shikiLang,
-      theme: THEME_NAME,
+      theme: currentThemeName,
       includeExplanation: false,
     });
     const lineTokens = tokens[0] ?? [];
