@@ -9,10 +9,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 let S; // DirviewShared
 
 beforeAll(() => {
-  const code = readFileSync(join(__dirname, 'shared.js'), 'utf-8');
-  // Execute the IIFE which sets window.DirviewShared
-  // eslint-disable-next-line no-new-func
-  Function(code)();
+  // Load all shared modules in dependency order — each IIFE writes to its own
+  // window._Dirview* namespace, and shared.js assembles window.DirviewShared.
+  const files = [
+    'shared-icons.js',
+    'shared-utils.js',
+    'shared-state.js',
+    'shared-renderer.js',
+    'shared.js',
+  ];
+  for (const file of files) {
+    const code = readFileSync(join(__dirname, file), 'utf-8');
+    // eslint-disable-next-line no-new-func
+    Function(code)();
+  }
   S = window.DirviewShared;
 });
 
@@ -2087,6 +2097,38 @@ describe('createMessageHandler search messages', () => {
     expect(state.searchActive).toBe(true);
   });
 
+  it('searchProgress clears stale results from previous search', () => {
+    const { state, handler } = makeHandlerEnv();
+    // Simulate a completed first search with results
+    state.searchResults = new Map([['/a/foo.ts', [{ line: 1, column: 0, matchLength: 3, lineText: 'abc' }]]]);
+    state.searchFileCount = 1;
+    state.searchMatchCount = 1;
+    // New search begins — searchProgress should clear stale results
+    handler({ data: { type: 'searchProgress' } });
+    expect(state.searchActive).toBe(true);
+    expect(state.searchResults).toBeNull();
+    expect(state.searchFileCount).toBe(0);
+    expect(state.searchMatchCount).toBe(0);
+  });
+
+  it('second searchProgress between batches resets results so stale batches start fresh', () => {
+    const { state, handler } = makeHandlerEnv();
+    // First search delivers a batch
+    handler({ data: { type: 'searchProgress' } });
+    handler({ data: { type: 'searchResultsBatch', matches: { '/a/old.ts': [{ line: 1, column: 0, matchLength: 2, lineText: 'ap' }] }, fileCount: 1, matchCount: 1 } });
+    expect(state.searchResults.has('/a/old.ts')).toBe(true);
+
+    // Second search starts — progress clears the stale batch results
+    handler({ data: { type: 'searchProgress' } });
+    expect(state.searchResults).toBeNull();
+
+    // Second search delivers its own batch — should not include old results
+    handler({ data: { type: 'searchResultsBatch', matches: { '/b/new.ts': [{ line: 5, column: 0, matchLength: 3, lineText: 'api' }] }, fileCount: 1, matchCount: 1 } });
+    expect(state.searchResults.size).toBe(1);
+    expect(state.searchResults.has('/b/new.ts')).toBe(true);
+    expect(state.searchResults.has('/a/old.ts')).toBe(false);
+  });
+
   it('searchResultsDone sets searchActive false and final counts', () => {
     const { state, handler } = makeHandlerEnv();
     state.searchActive = true;
@@ -2096,6 +2138,19 @@ describe('createMessageHandler search messages', () => {
     expect(state.searchFileCount).toBe(5);
     expect(state.searchMatchCount).toBe(20);
     expect(state.searchTruncated).toBe(true);
+  });
+
+  it('searchResultsDone with no preceding batches (zero results) sets searchResults to empty Map', () => {
+    // Regression: when ripgrep finds nothing, no searchResultsBatch messages arrive,
+    // leaving searchResults null. searchResultsDone must set it to an empty Map so the
+    // tree renders empty rather than showing the full unfiltered tree.
+    const { state, handler } = makeHandlerEnv();
+    handler({ data: { type: 'searchProgress' } });
+    expect(state.searchResults).toBeNull(); // no batches yet
+    handler({ data: { type: 'searchResultsDone', fileCount: 0, matchCount: 0, truncated: false } });
+    expect(state.searchResults).toBeInstanceOf(Map);
+    expect(state.searchResults.size).toBe(0);
+    expect(state.searchActive).toBe(false);
   });
 });
 
@@ -2163,5 +2218,300 @@ describe('expandMatchedDirs', () => {
     S.expandMatchedDirs(state, roots, searchResults, new Set(['JavaScript']));
 
     expect(state.expanded.has('/ws/src')).toBe(false);
+  });
+});
+
+// --- expandBatchFiles ---
+describe('expandBatchFiles', () => {
+  it('expands dirs for new batch files without clearing prior expand state', () => {
+    const state = S.createState();
+    state.expanded.set('/ws/other', true); // pre-existing expand from another source
+    const roots = [
+      makeDir('/ws', 'ws', {
+        children: [
+          makeDir('/ws/src', 'src', {
+            files: [{ path: '/ws/src/a.ts', name: 'a.ts', langName: 'TypeScript' }],
+          }),
+        ],
+      }),
+    ];
+    S.expandBatchFiles(state, roots, new Set(['/ws/src/a.ts']));
+    // New match dir is expanded.
+    expect(state.expanded.get('/ws/src')).toBe(true);
+    // Pre-existing expand state is preserved (not cleared).
+    expect(state.expanded.get('/ws/other')).toBe(true);
+  });
+
+  it('respects active language filters', () => {
+    const state = S.createState();
+    state.activeFilters = new Set(['JavaScript']);
+    const roots = [
+      makeDir('/ws', 'ws', {
+        children: [
+          makeDir('/ws/src', 'src', {
+            files: [{ path: '/ws/src/a.ts', name: 'a.ts', langName: 'TypeScript' }],
+          }),
+        ],
+      }),
+    ];
+    // TypeScript file is in batch but filter only allows JavaScript — should not expand.
+    S.expandBatchFiles(state, roots, new Set(['/ws/src/a.ts']));
+    expect(state.expanded.has('/ws/src')).toBe(false);
+  });
+
+  it('accumulates expand state across multiple batch calls', () => {
+    const state = S.createState();
+    const roots = [
+      makeDir('/ws', 'ws', {
+        children: [
+          makeDir('/ws/src', 'src', {
+            files: [{ path: '/ws/src/a.ts', name: 'a.ts', langName: 'TypeScript' }],
+          }),
+          makeDir('/ws/lib', 'lib', {
+            files: [{ path: '/ws/lib/b.ts', name: 'b.ts', langName: 'TypeScript' }],
+          }),
+        ],
+      }),
+    ];
+    // First batch expands /ws/src.
+    S.expandBatchFiles(state, roots, new Set(['/ws/src/a.ts']));
+    expect(state.expanded.get('/ws/src')).toBe(true);
+    expect(state.expanded.has('/ws/lib')).toBe(false);
+    // Second batch expands /ws/lib — /ws/src remains expanded.
+    S.expandBatchFiles(state, roots, new Set(['/ws/lib/b.ts']));
+    expect(state.expanded.get('/ws/src')).toBe(true);
+    expect(state.expanded.get('/ws/lib')).toBe(true);
+  });
+});
+
+// --- searchResultsHighlight message handler ---
+describe('searchResultsHighlight', () => {
+  function makeHandlerEnv() {
+    const state = S.createState();
+    const scanBar = { show: vi.fn() };
+    const rootEl = document.createElement('div');
+    document.body.appendChild(rootEl);
+    state.render = vi.fn((roots) => { state.lastRoots = roots; });
+    state.lastRoots = [makeDir('/ws', 'ws', {})];
+    const handler = S.createMessageHandler(state, scanBar, rootEl, { render: state.render });
+    return { state, handler };
+  }
+
+  it('merges highlightedHtml into existing match entries', () => {
+    const { state, handler } = makeHandlerEnv();
+    state.searchResults = new Map([['/a/foo.ts', [{ line: 1, column: 0, matchLength: 3, lineText: 'abc' }]]]);
+    handler({ data: { type: 'searchResultsHighlight', patches: [{ path: '/a/foo.ts', idx: 0, html: '<span>abc</span>' }] } });
+    expect(state.searchResults.get('/a/foo.ts')[0].highlightedHtml).toBe('<span>abc</span>');
+  });
+
+  it('is a no-op when searchResults is null', () => {
+    const { state, handler } = makeHandlerEnv();
+    // Should not throw even with no active search.
+    expect(() => {
+      handler({ data: { type: 'searchResultsHighlight', patches: [{ path: '/a/foo.ts', idx: 0, html: '<span>x</span>' }] } });
+    }).not.toThrow();
+    expect(state.searchResults).toBeNull();
+  });
+});
+
+// --- searchProgress clears expanded state ---
+describe('searchProgress expand state reset', () => {
+  it('clears expanded state so expandBatchFiles starts fresh', () => {
+    const state = S.createState();
+    const scanBar = { show: vi.fn() };
+    const rootEl = document.createElement('div');
+    document.body.appendChild(rootEl);
+    state.render = vi.fn();
+    state.lastRoots = [makeDir('/ws', 'ws', {})];
+    const handler = S.createMessageHandler(state, scanBar, rootEl, { render: state.render });
+    state.expanded.set('/ws/old-dir', true);
+    handler({ data: { type: 'searchProgress' } });
+    expect(state.expanded.size).toBe(0);
+  });
+});
+
+// --- renderMatchLine edge cases ---
+
+describe('renderMatchLine — edge cases', () => {
+  it('handles undefined lineText without throwing (stripped match beyond MAX_MATCH_LINES)', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+    // lineText is absent — simulates a match stripped by the backend
+    const match = { line: 10, column: 0, matchLength: 3 };
+    let li;
+    expect(() => { li = renderer.renderMatchLine(file, match, 1, []); }).not.toThrow();
+    // Text element should be empty (no crash, no content)
+    expect(li.querySelector('.match-line-text').textContent).toBe('');
+  });
+
+  it('escapes HTML special chars in lineText via textContent (plain-text path)', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+    const match = { line: 1, column: 0, matchLength: 2, lineText: 'if (a < b && c > d) {}' };
+    const li = renderer.renderMatchLine(file, match, 1, []);
+    const textEl = li.querySelector('.match-line-text');
+    // textContent should contain the raw characters (browser decodes entities when reading textContent)
+    expect(textEl.textContent).toContain('<');
+    expect(textEl.textContent).toContain('>');
+    // innerHTML should have entities escaped, not literal < / >
+    expect(textEl.innerHTML).not.toMatch(/<b\b/); // no stray <b> tag
+    expect(textEl.innerHTML).toContain('&lt;');
+    expect(textEl.innerHTML).toContain('&gt;');
+  });
+});
+
+// --- searchResultsHighlight — additional idx / path cases ---
+
+describe('searchResultsHighlight — idx and path edge cases', () => {
+  function makeHandlerEnv() {
+    const state = S.createState();
+    const scanBar = { show: vi.fn() };
+    const rootEl = document.createElement('div');
+    document.body.appendChild(rootEl);
+    state.render = vi.fn((roots) => { state.lastRoots = roots; });
+    state.lastRoots = [makeDir('/ws', 'ws', {})];
+    const handler = S.createMessageHandler(state, scanBar, rootEl, { render: state.render });
+    return { state, handler };
+  }
+
+  it('patches at non-zero idx, leaving other indices unchanged', () => {
+    const { state, handler } = makeHandlerEnv();
+    state.searchResults = new Map([['/a/foo.ts', [
+      { line: 1, column: 0, matchLength: 3, lineText: 'abc' },
+      { line: 2, column: 0, matchLength: 3, lineText: 'def' },
+      { line: 3, column: 0, matchLength: 3, lineText: 'ghi' },
+    ]]]);
+    handler({ data: { type: 'searchResultsHighlight', patches: [{ path: '/a/foo.ts', idx: 2, html: '<span>ghi</span>' }] } });
+    const matches = state.searchResults.get('/a/foo.ts');
+    expect(matches[2].highlightedHtml).toBe('<span>ghi</span>');
+    expect(matches[0].highlightedHtml).toBeUndefined();
+    expect(matches[1].highlightedHtml).toBeUndefined();
+  });
+
+  it('out-of-bounds idx is a no-op — does not crash or add entries', () => {
+    const { state, handler } = makeHandlerEnv();
+    state.searchResults = new Map([['/a/foo.ts', [
+      { line: 1, column: 0, matchLength: 3, lineText: 'abc' },
+      { line: 2, column: 0, matchLength: 3, lineText: 'def' },
+    ]]]);
+    expect(() => {
+      handler({ data: { type: 'searchResultsHighlight', patches: [{ path: '/a/foo.ts', idx: 5, html: '<span>x</span>' }] } });
+    }).not.toThrow();
+    const matches = state.searchResults.get('/a/foo.ts');
+    expect(matches.length).toBe(2);
+    expect(matches[0].highlightedHtml).toBeUndefined();
+  });
+
+  it('unknown file path is a no-op — does not crash or mutate existing results', () => {
+    const { state, handler } = makeHandlerEnv();
+    state.searchResults = new Map([['/a/foo.ts', [{ line: 1, column: 0, matchLength: 3, lineText: 'abc' }]]]);
+    expect(() => {
+      handler({ data: { type: 'searchResultsHighlight', patches: [{ path: '/a/OTHER.ts', idx: 0, html: '<span>x</span>' }] } });
+    }).not.toThrow();
+    expect(state.searchResults.get('/a/foo.ts')[0].highlightedHtml).toBeUndefined();
+  });
+});
+
+// --- dirMatchesSearch — empty dir ---
+
+describe('dirMatchesSearch — empty dir', () => {
+  it('returns false for a dir with no files and no children when search is active', () => {
+    const state = S.createState();
+    state.searchResults = new Map([['/a/other.ts', []]]);
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const node = makeDir('/a', 'a', { files: [], children: [] });
+    expect(renderer.dirMatchesSearch(node)).toBe(false);
+  });
+});
+
+// --- expandMatchedDirs — deep nesting ---
+
+describe('expandMatchedDirs — deep nesting', () => {
+  it('expands all ancestor dirs for a 3-level-deep match', () => {
+    const state = S.createState();
+    // Sibling dirs at each level prevent folder compaction (single-child chains collapse to the
+    // deepest node, making intermediate paths invisible to `state.expanded`).
+    const roots = [
+      makeDir('/ws', 'ws', {
+        children: [
+          makeDir('/ws/src', 'src', {
+            children: [
+              makeDir('/ws/src/deep', 'deep', {
+                files: [{ path: '/ws/src/deep/a.ts', name: 'a.ts', langName: 'TypeScript' }],
+              }),
+              makeDir('/ws/src/other', 'other', {}), // prevents src→deep compaction
+            ],
+          }),
+          makeDir('/ws/docs', 'docs', {}), // prevents ws→src compaction
+        ],
+      }),
+    ];
+    const searchResults = new Map([['/ws/src/deep/a.ts', []]]);
+    S.expandMatchedDirs(state, roots, searchResults, new Set());
+
+    expect(state.expanded.get('/ws')).toBe(true);
+    expect(state.expanded.get('/ws/src')).toBe(true);
+    expect(state.expanded.get('/ws/src/deep')).toBe(true);
+  });
+});
+
+// --- searchResultsBatch with empty matches ---
+
+describe('searchResultsBatch — empty matches', () => {
+  function makeHandlerEnv() {
+    const state = S.createState();
+    const scanBar = { show: vi.fn() };
+    const rootEl = document.createElement('div');
+    document.body.appendChild(rootEl);
+    state.render = vi.fn((roots) => { state.lastRoots = roots; });
+    state.lastRoots = [makeDir('/ws', 'ws', {})];
+    const handler = S.createMessageHandler(state, scanBar, rootEl, { render: state.render });
+    return { state, handler };
+  }
+
+  it('initializes searchResults to empty Map when null and empty batch arrives', () => {
+    const { state, handler } = makeHandlerEnv();
+    handler({ data: { type: 'searchProgress' } });
+    expect(state.searchResults).toBeNull();
+    handler({ data: { type: 'searchResultsBatch', matches: {}, fileCount: 0, matchCount: 0 } });
+    expect(state.searchResults).toBeInstanceOf(Map);
+    expect(state.searchResults.size).toBe(0);
+  });
+
+  it('does not discard existing results when an empty batch arrives', () => {
+    const { state, handler } = makeHandlerEnv();
+    handler({ data: { type: 'searchProgress' } });
+    handler({ data: { type: 'searchResultsBatch', matches: { '/a/foo.ts': [] }, fileCount: 1, matchCount: 0 } });
+    handler({ data: { type: 'searchResultsBatch', matches: {}, fileCount: 1, matchCount: 0 } });
+    expect(state.searchResults.has('/a/foo.ts')).toBe(true);
+    expect(state.searchResults.size).toBe(1);
+  });
+});
+
+// --- expandBatchFiles — orphan path ---
+
+describe('expandBatchFiles — orphan paths', () => {
+  it('is a no-op for file paths that do not match any dir in the tree', () => {
+    const state = S.createState();
+    const roots = [
+      makeDir('/ws', 'ws', {
+        children: [
+          makeDir('/ws/src', 'src', {
+            files: [{ path: '/ws/src/a.ts', name: 'a.ts', langName: 'TypeScript' }],
+          }),
+        ],
+      }),
+    ];
+    // Path belongs to a completely different root
+    expect(() => {
+      S.expandBatchFiles(state, roots, new Set(['/other/project/file.ts']));
+    }).not.toThrow();
+    // No dirs should have been expanded
+    expect(state.expanded.size).toBe(0);
   });
 });
