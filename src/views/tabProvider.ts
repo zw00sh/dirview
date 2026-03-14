@@ -74,10 +74,16 @@ export class TabProvider {
   }
 
   /** Returns the rg root paths for a given dirPath.
-   *  Root tabs search across all workspace folders; dir tabs are scoped to their subtree. */
+   *  Root tabs search across all workspace folders; dir tabs are scoped to their subtree.
+   *  dirPath is workspace-relative (e.g. 'src/scanner'), but ripgrep requires absolute paths. */
   private getRootPaths(dirPath: string): string[] {
     if (dirPath === '') {
       return vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath) ?? [];
+    }
+    // Convert the workspace-relative dirPath to an absolute filesystem path.
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    if (folders.length > 0) {
+      return [vscode.Uri.joinPath(folders[0].uri, dirPath).fsPath];
     }
     return [dirPath];
   }
