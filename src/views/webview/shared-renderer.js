@@ -188,6 +188,19 @@
         return;
       }
 
+      // Dir-name click → navigate (tab mode only; onNavigate is not set in sidebar).
+      if (deps.onNavigate) {
+        // Breadcrumb ancestor segment: navigate to that specific ancestor path.
+        const navSeg = e.target.closest('[data-navigate-path]');
+        if (navSeg) { deps.onNavigate(navSeg.dataset.navigatePath); return; }
+        // Any dir-name click: navigate to that directory.
+        const dirNameEl = e.target.closest('.dir-name');
+        if (dirNameEl) {
+          const parentDirRow = dirNameEl.closest('.dir-row[data-path]');
+          if (parentDirRow) { deps.onNavigate(parentDirRow.dataset.path); return; }
+        }
+      }
+
       // Dir row toggle (expand/collapse) — only when click is not on an action element.
       const dirRow = e.target.closest('.dir-row[data-path]');
       if (dirRow) {
@@ -697,7 +710,28 @@
       nameEl.className = 'dir-name';
       nameEl.title = displayNode.path || displayName;
 
-      if (compactSegments.length === 1) {
+      // In tab mode (onNavigate set), render ancestor breadcrumb for the root node of a subdir tab.
+      // For workspace root tabs (state.dirPath falsy), the root name renders normally below.
+      if (depth === 0 && typeof deps.onNavigate === 'function' && state.dirPath) {
+        const segments = state.dirPath.split('/');
+        const hasRootName = !!state.workspaceFolderName;
+        const allNames = hasRootName ? [state.workspaceFolderName, ...segments] : segments;
+        for (let i = 0; i < allNames.length; i++) {
+          if (i > 0) {
+            const sep = document.createElement('span');
+            sep.className = 'path-sep';
+            sep.textContent = ' / ';
+            nameEl.appendChild(sep);
+          }
+          const offset = hasRootName ? i - 1 : i;
+          const segPath = offset < 0 ? '' : segments.slice(0, offset + 1).join('/');
+          const seg = document.createElement('span');
+          seg.className = 'path-segment';
+          seg.dataset.navigatePath = segPath;
+          seg.textContent = allNames[i];
+          nameEl.appendChild(seg);
+        }
+      } else if (compactSegments.length === 1) {
         nameEl.textContent = compactSegments[0].name;
       } else {
         for (let i = 0; i < compactSegments.length; i++) {
@@ -727,8 +761,8 @@
       barSpacer.className = 'bar-spacer';
       row.appendChild(barSpacer);
 
-      // Proportional bar
-      if (displayNode.totalFiles > 0) {
+      // Proportional bar — skip for root node when hideRootBar is set (tab breadcrumb row)
+      if (displayNode.totalFiles > 0 && !(depth === 0 && opts.hideRootBar)) {
         const metric = state.currentSortMode === 'size' ? displayNode.sizeBytes : displayNode.totalFiles;
         const pct = metric / maxMetric;
         const barWrapWidth = computeBarWidth(pct, clientWidth, root, opts);

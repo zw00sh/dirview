@@ -15,7 +15,6 @@
   const searchChevronEl = document.getElementById('search-chevron');
   const searchContentEl = document.getElementById('search-content');
   const root = document.getElementById('root');
-  const tabTitleEl = document.getElementById('tab-title');
   const sortBtn = document.getElementById('tab-sort');
   const toggleIgnoredBtn = document.getElementById('tab-toggle-ignored');
   const toggleTruncationBtn = document.getElementById('tab-toggle-truncation');
@@ -41,12 +40,15 @@
     tooltip,
     options: {
       skipDepthZeroGuides: false,
+      hideRootBar: true,
       barFactor: 0.35,
       barMaxWidth: 400,
       barFallbackWidth: 600,
       barMinWidth: 24,
       barSqrt: true,
     },
+    // Navigate to directory when its name is clicked in the tab tree.
+    onNavigate: (path) => vscode.postMessage({ command: 'navigateToDir', path }),
   });
 
   let currentShowIgnored = false;
@@ -169,61 +171,6 @@
     sortBtn.setAttribute('aria-label', sortBtn.title);
     sortBtn.innerHTML = { files: S.SVG_SORT_FILES, name: S.SVG_SORT_NAME, size: S.SVG_SORT_SIZE }[state.currentSortMode] || S.SVG_SORT_FILES;
 
-    // Toolbar title: clickable breadcrumb showing current directory path + dimmed sort indicator.
-    // The './' prefix is rendered via CSS ::before on .tab-title, positioned absolutely so it
-    // doesn't push 'source' rightward — allowing 'source' to align with depth-0 tree node names.
-    tabTitleEl.innerHTML = '';
-
-    if (!state.dirPath) {
-      // Workspace root — show the workspace folder name (or "/" as fallback)
-      const rootSeg = document.createElement('span');
-      rootSeg.className = 'ancestor-path-segment';
-      rootSeg.textContent = state.workspaceFolderName || '/';
-      rootSeg.addEventListener('click', () => {
-        vscode.postMessage({ command: 'navigateToDir', path: '' });
-      });
-      tabTitleEl.appendChild(rootSeg);
-    } else {
-      // Subdir — prepend workspace folder name as first segment, then each path segment.
-      const segments = state.dirPath.split('/');
-      const hasRoot = !!state.workspaceFolderName;
-      const allNames = hasRoot ? [state.workspaceFolderName, ...segments] : segments;
-
-      for (let i = 0; i < allNames.length; i++) {
-        if (i > 0) {
-          const sep = document.createElement('span');
-          sep.className = 'ancestor-path-sep';
-          sep.textContent = ' / ';
-          tabTitleEl.appendChild(sep);
-        }
-
-        // offset: -1 means the root segment (path = ''), >=0 is index into segments
-        const offset = hasRoot ? i - 1 : i;
-        const segPath = offset < 0 ? '' : segments.slice(0, offset + 1).join('/');
-
-        const span = document.createElement('span');
-        span.className = 'ancestor-path-segment';
-        span.textContent = allNames[i];
-        span.title = offset < 0 ? (state.workspaceFolderName || '/') : segPath;
-        span.setAttribute('data-vscode-context', JSON.stringify({
-          webviewSection: 'directory',
-          path: segPath,
-          rootName: state.workspaceFolderName || state.currentRootName,
-          preventDefaultContextMenuItems: true,
-        }));
-        span.addEventListener('click', () => {
-          vscode.postMessage({ command: 'navigateToDir', path: segPath });
-        });
-        tabTitleEl.appendChild(span);
-      }
-    }
-
-    // Trailing slash — same class as inter-segment separators so spacing is consistent
-    const trailingSlash = document.createElement('span');
-    trailingSlash.className = 'ancestor-path-sep';
-    trailingSlash.textContent = ' /';
-    tabTitleEl.appendChild(trailingSlash);
-
     updateLegend(roots ? S.computeStats(state.lastRoots) : []);
     searchBar.updateFilterWarning(state.activeFilters.size > 0);
 
@@ -251,7 +198,7 @@
     }
 
     root.querySelector('.empty')?.remove();
-    S.renderTree(state, renderer, root);
+    S.renderTree(state, renderer, root, { showRootNode: true });
   }
 
   state.render = render;

@@ -7,46 +7,26 @@ body {
   overflow: hidden;
 }
 
-.tab-legend-section, .tab-search-section, .tab-toolbar {
+.tab-legend-section, .tab-search-section, .tab-tree-header {
   flex-shrink: 0;
 }
 
-.tab-toolbar {
+.tab-tree-header {
+  height: 22px;
+  padding: 0 8px;
+  cursor: default;
+  user-select: none;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 6px 12px 6px 0;
-  gap: 8px;
+  gap: 4px;
+  border-bottom: 1px solid var(--vscode-sideBar-border, rgba(128,128,128,0.2));
 }
 
-.tab-toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.tab-title {
-  font-size: var(--vscode-font-size);
-  color: var(--vscode-icon-foreground);
-  position: relative;
-  /* Indent matches depth-0 tree node name start (measured: 24px from left edge) */
-  padding-left: 24px;
-}
-
-/* './ ' prefix with trailing space: right-edge anchored to the content start
- * (padding-left: 16px) so 'source' stays aligned with depth-0 tree names.
- * white-space: pre preserves the trailing space for a 1-space gap. */
-.tab-title::before {
-  content: './ ';
-  position: absolute;
-  right: calc(100% - 24px);
-  opacity: 0.4;
-  white-space: pre;
-}
-
-.tab-title-sort {
-  opacity: 0.4;
-  margin-left: 4px;
+.tab-tree-header-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--vscode-foreground);
 }
 
 .tab-action {
@@ -162,21 +142,9 @@ body {
   padding-right: 8px;
 }
 
-.tab-view .dir-name { flex-shrink: 1; }
+/* Directory name navigation in tab tree: clicking any dir name navigates to that directory. */
+.tab-view .dir-name { flex-shrink: 1; cursor: pointer; }
+.tab-view .dir-name:hover { text-decoration: underline; }
 .tab-view .file-name { flex-shrink: 1; }
 .tab-view .indent-guide { width: 16px; }
-
-/* Ancestor path breadcrumb in toolbar */
-.ancestor-path-segment {
-  cursor: pointer;
-}
-
-.ancestor-path-segment:hover {
-  opacity: 1;
-  text-decoration: underline;
-}
-
-.ancestor-path-sep {
-  opacity: 0.4;
-}
 

@@ -35,8 +35,20 @@
 
   // Renders the root-level tree rows into treeEl. Shared between sidebar and tab views.
   // Requires state.lastRoots to be set.
-  function renderRoots(renderer, state, treeEl, maxMetric, clientWidth) {
+  // opts.showRootNode: if true (tab), render each root as a depth-0 dir-row itself rather than
+  //   rendering the root's children at depth 0. Enables the root-as-tree-node design where the
+  //   workspace folder (or subdir) appears as the topmost row and its children are at depth 1.
+  function renderRoots(renderer, state, treeEl, maxMetric, clientWidth, opts) {
     const roots = state.lastRoots;
+
+    if (opts && opts.showRootNode) {
+      // Tab view: each root is a visible depth-0 node; no workspace-root-header needed.
+      for (const r of roots) {
+        state.currentRootName = r.name;
+        treeEl.appendChild(renderer.renderDirNode(r, 0, maxMetric, [], clientWidth));
+      }
+      return;
+    }
 
     for (const r of roots) {
       state.currentRootName = r.name;
@@ -218,13 +230,13 @@
       existingTree.className = treeClass;
       const newTreeEl = document.createElement('ul');
       newTreeEl.className = treeClass;
-      renderRoots(renderer, state, newTreeEl, maxMetric, clientWidth);
+      renderRoots(renderer, state, newTreeEl, maxMetric, clientWidth, opts);
       patchTreeChildren(existingTree, newTreeEl);
     } else {
       // First render (or after loading/error cleared the container): full creation.
       const treeEl = document.createElement('ul');
       treeEl.className = treeClass;
-      renderRoots(renderer, state, treeEl, maxMetric, clientWidth);
+      renderRoots(renderer, state, treeEl, maxMetric, clientWidth, opts);
       rootEl.appendChild(treeEl);
     }
 

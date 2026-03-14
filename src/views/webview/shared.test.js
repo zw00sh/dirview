@@ -277,7 +277,7 @@ function makeDir(path, name, { children = [], files = [], totalFiles = 0, sizeBy
   return { path, name, children, files, totalFiles, sizeBytes, stats };
 }
 
-function makeRenderer(state, { onExpandChanged } = {}) {
+function makeRenderer(state, { onExpandChanged, onNavigate } = {}) {
   const vscode = { postMessage: vi.fn() };
   const rootEl = document.createElement('div');
   document.body.appendChild(rootEl);
@@ -291,6 +291,7 @@ function makeRenderer(state, { onExpandChanged } = {}) {
     tooltip: tooltipEl,
     options: { skipDepthZeroGuides: false, barFactor: 0.4, barMaxWidth: 200, barFallbackWidth: 300 },
     onExpandChanged,
+    onNavigate,
   });
   // Expose rootEl and vscode so tests can append rendered elements and verify messages.
   renderer._rootEl = rootEl;
@@ -2770,5 +2771,217 @@ describe('setupDebugEval', () => {
     expect(postMessage).not.toHaveBeenCalled();
 
     document.body.removeAttribute('data-debug');
+  });
+});
+
+// --- showRootNode option ---
+
+describe('renderTree showRootNode', () => {
+  // Use two children to prevent single-child compaction, which would change data-node-path.
+  function makeWorkspaceRoot() {
+    const src = makeDir('/ws/src', 'src', { totalFiles: 1, stats: [] });
+    const lib = makeDir('/ws/lib', 'lib', { totalFiles: 1, stats: [] });
+    return makeDir('/ws', 'myProject', { children: [src, lib], totalFiles: 2, stats: [] });
+  }
+
+  it('renders root as a depth-0 dir-row when showRootNode is true', () => {
+    const state = S.createState();
+    state.dirPath = '';
+    state.workspaceFolderName = 'myProject';
+    const root = makeWorkspaceRoot();
+    state.lastRoots = [root];
+    state.currentSortMode = 'files';
+
+    const renderer = makeRenderer(state);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    S.renderTree(state, renderer, container, { showRootNode: true });
+
+    const tree = container.querySelector('ul.tree');
+    expect(tree).not.toBeNull();
+    // Root itself is a dir-row at depth 0 (two children prevents compaction)
+    const rootLi = tree.querySelector('[data-node-path="/ws"]');
+    expect(rootLi).not.toBeNull();
+    expect(rootLi.querySelector('.dir-row')).not.toBeNull();
+    // Root is not a workspace-root-header
+    expect(tree.querySelector('.workspace-root-header')).toBeNull();
+  });
+
+  it('children appear at depth 1 (inside root children UL)', () => {
+    const state = S.createState();
+    state.dirPath = '';
+    const root = makeWorkspaceRoot();
+    state.lastRoots = [root];
+    state.currentSortMode = 'files';
+    state.expanded.set('/ws', true);
+
+    const renderer = makeRenderer(state);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    S.renderTree(state, renderer, container, { showRootNode: true });
+
+    // Root is at depth 0, children are inside root's children UL
+    const rootLi = container.querySelector('[data-node-path="/ws"]');
+    const childrenUl = rootLi.querySelector('ul.children');
+    expect(childrenUl).not.toBeNull();
+    expect(childrenUl.querySelector('[data-node-path="/ws/src"]')).not.toBeNull();
+    expect(childrenUl.querySelector('[data-node-path="/ws/lib"]')).not.toBeNull();
+  });
+
+  it('falls back to rendering root children at depth 0 when showRootNode is false', () => {
+    const state = S.createState();
+    const root = makeWorkspaceRoot();
+    state.lastRoots = [root];
+    state.currentSortMode = 'files';
+
+    const renderer = makeRenderer(state);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    S.renderTree(state, renderer, container);  // no showRootNode
+
+    const tree = container.querySelector('ul.tree');
+    // /ws root itself is NOT rendered as a dir-row
+    expect(tree.querySelector('[data-node-path="/ws"]')).toBeNull();
+    // /ws/src and /ws/lib are at the top level (depth 0)
+    expect(tree.querySelector('[data-node-path="/ws/src"]')).not.toBeNull();
+    expect(tree.querySelector('[data-node-path="/ws/lib"]')).not.toBeNull();
+  });
+});
+
+// --- onNavigate: dir-name click navigation ---
+
+describe('onNavigate dir-name click', () => {
+  // Two children prevents single-child compaction (which would change data-node-path).
+  function makeNavTree() {
+    const jsFile = (dir, name) => ({ name, path: `${dir}/${name}`, langName: 'JS', langColor: '#f1e05a', sizeBytes: 0 });
+    const src = makeDir('/ws/src', 'src', { files: [jsFile('/ws/src', 'a.js')], totalFiles: 1, stats: [] });
+    const lib = makeDir('/ws/lib', 'lib', { files: [jsFile('/ws/lib', 'b.js')], totalFiles: 1, stats: [] });
+    const root = makeDir('/ws', 'ws', { children: [src, lib], totalFiles: 2, stats: [] });
+    return { root, src, lib };
+  }
+
+  it('calls onNavigate with dir path when dir-name is clicked', () => {
+    const state = S.createState();
+    const navigate = vi.fn();
+    const { root } = makeNavTree();
+    state.expanded.set('/ws', true);
+
+    const renderer = makeRenderer(state, { onNavigate: navigate });
+    renderer.beforeRender();
+    const li = renderer.renderDirNode(root, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
+
+    const srcLi = li.querySelector('[data-node-path="/ws/src"]');
+    const dirName = srcLi.querySelector('.dir-name');
+    dirName.click();
+
+    expect(navigate).toHaveBeenCalledWith('/ws/src');
+  });
+
+  it('does not toggle expand/collapse when dir-name is clicked (navigate instead)', () => {
+    const state = S.createState();
+    state.render = vi.fn();
+    const navigate = vi.fn();
+    const { root } = makeNavTree();
+    state.expanded.set('/ws', true);
+    state.expanded.set('/ws/src', false);
+
+    const renderer = makeRenderer(state, { onNavigate: navigate });
+    renderer.beforeRender();
+    const li = renderer.renderDirNode(root, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
+
+    const srcLi = li.querySelector('[data-node-path="/ws/src"]');
+    const dirName = srcLi.querySelector('.dir-name');
+    dirName.click();
+
+    // onNavigate was called, expand state was NOT changed
+    expect(navigate).toHaveBeenCalledWith('/ws/src');
+    expect(state.expanded.get('/ws/src')).toBe(false);
+  });
+
+  it('renders breadcrumb with ancestor segments at depth 0 when state.dirPath is set', () => {
+    const state = S.createState();
+    state.dirPath = 'src/views';
+    state.workspaceFolderName = 'dirview';
+    const navigate = vi.fn();
+
+    const root = makeDir('src/views', 'views', { totalFiles: 2, stats: [] });
+    const renderer = makeRenderer(state, { onNavigate: navigate });
+    renderer.beforeRender();
+    const li = renderer.renderDirNode(root, 0, 10, [], 300);
+
+    const nameEl = li.querySelector('.dir-name');
+    const segments = nameEl.querySelectorAll('.path-segment');
+    // dirview / src / views = 3 segments
+    expect(segments.length).toBe(3);
+    expect(segments[0].textContent).toBe('dirview');
+    expect(segments[0].dataset.navigatePath).toBe('');
+    expect(segments[1].textContent).toBe('src');
+    expect(segments[1].dataset.navigatePath).toBe('src');
+    expect(segments[2].textContent).toBe('views');
+    expect(segments[2].dataset.navigatePath).toBe('src/views');
+  });
+
+  it('clicking breadcrumb ancestor segment navigates to ancestor path', () => {
+    const state = S.createState();
+    state.dirPath = 'src/views';
+    state.workspaceFolderName = 'dirview';
+    const navigate = vi.fn();
+
+    const root = makeDir('src/views', 'views', { totalFiles: 2, stats: [] });
+    const renderer = makeRenderer(state, { onNavigate: navigate });
+    renderer.beforeRender();
+    const li = renderer.renderDirNode(root, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
+
+    // Click the 'src' ancestor segment
+    const nameEl = li.querySelector('.dir-name');
+    const segments = nameEl.querySelectorAll('.path-segment');
+    const srcSeg = Array.from(segments).find(s => s.textContent === 'src');
+    srcSeg.click();
+
+    expect(navigate).toHaveBeenCalledWith('src');
+  });
+
+  it('does not render breadcrumb at depth 0 when state.dirPath is empty (workspace root)', () => {
+    const state = S.createState();
+    state.dirPath = '';
+    state.workspaceFolderName = 'dirview';
+    const navigate = vi.fn();
+
+    const root = makeDir('', 'dirview', { totalFiles: 1, stats: [] });
+    const renderer = makeRenderer(state, { onNavigate: navigate });
+    renderer.beforeRender();
+    const li = renderer.renderDirNode(root, 0, 10, [], 300);
+
+    const nameEl = li.querySelector('.dir-name');
+    // No breadcrumb segments — just the folder name as plain text
+    expect(nameEl.querySelectorAll('[data-navigate-path]').length).toBe(0);
+    expect(nameEl.textContent).toBe('dirview');
+  });
+
+  it('does not call onNavigate when chevron is clicked (expand/collapse instead)', async () => {
+    const state = S.createState();
+    state.render = vi.fn();
+    state.lastRoots = [];
+    const navigate = vi.fn();
+    const { root } = makeNavTree();
+    state.expanded.set('/ws', true);
+    state.expanded.set('/ws/src', false);
+
+    const renderer = makeRenderer(state, { onNavigate: navigate });
+    renderer.beforeRender();
+    const li = renderer.renderDirNode(root, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
+
+    const srcLi = li.querySelector('[data-node-path="/ws/src"]');
+    const chevron = srcLi.querySelector('.chevron');
+    chevron.click();
+
+    // Navigate was NOT called — clicking chevron (outside .dir-name) expands/collapses
+    expect(navigate).not.toHaveBeenCalled();
+    // Expand state was toggled
+    expect(state.expanded.get('/ws/src')).toBe(true);
   });
 });
