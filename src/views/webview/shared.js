@@ -380,29 +380,6 @@
         if (state.searchBar_updateStatus) { state.searchBar_updateStatus(); }
         if (state.lastRoots) { state.rerender(); }
       },
-      /* @DEV_START */
-      debugEval(message) {
-        // Cross-frame debug bridge: evals a script string and returns the result
-        // to the extension host AND to the parent frame (so CDP can read it).
-        // Only functional when CSP includes 'unsafe-eval' (Development mode).
-        // Double-gated: body must have data-debug attribute AND CSP must allow eval.
-        // Stripped entirely from production builds by copyWebview.js.
-        if (!document.body.hasAttribute('data-debug')) { return; }
-        const id = message.id;
-        try {
-          // eslint-disable-next-line no-eval
-          const result = eval(message.script);
-          const serialized = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
-          if (deps.vscode) { deps.vscode.postMessage({ command: 'debugEvalResult', id, result: serialized }); }
-          // Also post to parent chain so the renderer (CDP) can read results.
-          window.parent.postMessage({ type: 'dirview-debug-result', id, result: serialized }, '*');
-        } catch (err) {
-          const errStr = String(err);
-          if (deps.vscode) { deps.vscode.postMessage({ command: 'debugEvalResult', id, error: errStr }); }
-          window.parent.postMessage({ type: 'dirview-debug-result', id, error: errStr }, '*');
-        }
-      },
-      /* @DEV_END */
     };
 
     return function (event) {
@@ -726,6 +703,39 @@
       true);
   }
 
+  /* @DEV_START */
+  // Sets up the cross-frame debug eval bridge for a webview.
+  // Call once per webview entry point (main.js, tab.js, languages.js, search.js) after
+  // acquireVsCodeApi(). Registers an independent message listener so the bridge works in
+  // all webviews regardless of whether they use createMessageHandler.
+  //
+  // Security: triple-gated in dev mode only —
+  //   (1) this function is entirely stripped from production builds by copyWebview.js
+  //   (2) the caller site is inside @DEV_START/@DEV_END markers in each entry point
+  //   (3) requires data-debug body attribute (set by buildWebviewHtml only when debug=true)
+  //   (4) requires 'unsafe-eval' in CSP (set by buildWebviewHtml only when debug=true)
+  function setupDebugEval(vscode) {
+    if (!document.body.hasAttribute('data-debug')) { return; }
+    window.addEventListener('message', function (event) {
+      const message = event.data;
+      if (message.type !== 'debugEval') { return; }
+      const id = message.id;
+      try {
+        // eslint-disable-next-line no-eval
+        const result = eval(message.script);
+        const serialized = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
+        vscode.postMessage({ command: 'debugEvalResult', id, result: serialized });
+        // Also post to parent frame so CDP renderer tools can read results.
+        window.parent.postMessage({ type: 'dirview-debug-result', id, result: serialized }, '*');
+      } catch (err) {
+        const errStr = String(err);
+        vscode.postMessage({ command: 'debugEvalResult', id, error: errStr });
+        window.parent.postMessage({ type: 'dirview-debug-result', id, error: errStr }, '*');
+      }
+    });
+  }
+  /* @DEV_END */
+
   window.DirviewShared = {
     // Icons
     SVG_CHEVRON: I.SVG_CHEVRON, SVG_PLUS: I.SVG_PLUS, SVG_WARNING: I.SVG_WARNING,
@@ -749,5 +759,8 @@
     patchTreeChildren, patchDirLi, createSearchBar,
     walkMatchingDirs, expandMatchedDirs, expandBatchFiles,
     updateSearchStatus, scheduleSearchRender,
+    /* @DEV_START */
+    setupDebugEval,
+    /* @DEV_END */
   };
 })();

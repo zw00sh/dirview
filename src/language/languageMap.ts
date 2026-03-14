@@ -29,6 +29,26 @@ const PREFERRED = new Map<string, string>([
   ['.pro', 'Prolog'],
   ['.cls', 'TeX'],
   ['.f', 'Fortran'],
+  // High-priority: very common extensions with ambiguous linguist mappings
+  ['.h', 'C'],
+  ['.ts', 'TypeScript'],
+  ['.tsx', 'TSX'],
+  ['.json', 'JSON'],
+  ['.cs', 'C#'],
+  // Medium-priority: reasonably common languages
+  ['.pl', 'Perl'],
+  ['.r', 'R'],
+  ['.ex', 'Elixir'],
+  ['.ml', 'OCaml'],
+  ['.sc', 'Scala'],
+  ['.d', 'D'],
+  ['.sol', 'Solidity'],
+  ['.gd', 'GDScript'],
+  ['.typ', 'Typst'],
+  ['.lean', 'Lean 4'],
+  ['.nu', 'Nushell'],
+  ['.hh', 'C++'],
+  ['.re', 'Reason'],
 ]);
 
 // Build lookup maps at module load time

@@ -95,7 +95,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // Pending eval promises keyed by id — resolved when a webview responds.
     const pending = new Map<number, (value: string) => void>();
 
-    // Called by providers when a webview sends back a debugEvalResult.
+    // Called by any provider when its webview sends back a debugEvalResult.
+    // First responder wins — the pending entry is deleted after first resolution.
     const onDebugResult = (msg: { id?: number; result?: string; error?: string }) => {
       const id = msg.id;
       if (id === undefined) { return; }
@@ -106,13 +107,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     };
     sidebarProvider.onDebugResult = onDebugResult;
     tabProvider.onDebugResult = onDebugResult;
+    languagesProvider.onDebugResult = onDebugResult;
+    searchProvider.onDebugResult = onDebugResult;
 
-    const debugEval = (script: string): Promise<string> => {
+    // Named providers for targeted eval. 'all' broadcasts to every provider.
+    const providerMap: Record<string, Array<{ debugEval: (s: string, id: number) => void }>> = {
+      sidebar: [sidebarProvider],
+      tab: [tabProvider],
+      languages: [languagesProvider],
+      search: [searchProvider],
+      all: [sidebarProvider, tabProvider, languagesProvider, searchProvider],
+    };
+
+    // Evaluates a script in the specified target frame(s) and returns the first response.
+    // Exposed as globalThis.__dirviewDebugEval(script, target?) on the Node inspector.
+    // Call via: npm run debug-eval -- <target>  (reads /tmp/dirview-debug.js)
+    const debugEval = (script: string, target?: string): Promise<string> => {
       const id = ++debugEvalId;
+      const targets = providerMap[target || 'all'] ?? providerMap.all;
       return new Promise((resolve) => {
         pending.set(id, resolve);
-        sidebarProvider.debugEval(script, id);
-        tabProvider.debugEval(script, id);
+        for (const provider of targets) { provider.debugEval(script, id); }
         // Timeout: resolve with error if no webview responds within 3s.
         setTimeout(() => {
           if (pending.has(id)) {
@@ -127,8 +142,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       vscode.commands.registerCommand('dirview.debugEval', debugEval)
     );
 
-    // Expose on globalThis so the Node inspector (port 9223) can call it directly:
-    //   globalThis.__dirviewDebugEval('document.title')
+    // Expose on globalThis so the Node inspector (port 9223) can call it directly.
     // Also expose the vscode commands API for arbitrary command execution.
     (globalThis as any).__dirviewDebugEval = debugEval;
     (globalThis as any).__dirviewExecCommand = vscode.commands.executeCommand.bind(vscode.commands);

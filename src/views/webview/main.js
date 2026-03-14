@@ -2,6 +2,9 @@
 (function () {
   const S = window.DirviewShared;
   const vscode = acquireVsCodeApi();
+  /* @DEV_START */
+  if (S.setupDebugEval) { S.setupDebugEval(vscode); }
+  /* @DEV_END */
   const root = document.getElementById('root');
 
   const scanBar = S.createScanBar();

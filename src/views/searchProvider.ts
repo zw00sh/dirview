@@ -18,6 +18,7 @@ export class SearchProvider implements vscode.WebviewViewProvider {
   onSearchResultsDone?: (data: { fileCount: number; matchCount: number; truncated: boolean }) => void;
   onSearchProgress?: () => void;
   onSearchClear?: () => void;
+  onDebugResult?: (msg: { id?: number; result?: string; error?: string }) => void;
 
   debug = false;
 
@@ -99,6 +100,11 @@ export class SearchProvider implements vscode.WebviewViewProvider {
           });
         }
       };
+
+      if (message.command === 'debugEvalResult') {
+        this.onDebugResult?.(message as any);
+        return;
+      }
 
       // clearSearch is handled by handleSearchMessage, but we also need to call onSearchClear.
       // Override the clear branch by checking first and calling our callback.

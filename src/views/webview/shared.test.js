@@ -2689,3 +2689,86 @@ describe('renderFileMatches', () => {
     expect(container.children.length).toBe(0);
   });
 });
+
+// --- setupDebugEval ---
+describe('setupDebugEval', () => {
+  it('is exported on DirviewShared', () => {
+    expect(typeof S.setupDebugEval).toBe('function');
+  });
+
+  it('posts debugEvalResult back to vscode when data-debug is set', async () => {
+    document.body.setAttribute('data-debug', '');
+    const postMessage = vi.fn();
+    const mockVscode = { postMessage };
+
+    S.setupDebugEval(mockVscode);
+
+    // Dispatch a debugEval message — the handler should eval the script and postMessage the result.
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: 'debugEval', id: 99, script: '1 + 2' },
+    }));
+
+    // Allow the synchronous handler to run.
+    await Promise.resolve();
+
+    expect(postMessage).toHaveBeenCalledWith({
+      command: 'debugEvalResult',
+      id: 99,
+      result: '3',
+    });
+
+    document.body.removeAttribute('data-debug');
+  });
+
+  it('posts error result when the script throws', async () => {
+    document.body.setAttribute('data-debug', '');
+    const postMessage = vi.fn();
+    const mockVscode = { postMessage };
+
+    S.setupDebugEval(mockVscode);
+
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: 'debugEval', id: 100, script: 'throw new Error("boom")' },
+    }));
+
+    await Promise.resolve();
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ command: 'debugEvalResult', id: 100, error: expect.stringContaining('boom') })
+    );
+
+    document.body.removeAttribute('data-debug');
+  });
+
+  it('does nothing when data-debug attribute is absent', async () => {
+    document.body.removeAttribute('data-debug');
+    const postMessage = vi.fn();
+    const mockVscode = { postMessage };
+
+    S.setupDebugEval(mockVscode);
+
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: 'debugEval', id: 101, script: '42' },
+    }));
+
+    await Promise.resolve();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  it('ignores non-debugEval message types', async () => {
+    document.body.setAttribute('data-debug', '');
+    const postMessage = vi.fn();
+    const mockVscode = { postMessage };
+
+    S.setupDebugEval(mockVscode);
+
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: 'update', roots: [] },
+    }));
+
+    await Promise.resolve();
+    expect(postMessage).not.toHaveBeenCalled();
+
+    document.body.removeAttribute('data-debug');
+  });
+});

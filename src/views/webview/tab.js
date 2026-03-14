@@ -2,6 +2,9 @@
 (function () {
   const S = window.DirviewShared;
   const vscode = acquireVsCodeApi();
+  /* @DEV_START */
+  if (S.setupDebugEval) { S.setupDebugEval(vscode); }
+  /* @DEV_END */
   const legendSection = document.getElementById('legend-section');
   const legendHeader = document.getElementById('legend-header');
   const legendChevron = document.getElementById('legend-chevron');

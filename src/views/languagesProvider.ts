@@ -12,6 +12,7 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
   debug = false;
 
   onFilterChange: ((langs: string[]) => void) | undefined;
+  onDebugResult: ((msg: { id?: number; result?: string; error?: string }) => void) | undefined;
 
   constructor(extensionUri: vscode.Uri) {
     this.extensionUri = extensionUri;
@@ -29,10 +30,12 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this.getHtml(webviewView.webview);
 
-    webviewView.webview.onDidReceiveMessage((message: { command: string; langs?: string[] }) => {
+    webviewView.webview.onDidReceiveMessage((message: { command: string; langs?: string[]; id?: number; result?: string; error?: string }) => {
       if (message.command === 'filter') {
         this.activeFilters = message.langs ?? [];
         this.onFilterChange?.(this.activeFilters);
+      } else if (message.command === 'debugEvalResult') {
+        this.onDebugResult?.(message);
       }
     });
 
