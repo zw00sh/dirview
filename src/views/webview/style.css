@@ -540,7 +540,7 @@ body {
 
 .match-line-row {
   display: flex;
-  align-items: baseline;
+  align-items: center; /* baseline adds 1px to <li> height, breaking indent guide continuity */
   padding: 1px 57px 1px 0; /* vertical 1px matches dir/file-row, allowing indent guide ::before (-1px overlap) to show; right aligns with file-count column */
   cursor: pointer;
   gap: 4px;
