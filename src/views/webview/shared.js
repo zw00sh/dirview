@@ -492,6 +492,8 @@
     // file: FileNode (needed for path/line target), match: { line, column, matchLength, lineText }
     function renderMatchLine(file, match, depth, ancestors) {
       const li = document.createElement('li');
+      // Stable key for DOM patching — lets patchTreeChildren reuse match-line nodes.
+      li.dataset.nodePath = 'match:' + file.path + ':' + match.line + ':' + match.column;
       const row = document.createElement('div');
       row.className = 'match-line-row';
       // data-action + data-path + data-line use the delegated click handler in createRenderer.
@@ -556,8 +558,9 @@
     }
 
     // Renders a "N more matches" summary row when match lines are capped at 5 per file.
-    function renderMoreMatchesRow(count, depth, ancestors) {
+    function renderMoreMatchesRow(count, depth, ancestors, filePath) {
       const li = document.createElement('li');
+      if (filePath) { li.dataset.nodePath = 'more:' + filePath; }
       const row = document.createElement('div');
       row.className = 'match-more-row';
       row.appendChild(renderIndentGuides(depth, ancestors));
@@ -802,7 +805,7 @@
       // used by nodeMap, state.expanded, and the dir-row's data-path attribute.
       li.dataset.nodePath = displayNode.path;
 
-      const isExpanded = state.expanded.get(displayNode.path) ?? (state.activeFilters.size > 0 || state.searchResults !== null || depth === 0);
+      const isExpanded = state.expanded.get(displayNode.path) ?? (state.activeFilters.size > 0 || depth === 0);
       // Record implicit depth-0 expansion so button state reflects reality after initial render.
       // Skip during active filter/search to avoid recording ephemeral auto-expanded state.
       if (!state.expanded.has(displayNode.path) && depth === 0 && state.activeFilters.size === 0 && !state.searchResults) {
@@ -1026,7 +1029,7 @@
                   childrenEl.appendChild(renderMatchLine(file, m, depth + 2, nextAncestors));
                 }
                 if (fileMatches.length > MAX_MATCH_LINES) {
-                  childrenEl.appendChild(renderMoreMatchesRow(fileMatches.length - MAX_MATCH_LINES, depth + 2, nextAncestors));
+                  childrenEl.appendChild(renderMoreMatchesRow(fileMatches.length - MAX_MATCH_LINES, depth + 2, nextAncestors, file.path));
                 }
               }
             }
@@ -1291,7 +1294,7 @@
               treeEl.appendChild(renderer.renderMatchLine(file, m, 1, []));
             }
             if (fileMatches.length > MAX_MATCH_LINES) {
-              treeEl.appendChild(renderer.renderMoreMatchesRow(fileMatches.length - MAX_MATCH_LINES, 1, []));
+              treeEl.appendChild(renderer.renderMoreMatchesRow(fileMatches.length - MAX_MATCH_LINES, 1, [], file.path));
             }
           }
         }
@@ -1552,7 +1555,7 @@
           rootEl.innerHTML = `<div class="error">Error: ${escHtml(message.message)}</div>`;
           break;
         case 'searchResults':
-          // Deserialise the plain-object map sent by providerUtils into a real Map.
+          // Non-streaming fallback (used by searchFiles / clearSearch / errors).
           state.searchResults = message.matches
             ? new Map(Object.entries(message.matches))
             : null;
@@ -1560,8 +1563,34 @@
           state.searchTruncated = message.truncated || false;
           state.searchFileCount = message.fileCount || 0;
           state.searchMatchCount = message.matchCount || 0;
-          // Auto-expand all dirs so matching files are visible.
-          if (state.searchResults && state.searchResults.size > 0) { state.expanded.clear(); }
+          // Selectively expand only dirs that contain matches (avoids rendering entire tree).
+          if (state.searchResults && state.searchResults.size > 0 && state.lastRoots) {
+            expandMatchedDirs(state, state.lastRoots, state.searchResults, state.activeFilters);
+          }
+          if (state.searchBar_updateStatus) { state.searchBar_updateStatus(); }
+          if (state.lastRoots) { state.rerender(); }
+          break;
+        case 'searchResultsBatch': {
+          // Progressive delivery: merge incoming batch into accumulated results.
+          const batchEntries = Object.entries(message.matches || {});
+          if (!state.searchResults) { state.searchResults = new Map(); }
+          for (const [p, m] of batchEntries) { state.searchResults.set(p, m); }
+          state.searchFileCount = message.fileCount || 0;
+          state.searchMatchCount = message.matchCount || 0;
+          // Re-expand matched dirs to include newly arrived matches.
+          if (state.lastRoots) {
+            expandMatchedDirs(state, state.lastRoots, state.searchResults, state.activeFilters);
+          }
+          if (state.searchBar_updateStatus) { state.searchBar_updateStatus(); }
+          if (state.lastRoots) { state.rerender(); }
+          break;
+        }
+        case 'searchResultsDone':
+          // Final signal after all batches have been delivered.
+          state.searchActive = false;
+          state.searchTruncated = message.truncated || false;
+          state.searchFileCount = message.fileCount || 0;
+          state.searchMatchCount = message.matchCount || 0;
           if (state.searchBar_updateStatus) { state.searchBar_updateStatus(); }
           if (state.lastRoots) { state.rerender(); }
           break;
@@ -1856,6 +1885,30 @@
     return { el, focus, clear: clearSearch, show, hide, updateStatus, setStatus, updateFilterWarning };
   }
 
+  // Pre-populates state.expanded so only directories containing search matches are expanded.
+  // Returns true if any descendant matches, allowing the caller to expand ancestors.
+  function expandMatchedDirs(state, roots, searchResults, activeFilters) {
+    state.expanded.clear();
+    function walk(node) {
+      let hasMatch = false;
+      for (const f of (node.files || [])) {
+        if (searchResults.has(f.path) && (activeFilters.size === 0 || activeFilters.has(f.langName))) {
+          hasMatch = true;
+          break;
+        }
+      }
+      for (const child of (node.children || [])) {
+        if (walk(child)) { hasMatch = true; }
+      }
+      if (hasMatch) {
+        const cp = compactedPath(node);
+        state.expanded.set(cp, true);
+      }
+      return hasMatch;
+    }
+    for (const r of roots) { walk(r); }
+  }
+
   window.DirviewShared = {
     SVG_CHEVRON, SVG_PLUS, SVG_WARNING,
     SVG_EYE, SVG_EYE_CLOSED, SVG_FOLD, SVG_UNFOLD, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_OPEN_IN_TAB,
@@ -1866,6 +1919,6 @@
     computeStats, renderLegend, createState,
     walkExpand, walkCollapse, tieredExpandAll, tieredCollapseAll, renderRoots,
     createRescanWarning, renderTree, createMessageHandler,
-    patchTreeChildren, patchDirLi, createSearchBar,
+    patchTreeChildren, patchDirLi, createSearchBar, expandMatchedDirs,
   };
 })();

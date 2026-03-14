@@ -21,6 +21,9 @@ export interface SearchOptions {
   caseSensitive?: boolean;
   useRegex?: boolean;
   include?: string;
+  /** Called with partial results as they arrive. Batches are flushed every BATCH_FLUSH_FILES
+   *  new files or BATCH_FLUSH_MS milliseconds, whichever comes first. */
+  onBatch?: (batch: Map<string, SearchMatch[]>, totals: { fileCount: number; matchCount: number }) => void;
 }
 
 const MAX_FILES = 2000;
@@ -61,6 +64,7 @@ export class SearchService {
   ): { result: Promise<SearchResult>; cancel: () => void } {
     this.cancel();
     const generation = this.generation;
+    const onBatch = options.onBatch;
 
     const args: string[] = ['--json', '--max-filesize', '1M', '-e', pattern];
     if (!options.caseSensitive) { args.push('-i'); }
@@ -71,6 +75,9 @@ export class SearchService {
     const proc = child_process.spawn(this.rgPath, args);
     this.currentProcess = proc;
 
+    const BATCH_FLUSH_FILES = 50;
+    const BATCH_FLUSH_MS = 200;
+
     const result = new Promise<SearchResult>((resolve, reject) => {
       const matches = new Map<string, SearchMatch[]>();
       let fileCount = 0;
@@ -78,6 +85,25 @@ export class SearchService {
       let truncated = false;
       let buffer = '';
       let errorOutput = '';
+
+      // Batch accumulator for progressive delivery
+      let batchBuffer = new Map<string, SearchMatch[]>();
+      let batchFileCount = 0;
+      let batchTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const flushBatch = () => {
+        if (batchTimer) { clearTimeout(batchTimer); batchTimer = null; }
+        if (batchBuffer.size === 0 || generation !== this.generation) { return; }
+        const batch = batchBuffer;
+        batchBuffer = new Map();
+        batchFileCount = 0;
+        onBatch!(batch, { fileCount, matchCount });
+      };
+
+      const scheduleBatchFlush = () => {
+        if (!onBatch || batchTimer) { return; }
+        batchTimer = setTimeout(flushBatch, BATCH_FLUSH_MS);
+      };
 
       proc.stdout.on('data', (chunk: Buffer) => {
         if (truncated) { return; }
@@ -98,17 +124,31 @@ export class SearchService {
                   if (fileCount >= MAX_FILES) { truncated = true; return; }
                   matches.set(filePath, []);
                   fileCount++;
+                  if (onBatch) { batchFileCount++; }
                 }
-                matches.get(filePath)!.push({
+                const match: SearchMatch = {
                   line: lineNum,
                   column: submatch.start,
                   matchLength: submatch.end - submatch.start,
                   lineText,
-                });
+                };
+                matches.get(filePath)!.push(match);
                 matchCount++;
+
+                // Also accumulate in batch buffer for progressive delivery
+                if (onBatch) {
+                  if (!batchBuffer.has(filePath)) { batchBuffer.set(filePath, []); }
+                  batchBuffer.get(filePath)!.push(match);
+                }
               }
             }
           } catch { /* ignore JSON parse errors */ }
+        }
+        // Flush batch if file threshold reached
+        if (onBatch && batchFileCount >= BATCH_FLUSH_FILES) {
+          flushBatch();
+        } else if (onBatch && batchBuffer.size > 0) {
+          scheduleBatchFlush();
         }
       });
 
@@ -117,6 +157,8 @@ export class SearchService {
       proc.on('close', (code: number | null) => {
         if (this.currentProcess === proc) { this.currentProcess = null; }
         if (generation !== this.generation) { return; } // Cancelled — discard stale results
+        // Flush any remaining batch before resolving
+        if (onBatch && batchBuffer.size > 0) { flushBatch(); }
         // exit code 0 = matches found, 1 = no matches (both are success in rg)
         if (code !== null && code !== 0 && code !== 1 && matches.size === 0 && errorOutput) {
           reject(new Error(errorOutput.trim()));

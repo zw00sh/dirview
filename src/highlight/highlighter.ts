@@ -31,6 +31,7 @@ export function updateTheme(kind: number): void {
   if (name === currentThemeName && highlighterPromise) { return; }
   currentThemeName = name;
   highlighterPromise = undefined; // lazy re-create on next highlight call
+  loadedLangs = new Map(); // grammars must be reloaded with the new highlighter
 }
 
 // Max line length to syntax-highlight; longer lines are truncated to context around the match
@@ -38,15 +39,19 @@ const MAX_LINE = 120;
 
 // Lazy singleton — created on first call to highlightLine()
 let highlighterPromise: Promise<Highlighter> | undefined;
+// Tracks which grammars have been loaded. Values are loading promises to prevent
+// concurrent duplicate loads of the same language.
+let loadedLangs = new Map<string, Promise<void>>();
 
 function getHighlighter(): Promise<Highlighter> {
   if (!highlighterPromise) {
     // Oniguruma (WASM) engine handles all TextMate grammar regex patterns natively,
     // unlike the JS engine which fails on grammars requiring the `v` (unicode sets)
     // flag unsupported in VSCode's embedded Node.js runtime.
+    // Starts with zero grammars — languages are loaded on demand in highlightLine().
     highlighterPromise = createOnigurumaEngine(onigurumaWasm).then((engine) =>
       createHighlighter({
-        langs: Object.values(bundledLanguages),
+        langs: [],
         themes: [bundledThemes[currentThemeName as keyof typeof bundledThemes]],
         engine,
       })
@@ -56,6 +61,18 @@ function getHighlighter(): Promise<Highlighter> {
     });
   }
   return highlighterPromise;
+}
+
+/** Loads a Shiki grammar on demand if not already loaded. */
+async function ensureLangLoaded(h: Highlighter, shikiLang: string): Promise<void> {
+  if (loadedLangs.has(shikiLang)) {
+    return loadedLangs.get(shikiLang);
+  }
+  const langDef = bundledLanguages[shikiLang as keyof typeof bundledLanguages];
+  if (!langDef) { return; }
+  const p = h.loadLanguage(langDef).then(() => { /* loaded */ });
+  loadedLangs.set(shikiLang, p);
+  return p;
 }
 
 function escapeHtml(s: string): string {
@@ -162,6 +179,7 @@ export async function highlightLine(
 
   try {
     const h = await getHighlighter();
+    await ensureLangLoaded(h, shikiLang);
     const { tokens } = h.codeToTokens(text, {
       lang: shikiLang,
       theme: currentThemeName,

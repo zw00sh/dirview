@@ -91,6 +91,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this.view?.webview.postMessage({ type: 'searchResults', ...data });
   }
 
+  /** Forward a streaming batch of search results to the tree webview. */
+  postSearchResultsBatch(data: { matches: Record<string, any[]>; fileCount: number; matchCount: number }): void {
+    this.view?.webview.postMessage({ type: 'searchResultsBatch', ...data });
+  }
+
+  /** Signal that all search result batches have been delivered. */
+  postSearchResultsDone(data: { fileCount: number; matchCount: number; truncated: boolean }): void {
+    this.view?.webview.postMessage({ type: 'searchResultsDone', ...data });
+  }
+
   /** Notify the tree webview that a search is in progress. */
   postSearchProgress(): void {
     this.view?.webview.postMessage({ type: 'searchProgress' });

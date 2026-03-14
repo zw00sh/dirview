@@ -43,6 +43,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Wire search: search fold → tree fold. The search fold runs ripgrep and forwards
   // results to the tree fold via sidebarProvider's postMessage methods.
   searchProvider.onSearchResults = (data) => sidebarProvider.postSearchResults(data);
+  searchProvider.onSearchResultsBatch = (data) => sidebarProvider.postSearchResultsBatch(data);
+  searchProvider.onSearchResultsDone = (data) => sidebarProvider.postSearchResultsDone(data);
   searchProvider.onSearchProgress = () => sidebarProvider.postSearchProgress();
   searchProvider.onSearchClear = () => sidebarProvider.clearSearch();
 

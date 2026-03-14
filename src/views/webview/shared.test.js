@@ -1871,6 +1871,16 @@ describe('renderMatchLine', () => {
     // Verify it's the innerHTML path (no additional text nodes from the plain path)
     expect(textEl.childNodes.length).toBe(1);
   });
+
+  it('sets data-node-path for DOM patching', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+    const match = { line: 42, column: 6, matchLength: 3, lineText: 'const api = true;' };
+    const li = renderer.renderMatchLine(file, match, 1, []);
+    expect(li.dataset.nodePath).toBe('match:/a/foo.ts:42:6');
+  });
 });
 
 // --- search: renderMoreMatchesRow ---
@@ -1890,6 +1900,14 @@ describe('renderMoreMatchesRow', () => {
     renderer.beforeRender();
     const li = renderer.renderMoreMatchesRow(1, 1, []);
     expect(li.querySelector('.match-more-label').textContent).toBe('1 more match');
+  });
+
+  it('sets data-node-path when filePath is provided', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderMoreMatchesRow(3, 1, [], '/a/foo.ts');
+    expect(li.dataset.nodePath).toBe('more:/a/foo.ts');
   });
 });
 
@@ -2050,5 +2068,100 @@ describe('createMessageHandler search messages', () => {
     state.expanded.set('/some/dir', true);
     handler({ data: { type: 'searchResults', matches: { '/a/foo.ts': [] }, fileCount: 1, matchCount: 0, truncated: false } });
     expect(state.expanded.size).toBe(0);
+  });
+
+  it('searchResultsBatch merges into existing searchResults', () => {
+    const { state, handler } = makeHandlerEnv();
+    // searchProgress fires before batches begin
+    handler({ data: { type: 'searchProgress' } });
+    expect(state.searchActive).toBe(true);
+    // First batch
+    handler({ data: { type: 'searchResultsBatch', matches: { '/a/foo.ts': [{ line: 1, column: 0, matchLength: 3, lineText: 'abc' }] }, fileCount: 1, matchCount: 1 } });
+    expect(state.searchResults).toBeInstanceOf(Map);
+    expect(state.searchResults.has('/a/foo.ts')).toBe(true);
+    // Second batch adds more files
+    handler({ data: { type: 'searchResultsBatch', matches: { '/b/bar.ts': [{ line: 2, column: 0, matchLength: 3, lineText: 'def' }] }, fileCount: 2, matchCount: 2 } });
+    expect(state.searchResults.size).toBe(2);
+    expect(state.searchResults.has('/b/bar.ts')).toBe(true);
+    // searchActive remains true during batches (only searchResultsDone sets it false)
+    expect(state.searchActive).toBe(true);
+  });
+
+  it('searchResultsDone sets searchActive false and final counts', () => {
+    const { state, handler } = makeHandlerEnv();
+    state.searchActive = true;
+    state.searchResults = new Map([['/a/foo.ts', []]]);
+    handler({ data: { type: 'searchResultsDone', fileCount: 5, matchCount: 20, truncated: true } });
+    expect(state.searchActive).toBe(false);
+    expect(state.searchFileCount).toBe(5);
+    expect(state.searchMatchCount).toBe(20);
+    expect(state.searchTruncated).toBe(true);
+  });
+});
+
+// --- expandMatchedDirs ---
+describe('expandMatchedDirs', () => {
+  it('expands only directories that contain matching files', () => {
+    const state = S.createState();
+    const roots = [
+      makeDir('/ws', 'ws', {
+        children: [
+          makeDir('/ws/src', 'src', {
+            files: [{ path: '/ws/src/a.ts', name: 'a.ts', langName: 'TypeScript' }],
+          }),
+          makeDir('/ws/docs', 'docs', {
+            files: [{ path: '/ws/docs/readme.md', name: 'readme.md', langName: 'Markdown' }],
+          }),
+        ],
+      }),
+    ];
+    const searchResults = new Map([['/ws/src/a.ts', []]]);
+    S.expandMatchedDirs(state, roots, searchResults, new Set());
+
+    // /ws/src should be expanded (contains match), /ws/docs should not
+    expect(state.expanded.get('/ws/src')).toBe(true);
+    expect(state.expanded.has('/ws/docs')).toBe(false);
+    // Root should be expanded (has a matched descendant)
+    expect(state.expanded.get('/ws')).toBe(true);
+  });
+
+  it('respects active language filters', () => {
+    const state = S.createState();
+    const roots = [
+      makeDir('/ws', 'ws', {
+        children: [
+          makeDir('/ws/src', 'src', {
+            files: [
+              { path: '/ws/src/a.ts', name: 'a.ts', langName: 'TypeScript' },
+              { path: '/ws/src/b.js', name: 'b.js', langName: 'JavaScript' },
+            ],
+          }),
+        ],
+      }),
+    ];
+    const searchResults = new Map([['/ws/src/a.ts', []], ['/ws/src/b.js', []]]);
+    // Only JavaScript is in the active filter
+    S.expandMatchedDirs(state, roots, searchResults, new Set(['JavaScript']));
+
+    // Dir should still be expanded because b.js matches filter + search
+    expect(state.expanded.get('/ws/src')).toBe(true);
+  });
+
+  it('does not expand dirs when no files match filter', () => {
+    const state = S.createState();
+    const roots = [
+      makeDir('/ws', 'ws', {
+        children: [
+          makeDir('/ws/src', 'src', {
+            files: [{ path: '/ws/src/a.ts', name: 'a.ts', langName: 'TypeScript' }],
+          }),
+        ],
+      }),
+    ];
+    const searchResults = new Map([['/ws/src/a.ts', []]]);
+    // Filter for JavaScript only — a.ts (TypeScript) doesn't pass
+    S.expandMatchedDirs(state, roots, searchResults, new Set(['JavaScript']));
+
+    expect(state.expanded.has('/ws/src')).toBe(false);
   });
 });

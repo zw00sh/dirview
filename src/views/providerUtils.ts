@@ -46,27 +46,54 @@ export function handleSearchMessage(
 ): boolean {
   if (message.command === 'search' && message.pattern !== undefined) {
     postMessage({ type: 'searchProgress' });
-    const { result } = searchService.searchWorkspace(
-      message.pattern,
-      rootPaths,
-      { caseSensitive: message.caseSensitive, useRegex: message.useRegex, include: message.include }
-    );
-    result.then(async (r) => {
-      // Highlight the first MAX_MATCH_LINES matches per file (same cap the webview renders).
-      // Runs concurrently across all files; unknown languages get undefined → plain-text fallback.
-      const MAX_MATCH_LINES = 5;
-      await Promise.all(
-        Array.from(r.matches.entries()).map(async ([filePath, matches]) => {
+    const MAX_MATCH_LINES = 5;
+    const CONCURRENCY = 10;
+
+    // Highlights the first MAX_MATCH_LINES matches per file with concurrency limiting,
+    // strips lineText beyond the render cap, and returns a serialisable object.
+    async function highlightAndSerialize(batch: Map<string, SearchMatch[]>): Promise<Record<string, SearchMatch[]>> {
+      const executing = new Set<Promise<void>>();
+      for (const [filePath, matches] of batch) {
+        const task = (async () => {
           const langName = getLangInfo(path.basename(filePath)).name;
           for (const match of matches.slice(0, MAX_MATCH_LINES)) {
             const html = await highlightLine(match.lineText, match.column, match.matchLength, langName);
             if (html !== undefined) { match.highlightedHtml = html; }
           }
-        })
-      );
-      const matchesObj: Record<string, SearchMatch[]> = {};
-      for (const [p, m] of r.matches) { matchesObj[p] = m; }
-      postMessage({ type: 'searchResults', matches: matchesObj, fileCount: r.fileCount, matchCount: r.matchCount, truncated: r.truncated });
+        })();
+        const p = task.then(() => { executing.delete(p); });
+        executing.add(p);
+        if (executing.size >= CONCURRENCY) { await Promise.race(executing); }
+      }
+      await Promise.all(executing);
+      const obj: Record<string, SearchMatch[]> = {};
+      for (const [p, m] of batch) {
+        for (let i = MAX_MATCH_LINES; i < m.length; i++) { delete m[i].lineText; }
+        obj[p] = m;
+      }
+      return obj;
+    }
+
+    // Track in-flight batch highlights so we can wait for them before sending 'done'.
+    const pendingBatches: Promise<void>[] = [];
+
+    const { result } = searchService.searchWorkspace(
+      message.pattern,
+      rootPaths,
+      {
+        caseSensitive: message.caseSensitive, useRegex: message.useRegex, include: message.include,
+        onBatch: (batch, totals) => {
+          const p = highlightAndSerialize(batch).then((matchesObj) => {
+            postMessage({ type: 'searchResultsBatch', matches: matchesObj, fileCount: totals.fileCount, matchCount: totals.matchCount });
+          });
+          pendingBatches.push(p);
+        },
+      }
+    );
+    result.then(async (r) => {
+      // Wait for all in-flight batch highlights to complete before signalling done.
+      await Promise.all(pendingBatches);
+      postMessage({ type: 'searchResultsDone', fileCount: r.fileCount, matchCount: r.matchCount, truncated: r.truncated });
     }).catch((err: Error) => {
       postMessage({ type: 'searchResults', matches: null, error: String(err) });
     });

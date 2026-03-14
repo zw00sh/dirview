@@ -13,6 +13,8 @@ export class SearchProvider implements vscode.WebviewViewProvider {
 
   // Callbacks wired in extension.ts to forward results to the tree fold.
   onSearchResults?: (data: { matches: Record<string, any[]> | null; fileCount: number; matchCount: number; truncated: boolean }) => void;
+  onSearchResultsBatch?: (data: { matches: Record<string, any[]>; fileCount: number; matchCount: number }) => void;
+  onSearchResultsDone?: (data: { fileCount: number; matchCount: number; truncated: boolean }) => void;
   onSearchProgress?: () => void;
   onSearchClear?: () => void;
 
@@ -50,6 +52,32 @@ export class SearchProvider implements vscode.WebviewViewProvider {
         if (msg.type === 'searchProgress') {
           this.onSearchProgress?.();
           webviewView.webview.postMessage({ type: 'searchStatus', active: true });
+        } else if (msg.type === 'searchResultsBatch') {
+          this.onSearchResultsBatch?.({
+            matches: msg.matches,
+            fileCount: msg.fileCount ?? 0,
+            matchCount: msg.matchCount ?? 0,
+          });
+          // Update search fold status with running totals
+          webviewView.webview.postMessage({
+            type: 'searchStatus',
+            active: true,
+            fileCount: msg.fileCount ?? 0,
+            matchCount: msg.matchCount ?? 0,
+          });
+        } else if (msg.type === 'searchResultsDone') {
+          this.onSearchResultsDone?.({
+            fileCount: msg.fileCount ?? 0,
+            matchCount: msg.matchCount ?? 0,
+            truncated: msg.truncated ?? false,
+          });
+          webviewView.webview.postMessage({
+            type: 'searchStatus',
+            active: false,
+            fileCount: msg.fileCount ?? 0,
+            matchCount: msg.matchCount ?? 0,
+            truncated: msg.truncated ?? false,
+          });
         } else if (msg.type === 'searchResults') {
           this.onSearchResults?.({
             matches: msg.matches,
