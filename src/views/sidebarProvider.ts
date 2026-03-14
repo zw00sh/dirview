@@ -21,7 +21,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
+    // Default title; overridden below if scan data already arrived before this view was shown.
     this.view.title = 'Tree';
+    if (this.lastUpdate) {
+      const roots = this.lastUpdate.roots;
+      this.view.title = roots.length === 1 ? roots[0].name : 'Files';
+    }
 
     webviewView.webview.options = {
       enableScripts: true,
@@ -66,6 +71,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   update(payload: ScanUpdatePayload): void {
     this.lastUpdate = payload;
     const { roots, autoRescanEnabled, sortMode, truncateThreshold } = payload;
+    if (this.view) {
+      this.view.title = roots.length === 1 ? roots[0].name : 'Files';
+    }
     this.view?.webview.postMessage({ type: 'update', roots, autoRescanEnabled, sortMode, truncateThreshold });
   }
 

@@ -144,7 +144,7 @@ body {
 
 /* Directory name navigation in tab tree: clicking any dir name navigates to that directory. */
 .tab-view .dir-name { flex-shrink: 1; cursor: pointer; }
-.tab-view .dir-name:hover { text-decoration: underline; }
+.tab-view .dir-name:not(:has(.path-segment)):hover { text-decoration: underline; }
 .tab-view .file-name { flex-shrink: 1; }
 .tab-view .indent-guide { width: 16px; }
 
