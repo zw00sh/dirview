@@ -477,11 +477,11 @@
     contextInputWrap.appendChild(contextInput);
 
     const contextBtn = document.createElement('button');
-    contextBtn.className = 'search-toggle search-context-toggle';
+    contextBtn.className = 'search-toggle search-context-toggle active';
     contextBtn.title = 'Show Context Lines';
     contextBtn.setAttribute('aria-label', 'Show Context Lines');
     contextBtn.innerHTML = I.SVG_CONTEXT_LINES;
-    let contextLinesEnabled = false;
+    let contextLinesEnabled = true;
 
     inputRow.appendChild(contextInputWrap);
     inputRow.appendChild(contextBtn);
