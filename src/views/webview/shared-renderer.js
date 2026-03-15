@@ -1131,6 +1131,12 @@
         groups[groups.length - 1].contextAfter = contextBuffer;
       }
 
+      // Trim empty/whitespace-only context lines from the edges of each group.
+      for (const g of groups) {
+        while (g.contextBefore.length > 0 && g.contextBefore[0].lineText.trim() === '') { g.contextBefore.shift(); }
+        while (g.contextAfter.length > 0 && g.contextAfter[g.contextAfter.length - 1].lineText.trim() === '') { g.contextAfter.pop(); }
+      }
+
       // ── Phase 2: Render groups ───────────────────────────────────────────────
 
       const threshold = state.truncateThreshold;

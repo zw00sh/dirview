@@ -2898,6 +2898,45 @@ describe('renderFileMatches — context grouping', () => {
     expect(moreRow.textContent).toContain('1 more match');
   });
 
+  it('trims empty/whitespace context lines from edges of match groups', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    const emptyCtx = (line) => ({ line, column: 0, matchLength: 0, lineText: '', isContext: true });
+    const wsCtx = (line) => ({ line, column: 0, matchLength: 0, lineText: '   \t  ', isContext: true });
+    // Empty before, whitespace after — both should be trimmed
+    state.searchResults = new Map([['/ws/a.ts', [
+      emptyCtx(1), wsCtx(2), makeContext(3), makeMatch(4), makeContext(5), emptyCtx(6), wsCtx(7),
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const groups = container.querySelectorAll('.match-group');
+    expect(groups.length).toBe(1);
+    // Only context lines 3 and 5 should remain (lines 1,2 trimmed from start; 6,7 from end)
+    const ctxRows = groups[0].querySelectorAll('.match-context-row');
+    expect(ctxRows.length).toBe(2);
+  });
+
+  it('preserves non-empty context lines between empty ones', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    const emptyCtx = (line) => ({ line, column: 0, matchLength: 0, lineText: '', isContext: true });
+    // empty, non-empty, empty — only outer empties trimmed
+    state.searchResults = new Map([['/ws/a.ts', [
+      emptyCtx(1), makeContext(2), emptyCtx(3), makeMatch(4),
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const ctxRows = container.querySelectorAll('.match-context-row');
+    // Line 1 trimmed (leading empty), lines 2 and 3 kept (3 is interior, not edge)
+    expect(ctxRows.length).toBe(2);
+  });
+
   it('match without context produces a group with only the match div', () => {
     const state = S.createState();
     const renderer = makeRenderer(state);
