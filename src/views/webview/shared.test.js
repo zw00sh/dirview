@@ -3288,3 +3288,51 @@ describe('collapsible file-row with search matches', () => {
     expect(row.dataset.dirPath).toBe('/ws/a.ts');
   });
 });
+
+// --- createSearchBar setDirPill ---
+describe('createSearchBar setDirPill', () => {
+  function makeSearchBar(standalone) {
+    const state = S.createState();
+    const vscode = { postMessage: vi.fn() };
+    const bar = S.createSearchBar(state, vscode, standalone ? { standalone: true } : undefined);
+    return { bar, vscode };
+  }
+
+  it('shows pill with basename for a subdirectory path', () => {
+    const { bar } = makeSearchBar(false);
+    bar.setDirPill('src/scanner');
+    const pill = bar.el.querySelector('.search-dir-pill');
+    expect(pill.style.display).toBe('');
+    expect(pill.querySelector('.search-dir-pill-text').textContent).toBe('in: scanner');
+  });
+
+  it('hides pill when dirPath is empty', () => {
+    const { bar } = makeSearchBar(false);
+    bar.setDirPill('src/scanner');
+    bar.setDirPill('');
+    const pill = bar.el.querySelector('.search-dir-pill');
+    expect(pill.style.display).toBe('none');
+  });
+
+  it('uses the last segment for deeply nested paths', () => {
+    const { bar } = makeSearchBar(false);
+    bar.setDirPill('deep/nested/dir');
+    const pill = bar.el.querySelector('.search-dir-pill');
+    expect(pill.querySelector('.search-dir-pill-text').textContent).toBe('in: dir');
+  });
+
+  it('close button posts navigateToDir with empty path', () => {
+    const { bar, vscode } = makeSearchBar(false);
+    bar.setDirPill('src/scanner');
+    const closeBtn = bar.el.querySelector('.search-dir-pill-close');
+    closeBtn.click();
+    expect(vscode.postMessage).toHaveBeenCalledWith({ command: 'navigateToDir', path: '' });
+  });
+
+  it('is a no-op in standalone mode', () => {
+    const { bar } = makeSearchBar(true);
+    bar.setDirPill('src/scanner');
+    const pill = bar.el.querySelector('.search-dir-pill');
+    expect(pill).toBeNull();
+  });
+});

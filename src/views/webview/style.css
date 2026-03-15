@@ -510,12 +510,69 @@ body {
   color: var(--vscode-descriptionForeground);
 }
 
-.search-filter-input {
+.search-filter-container {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 25px;
+  border-radius: 4px;
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+  padding: 0 2px;
+}
+.search-filter-container:focus-within {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+
+/* Container handles border/background/focus — strip .search-input defaults from the inner input. */
+.search-filter-input,
+.search-filter-input:focus {
   flex: 1;
   min-width: 0;
   box-sizing: border-box;
-  height: 25px;
+  height: 100%;
+  font-size: var(--vscode-font-size);
+  border: none;
+  background: transparent;
+  outline: none;
+  color: var(--vscode-input-foreground);
+  font-family: var(--vscode-font-family);
+  padding: 3px 6px;
+}
+
+.search-dir-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 2px 1px 6px;
+  margin-left: 2px;
   font-size: 11px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  border-radius: 3px;
+  background: var(--vscode-badge-background, rgba(100, 100, 100, 0.3));
+  color: var(--vscode-badge-foreground, inherit);
+}
+.search-dir-pill-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 1px;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.7;
+  border-radius: 2px;
+}
+.search-dir-pill-close:hover {
+  opacity: 1;
+  background: var(--vscode-toolbar-hoverBackground, rgba(255, 255, 255, 0.1));
+}
+.search-dir-pill-close svg {
+  width: 12px;
+  height: 12px;
 }
 
 .search-filter-input-row {

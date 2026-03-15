@@ -231,7 +231,13 @@
     onBeforeUpdate: (message) => {
       currentShowIgnored = message.showIgnored || false;
       updateToggleIgnoredBtn();
-      if (typeof message.dirPath === 'string') { state.dirPath = message.dirPath; }
+      if (typeof message.dirPath === 'string') {
+        const dirChanged = state.dirPath !== message.dirPath;
+        state.dirPath = message.dirPath;
+        searchBar.setDirPill(message.dirPath);
+        // Re-run the search against the new root when the directory scope changes.
+        if (dirChanged && state.searchResults) { searchBar.triggerSearch(); }
+      }
       if (typeof message.workspaceFolderName === 'string') { state.workspaceFolderName = message.workspaceFolderName; }
       if (typeof message.stickyHeadersEnabled === 'boolean') {
         currentStickyEnabled = message.stickyHeadersEnabled;

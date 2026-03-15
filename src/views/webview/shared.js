@@ -506,9 +506,39 @@
     filterWarning.innerHTML = I.SVG_WARNING;
     filterWarning.title = 'Language filter active \u2014 some results may be hidden';
     filterWarning.style.display = 'none';
+
+    // Bordered container wrapping pill + input so they appear as one unified input field.
+    const filterContainer = document.createElement('div');
+    filterContainer.className = 'search-filter-container';
+
+    // Dir-scope pill — shows the tab's root directory basename with a dismiss button.
+    // Only created for non-standalone search bars (tabs), hidden when dirPath is ''.
+    let dirPill = null;
+    let dirPillText = null;
+    if (!standalone) {
+      dirPill = document.createElement('span');
+      dirPill.className = 'search-dir-pill';
+      dirPill.style.display = 'none';
+      dirPillText = document.createElement('span');
+      dirPillText.className = 'search-dir-pill-text';
+      const dirPillClose = document.createElement('button');
+      dirPillClose.className = 'search-dir-pill-close';
+      dirPillClose.title = 'Reset to workspace root';
+      dirPillClose.setAttribute('aria-label', 'Reset to workspace root');
+      dirPillClose.innerHTML = I.SVG_CLOSE;
+      dirPillClose.addEventListener('click', (e) => {
+        e.stopPropagation();
+        vscode.postMessage({ command: 'navigateToDir', path: '' });
+      });
+      dirPill.appendChild(dirPillText);
+      dirPill.appendChild(dirPillClose);
+      filterContainer.appendChild(dirPill);
+    }
+    filterContainer.appendChild(includeInput);
+
     const inputRow2 = document.createElement('div');
     inputRow2.className = 'search-filter-input-row';
-    inputRow2.appendChild(includeInput);
+    inputRow2.appendChild(filterContainer);
     inputRow2.appendChild(filterWarning);
     includeSection.appendChild(includeLabel);
     includeSection.appendChild(inputRow2);
@@ -696,7 +726,18 @@
       filterWarning.style.display = active ? '' : 'none';
     }
 
-    return { el, focus, clear: clearSearch, show, hide, updateStatus, setStatus, updateFilterWarning };
+    /** Show/hide the directory-scope pill based on the tab's current root path. */
+    function setDirPill(dirPath) {
+      if (!dirPill) { return; } // standalone mode — no pill
+      if (!dirPath) {
+        dirPill.style.display = 'none';
+        return;
+      }
+      dirPillText.textContent = 'in: ' + (dirPath.split('/').pop() || dirPath);
+      dirPill.style.display = '';
+    }
+
+    return { el, focus, clear: clearSearch, show, hide, updateStatus, setStatus, updateFilterWarning, setDirPill, triggerSearch };
   }
 
   // Updates search-result counters on state and triggers the search bar status display.
