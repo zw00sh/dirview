@@ -67,6 +67,14 @@
     },
     "commands": [
       {
+        "command": "dirview.refresh",
+        "title": "Refresh (auto-rescan disabled)",
+        "icon": {
+          "light": "media/icon-refresh-light.svg",
+          "dark": "media/icon-refresh-dark.svg"
+        }
+      },
+      {
         "command": "dirview.toggleIgnored",
         "title": "Show Ignored Files",
         "icon": "$(eye)"
@@ -165,6 +173,11 @@
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "dirview.refresh",
+          "when": "view == dirview.sidebar && !dirview.autoRescanEnabled",
+          "group": "navigation@0"
+        },
         {
           "command": "dirview.toggleIgnored",
           "when": "view == dirview.sidebar && !dirview.showIgnored",

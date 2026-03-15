@@ -44,6 +44,7 @@ export class ScanCoordinator {
       if (this.abortController.signal.aborted) { return; }
       this.watcher?.updateAutoRescan(result.totalFiles);
       const autoRescanEnabled = this.watcher ? this.watcher.isAutoRescanEnabled : true;
+      vscode.commands.executeCommand('setContext', 'dirview.autoRescanEnabled', autoRescanEnabled);
       const truncateThreshold = this.getTruncateThreshold();
       const payload: ScanUpdatePayload = {
         roots: result.roots,

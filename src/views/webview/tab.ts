@@ -4,7 +4,6 @@ import {
   createTooltip,
   createState,
   createRenderer,
-  createRescanWarning,
   renderTree,
   createMessageHandler,
   createSearchBar,
@@ -43,6 +42,7 @@ const toggleTruncationBtn = document.getElementById('tab-toggle-truncation')!;
 const toggleIgnoredBtn = document.getElementById('tab-toggle-ignored')!;
 const expandAllBtn = document.getElementById('tab-expand-all')!;
 const collapseAllBtn = document.getElementById('tab-collapse-all')!;
+const refreshBtn = document.getElementById('tab-refresh')!;
 
 const scanBar = createScanBar();
 const tooltip = createTooltip();
@@ -135,9 +135,14 @@ function updateStickyBtn() {
 // Set up sticky tracking — returns {updateStuck, setEnabled} for toggling sticky headers.
 const { updateStuck: _updateStuck, setEnabled: setStickyEnabled } = setupStickyTracking(root);
 
+function updateRefreshBtn(autoRescanEnabled: boolean) {
+  refreshBtn.style.display = autoRescanEnabled ? 'none' : '';
+}
+
 updateToggleIgnoredBtn();
 updateTruncationBtn();
 updateStickyBtn();
+updateRefreshBtn(true);
 
 // ── Toolbar event listeners ─────────────────────────────────────────────
 
@@ -174,6 +179,9 @@ collapseAllBtn.addEventListener('click', () => {
 });
 toggleStickyBtn.addEventListener('click', () => {
   vscode.postMessage({ command: 'toggleStickyHeaders', enabled: !currentStickyEnabled });
+});
+refreshBtn.addEventListener('click', () => {
+  vscode.postMessage({ command: 'refresh' });
 });
 legendHeader.addEventListener('click', () => {
   legendCollapsed = !legendCollapsed;
@@ -246,13 +254,7 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   // whole container — preserves any existing tree for incremental patching.
   root.querySelector('.loading')?.remove();
 
-  // Manage the rescan-warning banner in place rather than clearing root.
-  const existingWarn = root.querySelector('.rescan-warning');
-  if (!autoRescanEnabled && !existingWarn) {
-    root.insertBefore(createRescanWarning(vscode), root.firstChild);
-  } else if (autoRescanEnabled && existingWarn) {
-    existingWarn.remove();
-  }
+  updateRefreshBtn(autoRescanEnabled);
 
   if (!roots || roots.length === 0) {
     root.querySelector('ul.tree')?.remove();

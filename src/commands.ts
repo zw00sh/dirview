@@ -27,6 +27,12 @@ export function registerCommands(
   const { sidebar, tab, languages } = providers;
 
   context.subscriptions.push(
+    vscode.commands.registerCommand('dirview.refresh', () => {
+      doScan();
+    })
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand('dirview.toggleIgnored', async () => {
       await config.setShowIgnored(true);
       doScan();

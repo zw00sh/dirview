@@ -3,7 +3,6 @@ import {
   createTooltip,
   createState,
   createRenderer,
-  createRescanWarning,
   renderTree,
   createMessageHandler,
   setupStickyTracking,
@@ -42,14 +41,6 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   // Remove one-time placeholders (loading/initializing) without wiping the
   // whole container — preserves any existing tree for incremental patching.
   root.querySelector('.loading')?.remove();
-
-  // Manage the rescan-warning banner in place rather than clearing root.
-  const existingWarn = root.querySelector('.rescan-warning');
-  if (!autoRescanEnabled && !existingWarn) {
-    root.insertBefore(createRescanWarning(vscode), root.firstChild);
-  } else if (autoRescanEnabled && existingWarn) {
-    existingWarn.remove();
-  }
 
   if (!roots || roots.length === 0) {
     root.querySelector('ul.tree')?.remove();

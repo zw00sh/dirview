@@ -1,27 +1,10 @@
-// Tree rendering functions: createRescanWarning, renderRoots, renderTree.
+// Tree rendering functions: renderRoots, renderTree.
 
-import * as Icons from '../icons';
 import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, getVisibleChildren, getVisibleFiles } from '../utils';
 import { patchTreeChildren } from './dom-patch';
 import { h } from '../h';
 
 import type { DirNode, FileNode, WebviewState, SortMode, VsCodeApi, Renderer } from '../types';
-
-// ── Shared view helpers ───────────────────────────────────────────────────
-
-/**
- * Creates the "auto-rescan disabled" warning banner with a wired Refresh button.
- */
-export function createRescanWarning(vscode: VsCodeApi): HTMLElement {
-  return h('div', { className: 'rescan-warning' },
-    h('span', { className: 'rescan-warning-icon', innerHTML: Icons.SVG_WARNING }),
-    h('span', 'Auto-rescan disabled (large repo)'),
-    h('button', {
-      className: 'rescan-btn',
-      on: { click: () => vscode.postMessage({ command: 'refresh' }) },
-    }, 'Refresh'),
-  );
-}
 
 // Renders the root-level tree rows into treeEl. Shared between sidebar and tab views.
 // Requires state.lastRoots to be set.
