@@ -491,12 +491,23 @@ export function scheduleSearchRender(state: WebviewState): void {
 }
 
 // Builds a Set of all ancestor directory paths for the given file paths.
-// E.g. '/ws/src/lib/foo.ts' → adds '/ws', '/ws/src', '/ws/src/lib'.
-// Enables O(1) "does this dir contain a search match?" checks.
+// When rootPaths is provided, strips the workspace root prefix so ancestor
+// paths are workspace-relative (matching DirNode.path format).
+// E.g. with rootPath '/ws', '/ws/src/lib/foo.ts' → adds 'src', 'src/lib'.
+// Without rootPaths, produces absolute ancestors (legacy behaviour).
 // Uses lastIndexOf chaining instead of split+join for performance.
-export function buildAncestorPaths(filePaths: Iterable<string>): Set<string> {
+export function buildAncestorPaths(filePaths: Iterable<string>, rootPaths?: string[]): Set<string> {
   const ancestors = new Set<string>();
-  for (const filePath of filePaths) {
+  for (let filePath of filePaths) {
+    // Strip workspace root prefix to produce relative paths matching DirNode.path.
+    if (rootPaths) {
+      for (const root of rootPaths) {
+        if (filePath.startsWith(root + '/')) {
+          filePath = filePath.slice(root.length + 1);
+          break;
+        }
+      }
+    }
     // Walk up from the last '/' to the root, adding each directory prefix.
     let end = filePath.lastIndexOf('/');
     while (end > 0) {
@@ -533,7 +544,7 @@ export function walkMatchingDirs(state: WebviewState, roots: DirNode[], matchFn:
 // When language filters are active, falls back to tree walk to check per-file language.
 export function expandBatchFiles(state: WebviewState, roots: DirNode[], newFilePaths: Set<string>): void {
   // Merge into the cumulative ancestor index for dirMatchesSearch.
-  const ancestors = buildAncestorPaths(newFilePaths);
+  const ancestors = buildAncestorPaths(newFilePaths, state.searchRootPaths);
   if (!state.searchAncestorPaths) { state.searchAncestorPaths = new Set(); }
   for (const p of ancestors) { state.searchAncestorPaths.add(p); }
 
@@ -563,7 +574,7 @@ export function expandMatchedDirs(state: WebviewState, roots: DirNode[], searchR
   }
   // No language filter — use the fast ancestor path index.
   state.expanded.clear();
-  const ancestors = buildAncestorPaths(searchResults.keys());
+  const ancestors = buildAncestorPaths(searchResults.keys(), state.searchRootPaths);
   state.searchAncestorPaths = ancestors;
   for (const dirPath of ancestors) {
     state.expanded.set(dirPath, true);

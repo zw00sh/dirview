@@ -34,7 +34,7 @@ export type BackendToWebviewMessage =
   | { type: 'expandAll' }
   | { type: 'collapseAll' }
   | { type: 'error'; message: string }
-  | { type: 'searchProgress' }
+  | { type: 'searchProgress'; rootPaths: string[] }
   | { type: 'searchResultsBatch'; matches: Record<string, SearchMatch[]>; fileCount: number; matchCount: number }
   | { type: 'searchResultsHighlight'; patches: Array<{ path: string; idx: number; html: string }> }
   | { type: 'searchResultsDone'; fileCount: number; matchCount: number; truncated: boolean }
@@ -108,6 +108,9 @@ export interface WebviewState extends CoreWebviewState {
   /** Precomputed set of directory paths that are ancestors of search result files.
    *  Enables O(1) dirMatchesSearch checks instead of recursive tree walks. */
   searchAncestorPaths: Set<string> | null;
+  /** Workspace root paths (absolute) used to convert absolute file paths to
+   *  workspace-relative paths for ancestor index lookups against DirNode.path. */
+  searchRootPaths: string[];
   searchBar_updateStatus: (() => void) | null;
   _searchRenderTimer: ReturnType<typeof setTimeout> | null;
 }

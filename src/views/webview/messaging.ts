@@ -91,7 +91,7 @@ export function createMessageHandler(
         : null;
       // Build ancestor path index for O(1) dirMatchesSearch lookups.
       state.searchAncestorPaths = state.searchResults
-        ? buildAncestorPaths(state.searchResults.keys())
+        ? buildAncestorPaths(state.searchResults.keys(), state.searchRootPaths)
         : null;
       state.searchActive = false;
       if (state.scanBar) { state.scanBar.show(false); }
@@ -141,8 +141,10 @@ export function createMessageHandler(
       if (state._searchRenderTimer) { clearTimeout(state._searchRenderTimer); state._searchRenderTimer = null; }
       if (state.lastRoots) { state.rerender(); }
     },
-    searchProgress() {
+    searchProgress(message: BackendToWebviewMessage & { type: 'searchProgress' }) {
       state.searchActive = true;
+      // Store workspace root paths for converting absolute file paths to relative.
+      state.searchRootPaths = message.rootPaths || [];
       // Clear stale results, ancestor index, and expand state from a previous search.
       state.searchResults = null;
       state.searchAncestorPaths = null;

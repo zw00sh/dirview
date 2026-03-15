@@ -2,15 +2,16 @@
 // Webview debug eval script. Reads /tmp/dirview-debug.js and evaluates it
 // directly in the target webview frame via CDP (Chrome DevTools Protocol).
 //
-// Usage: node scripts/debug-eval.js [target]
+// Usage: node scripts/debug-eval.js [target] [script-path]
 //   target: sidebar | tab | languages | host (default: tab)
+//   script-path: path to JS file to evaluate (default: /tmp/dirview-debug.js)
 //
-// Recommended: npm run debug-eval [-- target]
+// Recommended: npm run debug-eval [-- target [script-path]]
 //
 // Workflow:
 //   1. Launch VSCode with CDP: ./scripts/launch-cdp.sh
-//   2. Write your script to /tmp/dirview-debug.js
-//   3. Run: npm run debug-eval -- tab
+//   2. Write your script to a file (e.g. /tmp/debug-script-foo.js)
+//   3. Run: npm run debug-eval -- tab /tmp/debug-script-foo.js
 //   4. The script runs inside the target webview frame and prints the result.
 //
 // How it works:
@@ -22,7 +23,7 @@
 // 'host' target evals in the extension host's Node context via port 9223.
 
 const fs = require('fs');
-const SCRIPT_PATH = '/tmp/dirview-debug.js';
+const DEFAULT_SCRIPT_PATH = '/tmp/dirview-debug.js';
 const CDP_PORT = 9222;
 const HOST_PORT = 9223;
 const VALID_TARGETS = new Set(['sidebar', 'tab', 'languages', 'host']);
@@ -31,6 +32,7 @@ const VALID_TARGETS = new Set(['sidebar', 'tab', 'languages', 'host']);
 const EXTENSION_ID = 'zwoosh.dirview';
 
 const target = process.argv[2] || 'tab';
+const scriptPath = process.argv[3] || DEFAULT_SCRIPT_PATH;
 if (!VALID_TARGETS.has(target)) {
   console.error(`Unknown target: ${target}`);
   console.error(`Valid targets: ${[...VALID_TARGETS].join(' | ')}`);
@@ -39,9 +41,9 @@ if (!VALID_TARGETS.has(target)) {
 
 let scriptContent;
 try {
-  scriptContent = fs.readFileSync(SCRIPT_PATH, 'utf8');
+  scriptContent = fs.readFileSync(scriptPath, 'utf8');
 } catch (err) {
-  console.error(`Could not read ${SCRIPT_PATH}: ${err.message}`);
+  console.error(`Could not read ${scriptPath}: ${err.message}`);
   console.error('Write your debug script to that path first, then run this again.');
   process.exit(1);
 }
@@ -197,11 +199,12 @@ async function evalInWebview() {
       process.exit(1);
     });
 
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       console.error('Timeout waiting for result (30s).');
       ws.close();
       process.exit(1);
     }, 30000);
+    timer.unref();
   });
 }
 
@@ -244,11 +247,12 @@ async function evalViaWebSocket(url, expression) {
       process.exit(1);
     });
 
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       console.error('Timeout waiting for result (30s).');
       ws.close();
       process.exit(1);
     }, 30000);
+    timer.unref();
   });
 }
 

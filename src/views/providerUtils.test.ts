@@ -269,7 +269,7 @@ describe('handleSearchMessage — webview clears stale results', () => {
     );
 
     // searchProgress must be the very first message
-    expect(messages[0]).toEqual({ type: 'searchProgress' });
+    expect(messages[0]).toEqual({ type: 'searchProgress', rootPaths: ['/ws'] });
   });
 });
 
@@ -286,7 +286,7 @@ describe('handleSearchMessage — searchFiles', () => {
   it('sends searchProgress before the file search', () => {
     const service = createFakeSearchService();
     handleSearchMessage({ command: 'searchFiles', glob: '*.ts' }, service, postMessage, ['/ws']);
-    expect(messages[0]).toEqual({ type: 'searchProgress' });
+    expect(messages[0]).toEqual({ type: 'searchProgress', rootPaths: ['/ws'] });
   });
 
   it('posts searchResults with file paths and empty match arrays on resolve', async () => {

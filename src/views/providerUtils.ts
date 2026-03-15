@@ -51,7 +51,7 @@ export function handleSearchMessage(
   rootPaths: string[]
 ): boolean {
   if (message.command === 'search' && message.pattern !== undefined) {
-    postMessage({ type: 'searchProgress' });
+    postMessage({ type: 'searchProgress', rootPaths });
     // Cap how many lines per file receive syntax highlighting to avoid Shiki overhead
     const CONCURRENCY = 10;
 
@@ -139,7 +139,7 @@ export function handleSearchMessage(
   }
 
   if (message.command === 'searchFiles' && message.glob !== undefined) {
-    postMessage({ type: 'searchProgress' });
+    postMessage({ type: 'searchProgress', rootPaths });
     const { result } = searchService.searchFiles(message.glob, rootPaths);
     result.then((r) => {
       const matchesObj: Record<string, []> = {};
