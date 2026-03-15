@@ -867,16 +867,13 @@
   function setupStickyTracking(scrollRoot) {
     function updateStuck() {
       if (document.body.classList.contains('sticky-disabled')) { return; }
-      // Find all sticky-dir elements and update their is-stuck / is-stuck-bottom state
-      // based on their current position relative to the scroll container.
-      // Each element sticks at its depth-based offset (depth * 22px from container top),
-      // so the stuck check must account for the element's --depth CSS variable.
-      //
-      // Three states for a sticky element:
-      //   1. Natural: rect.top > stickyTop (hasn't reached its sticky offset yet)
-      //   2. Stuck:   rect.top ≈ stickyTop (held at its sticky offset by CSS)
-      //   3. Leaving: rect.top < stickyTop (parent <li> scrolled past, dragging it up)
-      // Only state 2 counts as "stuck" for is-stuck-bottom purposes.
+      // Detect which sticky-dir elements are actively stuck and mark the deepest
+      // one with is-stuck-bottom (which renders a shadow via ::after).
+      // Detection uses two conditions:
+      //   1. heldBySticky: parent <li> has scrolled above the row (liTop < rectTop),
+      //      meaning CSS sticky is actively holding the row in place.
+      //   2. atOffset: the row is at its depth-based sticky offset (rectTop ≈ stickyTop),
+      //      filtering out off-screen elements whose <li> extends above them.
       const isDocRoot = scrollRoot === document.documentElement;
       const stickyEls = scrollRoot.querySelectorAll('.sticky-dir');
       // For document.documentElement, getBoundingClientRect().top moves with scroll
@@ -897,7 +894,6 @@
         const heldBySticky = liTop < rect.top - 1;
         const atOffset = rect.top >= stickyTop - 2 && rect.top <= stickyTop + 2;
         const isStuck = heldBySticky && atOffset;
-        el.classList.toggle('is-stuck', isStuck);
         el.classList.remove('is-stuck-bottom');
         if (isStuck) { lastStuck = el; }
       }
@@ -910,7 +906,7 @@
         // Clear all stuck classes when disabling
         const stickyEls = scrollRoot.querySelectorAll('.sticky-dir');
         for (const el of stickyEls) {
-          el.classList.remove('is-stuck', 'is-stuck-bottom');
+          el.classList.remove('is-stuck-bottom');
         }
       } else {
         updateStuck();

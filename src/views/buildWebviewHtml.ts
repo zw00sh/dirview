@@ -14,6 +14,7 @@ export interface BuildWebviewHtmlOptions {
   bodyClass?: string;
   bodyAttrs?: string;
   bodyHtml?: string;   // inserted before <div id="root">
+  skipRoot?: boolean;  // when true, omits the auto-generated <div id="root"> (bodyHtml must include it)
   debug?: boolean;     // when true, adds 'unsafe-eval' to CSP for cross-frame debug bridge
 }
 
@@ -53,8 +54,7 @@ export function buildWebviewHtml(
 ${styleLinks}
   <title>${options.title}</title>
 </head>
-<body${bodyClassAttr}${bodyExtraAttrs}${debugAttr}>${bodyHtml}
-  <div id="root"></div>
+<body${bodyClassAttr}${bodyExtraAttrs}${debugAttr}>${bodyHtml}${options.skipRoot ? '' : '\n  <div id="root"></div>'}
 ${scriptTags}
 </body>
 </html>`;

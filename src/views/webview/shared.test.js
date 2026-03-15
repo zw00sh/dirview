@@ -3234,14 +3234,14 @@ describe('setupStickyTracking', () => {
     expect(document.body.classList.contains('sticky-disabled')).toBe(false);
   });
 
-  it('setEnabled(false) clears is-stuck classes from sticky-dir elements', () => {
+  it('setEnabled(false) clears is-stuck-bottom class from sticky-dir elements', () => {
     const el = document.createElement('div');
     const stickyEl = document.createElement('div');
-    stickyEl.className = 'sticky-dir is-stuck';
+    stickyEl.className = 'sticky-dir is-stuck-bottom';
     el.appendChild(stickyEl);
     const { setEnabled } = S.setupStickyTracking(el);
     setEnabled(false);
-    expect(stickyEl.classList.contains('is-stuck')).toBe(false);
+    expect(stickyEl.classList.contains('is-stuck-bottom')).toBe(false);
   });
 
   it('updateStuck short-circuits when sticky-disabled is on body', () => {
@@ -3253,7 +3253,7 @@ describe('setupStickyTracking', () => {
     const { updateStuck } = S.setupStickyTracking(el);
     // Should not throw or add classes when disabled
     updateStuck();
-    expect(stickyEl.classList.contains('is-stuck')).toBe(false);
+    expect(stickyEl.classList.contains('is-stuck-bottom')).toBe(false);
     document.body.classList.remove('sticky-disabled');
   });
 });

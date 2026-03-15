@@ -15,6 +15,8 @@
   const searchChevronEl = document.getElementById('search-chevron');
   const searchContentEl = document.getElementById('search-content');
   const searchActiveAlert = document.getElementById('search-active-alert');
+  const treeHeaderEl = document.getElementById('tree-header');
+  const treeChevronEl = document.getElementById('tree-chevron');
   const root = document.getElementById('root');
   const sortBtn = document.getElementById('tab-sort');
   const toggleStickyBtn = document.getElementById('tab-toggle-sticky');
@@ -35,8 +37,10 @@
   searchContentEl.appendChild(searchBar.el);
 
   let searchCollapsed = false;
-  // Initialise chevron to match expanded state (chevron rotated 90° = expanded).
+  let treeCollapsed = false;
+  // Initialise chevrons to match expanded state (chevron rotated 90° = expanded).
   searchChevronEl.style.transform = 'rotate(90deg)';
+  treeChevronEl.style.transform = 'rotate(90deg)';
 
   // Cmd+F / Ctrl+F: expand and focus the search section.
   window.addEventListener('keydown', (e) => {
@@ -112,7 +116,7 @@
   }
 
   // Set up sticky tracking — returns {updateStuck, setEnabled} for toggling sticky headers.
-  const { updateStuck: _updateStuck, setEnabled: setStickyEnabled } = S.setupStickyTracking(root);
+  const { updateStuck, setEnabled: setStickyEnabled } = S.setupStickyTracking(root);
 
   updateToggleIgnoredBtn();
   updateTruncationBtn();
@@ -158,6 +162,13 @@
     legendCollapsed = !legendCollapsed;
     legendEl.style.display = legendCollapsed ? 'none' : '';
     legendChevron.style.transform = legendCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
+  });
+  treeHeaderEl.addEventListener('click', (e) => {
+    // Don't collapse when clicking toolbar action buttons inside the header.
+    if (e.target.closest('.tab-action')) { return; }
+    treeCollapsed = !treeCollapsed;
+    root.style.display = treeCollapsed ? 'none' : '';
+    treeChevronEl.style.transform = treeCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
   });
   searchHeaderEl.addEventListener('click', () => {
     searchCollapsed = !searchCollapsed;
@@ -246,7 +257,7 @@
 
     root.querySelector('.empty')?.remove();
     S.renderTree(state, renderer, root, { showRootNode: true });
-    _updateStuck();
+    updateStuck();
     updateSearchActiveAlert();
   }
 

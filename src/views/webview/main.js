@@ -13,7 +13,7 @@
   state.scanBar = scanBar;
 
   // Set up sticky tracking for the sidebar (before render so updateStuck is available).
-  const { updateStuck: _updateStuck, setEnabled: setStickyEnabled } = S.setupStickyTracking(document.documentElement);
+  const { updateStuck, setEnabled: setStickyEnabled } = S.setupStickyTracking(document.documentElement);
 
   const renderer = S.createRenderer(state, {
     vscode,
@@ -58,7 +58,7 @@
 
     root.querySelector('.empty')?.remove();
     S.renderTree(state, renderer, root, { cssClass: 'sidebar' });
-    _updateStuck();
+    updateStuck();
   }
 
   state.render = render;
