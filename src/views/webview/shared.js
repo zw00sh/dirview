@@ -472,7 +472,7 @@
     contextInput.type = 'number';
     contextInput.min = '0';
     contextInput.max = '10';
-    contextInput.value = '0';
+    contextInput.value = '1';
     contextInput.setAttribute('aria-label', 'Context lines');
     contextInputWrap.appendChild(contextInput);
 

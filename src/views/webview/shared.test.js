@@ -1910,7 +1910,7 @@ describe('renderMoreMatchesRow', () => {
     const renderer = makeRenderer(state);
     renderer.beforeRender();
     const li = renderer.renderMoreMatchesRow(3, 1, []);
-    expect(li.querySelector('.match-more-label').textContent).toBe('3 more matches');
+    expect(li.querySelector('.dir-name').textContent).toBe('3 more matches');
   });
 
   it('uses singular form for count=1', () => {
@@ -1918,7 +1918,7 @@ describe('renderMoreMatchesRow', () => {
     const renderer = makeRenderer(state);
     renderer.beforeRender();
     const li = renderer.renderMoreMatchesRow(1, 1, []);
-    expect(li.querySelector('.match-more-label').textContent).toBe('1 more match');
+    expect(li.querySelector('.dir-name').textContent).toBe('1 more match');
   });
 
   it('sets data-node-path when filePath is provided', () => {
@@ -2034,9 +2034,16 @@ describe('search rendering integration', () => {
     renderer.beforeRender();
     const li = renderer.renderDirNode(dir, 0, 10, [], 300);
     expect(li.querySelectorAll('.match-line-row').length).toBe(4);
-    const moreRow = li.querySelector('.match-more-label');
-    expect(moreRow).not.toBeNull();
-    expect(moreRow.textContent).toBe('3 more matches');
+    // The "more matches" row reuses truncated-row styling; find the one inside a match area.
+    const truncRows = li.querySelectorAll('.truncated-row');
+    // Find the truncated-row whose dir-name contains "more match"
+    let moreLabel = null;
+    for (const tr of truncRows) {
+      const dn = tr.querySelector('.dir-name');
+      if (dn && dn.textContent.includes('more match')) { moreLabel = dn; break; }
+    }
+    expect(moreLabel).not.toBeNull();
+    expect(moreLabel.textContent).toBe('3 more matches');
   });
 });
 
@@ -2685,7 +2692,7 @@ describe('renderFileMatches', () => {
     ]]]);
     renderer.renderFileMatches(container, file, 1, []);
     expect(container.querySelectorAll('.match-line-row').length).toBe(4);
-    const moreRow = container.querySelector('.match-more-row');
+    const moreRow = container.querySelector('.truncated-row');
     expect(moreRow).not.toBeNull();
     expect(moreRow.textContent).toContain('3 more match');
   });
@@ -3239,7 +3246,7 @@ describe('collapsible file-row with search matches', () => {
     const renderer = makeRenderer(state);
     renderer.beforeRender();
     const li = renderer.renderMoreMatchesRow(2, 1, [], '/ws/a.ts');
-    const row = li.querySelector('.match-more-row');
+    const row = li.querySelector('.truncated-row');
     expect(row.dataset.action).toBe('expandTruncated');
     expect(row.dataset.dirPath).toBe('/ws/a.ts');
   });

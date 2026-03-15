@@ -93,7 +93,18 @@
           if (state.activeFilters.size > 0) { return; }
           const guidePath = actionEl.dataset.guidePath;
           if (!guidePath) { return; }
-          state.expanded.set(guidePath, false);
+          // If this guide belongs to a file with inline matches (not a directory),
+          // toggle the match collapse state instead of the expand/collapse tree state.
+          if (actionEl.dataset.guideIsFileMatch) {
+            if (state.matchesCollapsed.has(guidePath)) {
+              state.matchesCollapsed.delete(guidePath);
+            } else {
+              state.matchesCollapsed.add(guidePath);
+              state.truncationExpanded.delete(guidePath);
+            }
+          } else {
+            state.expanded.set(guidePath, false);
+          }
           state.rerender();
           return;
         }
@@ -342,6 +353,10 @@
           guide.dataset.guidePath = ancestor.path;
           // data-action enables the delegated click handler in createRenderer.
           guide.dataset.action = 'collapseGuide';
+          // File-match guides collapse the file's match group rather than a directory.
+          if (ancestor.isFileMatch) {
+            guide.dataset.guideIsFileMatch = '1';
+          }
         }
         container.appendChild(guide);
       }
@@ -476,11 +491,12 @@
     }
 
     // Renders a clickable "N more matches" summary row when match lines exceed the truncation threshold.
+    // Uses the same dir-row truncated-row structure as file truncation rows for visual consistency.
     function renderMoreMatchesRow(count, depth, ancestors, filePath) {
       const li = document.createElement('li');
       if (filePath) { li.dataset.nodePath = 'more:' + filePath; }
       const row = document.createElement('div');
-      row.className = 'match-more-row';
+      row.className = 'dir-row truncated-row match-more-row';
       // data-action + data-dir-path reuse the expandTruncated handler to expand match lines.
       row.dataset.action = 'expandTruncated';
       row.dataset.dirPath = filePath;
@@ -490,7 +506,7 @@
       plusSlot.innerHTML = SVG_PLUS;
       row.appendChild(plusSlot);
       const label = document.createElement('span');
-      label.className = 'match-more-label';
+      label.className = 'dir-name';
       label.textContent = `${count} more match${count !== 1 ? 'es' : ''}`;
       row.appendChild(label);
       li.appendChild(row);
@@ -988,7 +1004,11 @@
 
           for (const file of shownFiles) {
             childrenEl.appendChild(renderFileNode(file, depth + 1, nextAncestors));
-            renderFileMatches(childrenEl, file, depth + 2, nextAncestors);
+            // Match lines sit at depth+2, one level below the file row. Include the
+            // file in the ancestors array so the indent guide at the file's depth is
+            // clickable — clicking it collapses the file's match group.
+            const fileAncestors = [...nextAncestors, { path: file.path, isFileMatch: true }];
+            renderFileMatches(childrenEl, file, depth + 2, fileAncestors);
           }
           if (hiddenFiles.length > 0) {
             childrenEl.appendChild(renderTruncatedRow(hiddenFiles, depth + 1, nextAncestors, displayNode.path, maxMetric, clientWidth));
