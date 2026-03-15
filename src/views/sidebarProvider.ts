@@ -57,13 +57,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     );
   }
 
-  // Only show loading indicator on first load (when no data exists yet)
-  showLoading(): void {
-    if (!this.lastUpdate) {
-      this.view?.webview.postMessage({ type: 'loading' });
-    }
-  }
-
   showScanning(): void {
     this.view?.webview.postMessage({ type: 'scanning' });
   }

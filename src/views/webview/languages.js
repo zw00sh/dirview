@@ -6,6 +6,7 @@
   if (S.setupDebugEval) { S.setupDebugEval(vscode); }
   /* @DEV_END */
   const root = document.getElementById('root');
+  const scanBar = S.createScanBar();
 
   let activeFilters = new Set();
   let currentStats = [];
@@ -30,7 +31,12 @@
 
   window.addEventListener('message', (event) => {
     const message = event.data;
+    if (message.type === 'scanning') {
+      scanBar.show(true);
+      return;
+    }
     if (message.type === 'update') {
+      scanBar.show(false);
       currentStats = S.computeStats(message.roots || []);
       if (message.activeFilters !== undefined) {
         activeFilters = new Set(message.activeFilters);
@@ -46,6 +52,7 @@
       showPct = message.showPct;
       render();
     } else if (message.type === 'error') {
+      scanBar.show(false);
       root.innerHTML = `<div class="empty">Error: ${S.escHtml(message.message)}</div>`;
     }
   });

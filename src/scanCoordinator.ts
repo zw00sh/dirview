@@ -38,6 +38,7 @@ export class ScanCoordinator {
     try {
       this.sidebar.showScanning();
       this.tab.showScanning();
+      this.languages.showScanning();
       const result = await scanWorkspace(this.config.showIgnored, this.abortController.signal);
       // If the scan was cancelled, don't push stale partial data to the views.
       if (this.abortController.signal.aborted) { return; }

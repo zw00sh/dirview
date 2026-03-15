@@ -44,6 +44,10 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
     );
   }
 
+  showScanning(): void {
+    this.view?.webview.postMessage({ type: 'scanning' });
+  }
+
   update(payload: ScanUpdatePayload): void {
     this.lastPayload = payload;
     this.view?.webview.postMessage({ type: 'update', roots: this.stripRoots(payload.roots), activeFilters: this.activeFilters, showPct: this.showPct });
