@@ -644,6 +644,16 @@ body {
   opacity: 0.5;
 }
 
+/* Separator between non-contiguous line groups in search results */
+.match-group-separator {
+  display: flex;
+  align-items: center;
+  padding: 1px 57px 1px 0;
+  gap: 4px;
+  min-height: 18px;
+  overflow: hidden;
+}
+
 .match-highlight {
   background: var(--vscode-editor-findMatchHighlightBackground, rgba(255, 255, 0, 0.3));
   border-radius: 2px;
@@ -704,6 +714,7 @@ body {
 /* Sidebar has no count column — reduce right padding to file-dot (9px) + sidebar row padding (8px) */
 .tree.sidebar .match-line-row,
 .tree.sidebar .match-context-row,
+.tree.sidebar .match-group-separator,
 .tree.sidebar .match-more-row {
   padding: 1px 17px 1px 0;
 }

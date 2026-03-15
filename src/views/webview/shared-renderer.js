@@ -1057,10 +1057,12 @@
         }
 
         // Insert a separator between non-contiguous line groups.
+        // Includes indent guides so the vertical lines stay continuous.
         if (prevLine !== null && m.line > prevLine + 1) {
           const sepLi = document.createElement('li');
           const sepDiv = document.createElement('div');
           sepDiv.className = 'match-group-separator';
+          sepDiv.appendChild(renderIndentGuides(depth, ancestors));
           sepLi.appendChild(sepDiv);
           container.appendChild(sepLi);
         }
