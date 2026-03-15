@@ -1,8 +1,8 @@
 // Search bar UI and search-related tree utilities.
 
-import * as Icons from './shared-icons';
-import { compactedPath } from './shared-utils';
-import { h } from './shared-h';
+import * as Icons from './icons';
+import { compactedPath } from './utils';
+import { h } from './h';
 
 import type { DirNode, FileNode, WebviewState, VsCodeApi, SearchBarOptions, SearchBarResult, SearchStatusData, SearchMatch } from './types';
 

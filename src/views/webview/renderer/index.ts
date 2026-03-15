@@ -1,20 +1,20 @@
 // Core tree renderer for dirview webviews.
 // ES module — imported by main.ts, tab.ts, etc.
 
-import { SVG_CHEVRON, SVG_PLUS, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_OPEN_IN_TAB } from './shared-icons';
+import { SVG_CHEVRON, SVG_PLUS, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_OPEN_IN_TAB } from '../icons';
 import {
   escHtml, formatBytes, sortDirs, sortFiles, groupEmptyDirs,
   compactedNode, compactedPath, getVisibleChildren, getVisibleFiles, computeBarWidth,
-} from './shared-utils';
-import { setupDelegatedEvents } from './shared-renderer-events';
+} from '../utils';
+import { setupDelegatedEvents } from './events';
 import {
   renderMatchLine as _renderMatchLine,
   renderContextLine as _renderContextLine,
   renderMoreMatchesRow as _renderMoreMatchesRow,
   renderFileMatches as _renderFileMatches,
-} from './shared-renderer-matches';
-import { h } from './shared-h';
-import type { DirNode, FileNode, FileTypeStats, WebviewState, SortMode, RendererDeps, RendererOptions, Renderer, IndentAncestor, SearchMatch, NodeMapEntry, RendererContext } from './types';
+} from './matches';
+import { h } from '../h';
+import type { DirNode, FileNode, FileTypeStats, WebviewState, SortMode, RendererDeps, RendererOptions, Renderer, IndentAncestor, SearchMatch, NodeMapEntry, RendererContext } from '../types';
 
 // Creates render helpers bound to a mutable state object.
 //

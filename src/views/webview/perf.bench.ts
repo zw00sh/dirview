@@ -4,7 +4,7 @@ import {
   createState, createRenderer,
   expandMatchedDirs, expandBatchFiles,
   renderTree, patchTreeChildren,
-} from './shared';
+} from './index';
 import type { DirNode, FileNode } from './types';
 
 // Mock webview API

@@ -8,7 +8,7 @@ import {
   createMessageHandler,
   setupStickyTracking,
   setupDebugEval,
-} from './shared';
+} from './index';
 import type { DirNode, SortMode, BackendToWebviewMessage } from './types';
 
 const vscode = acquireVsCodeApi();

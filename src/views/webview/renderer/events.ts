@@ -1,9 +1,9 @@
 // Delegated event handlers for the tree renderer.
 // Extracted from createRenderer to keep the main file focused on rendering logic.
 
-import { compactedNode, compactedPath, hasExpandedDescendant, escHtml } from './shared-utils';
-import { walkExpand, walkCollapse } from './shared-state';
-import type { DirNode, RendererContext } from './types';
+import { compactedNode, compactedPath, hasExpandedDescendant, escHtml } from '../utils';
+import { walkExpand, walkCollapse } from '../state';
+import type { DirNode, RendererContext } from '../types';
 
 // Sets up all delegated event listeners on the root container element.
 // Instead of attaching 3-6 listeners to each rendered row, we use delegated

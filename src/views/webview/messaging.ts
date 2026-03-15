@@ -1,8 +1,8 @@
 // Message handler for backend → webview communication.
 
-import { escHtml } from './shared-utils';
-import { tieredExpandAll, tieredCollapseAll } from './shared-state';
-import { expandMatchedDirs, updateSearchStatus, scheduleSearchRender, expandBatchFiles, buildAncestorPaths } from './shared-search';
+import { escHtml } from './utils';
+import { tieredExpandAll, tieredCollapseAll } from './state';
+import { expandMatchedDirs, updateSearchStatus, scheduleSearchRender, expandBatchFiles, buildAncestorPaths } from './search';
 
 import type { WebviewState, ScanBar, MessageHandlerDeps, BackendToWebviewMessage } from './types';
 

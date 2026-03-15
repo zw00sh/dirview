@@ -9,7 +9,7 @@ import * as path from 'node:path';
 import {
   createState, createRenderer,
   expandMatchedDirs, expandBatchFiles, buildAncestorPaths,
-} from './shared';
+} from './index';
 import type { DirNode, FileNode } from './types';
 
 (globalThis as any).acquireVsCodeApi = () => ({

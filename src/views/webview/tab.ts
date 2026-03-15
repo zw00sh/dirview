@@ -23,7 +23,7 @@ import {
   SVG_SORT_SIZE,
   SVG_STICKY,
   SVG_STICKY_OFF,
-} from './shared';
+} from './index';
 import type { DirNode, SortMode, LangStat, BackendToWebviewMessage } from './types';
 
 const vscode = acquireVsCodeApi();

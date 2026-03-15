@@ -1,11 +1,11 @@
 // Tree rendering functions: createRescanWarning, renderRoots, renderTree.
 
-import * as Icons from './shared-icons';
-import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, getVisibleChildren, getVisibleFiles } from './shared-utils';
-import { patchTreeChildren } from './shared-dom-patch';
-import { h } from './shared-h';
+import * as Icons from '../icons';
+import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, getVisibleChildren, getVisibleFiles } from '../utils';
+import { patchTreeChildren } from './dom-patch';
+import { h } from '../h';
 
-import type { DirNode, FileNode, WebviewState, SortMode, VsCodeApi, Renderer } from './types';
+import type { DirNode, FileNode, WebviewState, SortMode, VsCodeApi, Renderer } from '../types';
 
 // ── Shared view helpers ───────────────────────────────────────────────────
 

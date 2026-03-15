@@ -1,7 +1,7 @@
 // State management for dirview webviews.
 
 import type { DirNode, WebviewState, SortMode } from './types';
-import { compactedNode, compactedPath, hasExpandedDescendant } from './shared-utils';
+import { compactedNode, compactedPath, hasExpandedDescendant } from './utils';
 
 // Create a fresh webview state object with default values.
 export function createState(): WebviewState {

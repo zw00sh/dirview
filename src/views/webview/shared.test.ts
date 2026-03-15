@@ -12,7 +12,7 @@ import {
   createSearchBar, setupDebugEval,
   scheduleSearchRender, updateSearchStatus, expandBatchFiles,
   SVG_CHEVRON, SVG_EYE, SVG_FOLD, SVG_UNFOLD, SVG_SORT_FILES, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL,
-} from './shared';
+} from './index';
 import type { DirNode, FileNode, WebviewState, Renderer, LangStat } from './types';
 
 // Mock acquireVsCodeApi for webview tests

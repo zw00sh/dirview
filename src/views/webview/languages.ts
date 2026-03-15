@@ -4,7 +4,7 @@ import {
   renderLegend,
   escHtml,
   setupDebugEval,
-} from './shared';
+} from './index';
 import type { LangStat } from './types';
 
 const vscode = acquireVsCodeApi();

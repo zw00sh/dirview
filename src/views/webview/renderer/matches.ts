@@ -2,9 +2,9 @@
 // Extracted from createRenderer — handles search match lines, context lines,
 // "more matches" rows, and the full renderFileMatches orchestrator.
 
-import { SVG_CHEVRON, SVG_PLUS, SVG_WARNING } from './shared-icons';
-import { h } from './shared-h';
-import type { FileNode, SearchMatch, IndentAncestor, RendererContext } from './types';
+import { SVG_CHEVRON, SVG_PLUS, SVG_WARNING } from '../icons';
+import { h } from '../h';
+import type { FileNode, SearchMatch, IndentAncestor, RendererContext } from '../types';
 
 export const MAX_MATCH_LINES = 5;
 export const MAX_MATCH_LINE_DISPLAY = 120;
