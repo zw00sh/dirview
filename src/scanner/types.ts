@@ -6,7 +6,8 @@ export interface ScanUpdatePayload {
   sortMode: SortMode;
   truncateThreshold: number;
   showIgnored: boolean;
-  stickyHeadersEnabled: boolean;
+  sidebarStickyHeadersEnabled: boolean;
+  tabStickyHeadersEnabled: boolean;
 }
 
 export interface FileTypeStats {

@@ -175,12 +175,12 @@
         {
           "command": "dirview.toggleIgnored",
           "when": "view == dirview.sidebar && !dirview.showIgnored",
-          "group": "navigation@2"
+          "group": "navigation@3"
         },
         {
           "command": "dirview.toggleIgnoredOff",
           "when": "view == dirview.sidebar && dirview.showIgnored",
-          "group": "navigation@2"
+          "group": "navigation@3"
         },
         {
           "command": "dirview.cycleSortFiles",
@@ -200,22 +200,22 @@
         {
           "command": "dirview.toggleTruncation",
           "when": "view == dirview.sidebar && !dirview.truncationEnabled",
-          "group": "navigation@3"
+          "group": "navigation@4"
         },
         {
           "command": "dirview.toggleTruncationOff",
           "when": "view == dirview.sidebar && dirview.truncationEnabled",
-          "group": "navigation@3"
+          "group": "navigation@4"
         },
         {
           "command": "dirview.toggleStickyHeaders",
           "when": "view == dirview.sidebar && !dirview.stickyHeadersEnabled",
-          "group": "navigation@7"
+          "group": "navigation@2"
         },
         {
           "command": "dirview.toggleStickyHeadersOff",
           "when": "view == dirview.sidebar && dirview.stickyHeadersEnabled",
-          "group": "navigation@7"
+          "group": "navigation@2"
         },
         {
           "command": "dirview.openInTab",

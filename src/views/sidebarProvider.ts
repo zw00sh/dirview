@@ -74,7 +74,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     if (this.view) {
       this.view.title = roots.length === 1 ? roots[0].name : 'Files';
     }
-    const stickyHeadersEnabled = payload.stickyHeadersEnabled;
+    const stickyHeadersEnabled = payload.sidebarStickyHeadersEnabled;
     this.view?.webview.postMessage({ type: 'update', roots, autoRescanEnabled, sortMode, truncateThreshold, stickyHeadersEnabled });
   }
 

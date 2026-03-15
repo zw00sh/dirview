@@ -77,17 +77,15 @@ export function registerCommands(
 
   context.subscriptions.push(
     vscode.commands.registerCommand('dirview.toggleStickyHeaders', async () => {
-      await config.setStickyHeadersEnabled(true);
+      await config.setSidebarStickyHeadersEnabled(true);
       sidebar.updateStickyHeaders(true);
-      tab.updateStickyHeaders(true);
     })
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('dirview.toggleStickyHeadersOff', async () => {
-      await config.setStickyHeadersEnabled(false);
+      await config.setSidebarStickyHeadersEnabled(false);
       sidebar.updateStickyHeaders(false);
-      tab.updateStickyHeaders(false);
     })
   );
 

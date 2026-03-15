@@ -41,20 +41,28 @@ export class Config {
     return next;
   }
 
-  get stickyHeadersEnabled(): boolean {
-    return this.context.workspaceState.get<boolean>('dirview.stickyHeadersEnabled', true);
+  get sidebarStickyHeadersEnabled(): boolean {
+    return this.context.workspaceState.get<boolean>('dirview.sidebarStickyHeadersEnabled', true);
   }
 
-  async setStickyHeadersEnabled(value: boolean): Promise<void> {
-    await this.context.workspaceState.update('dirview.stickyHeadersEnabled', value);
+  async setSidebarStickyHeadersEnabled(value: boolean): Promise<void> {
+    await this.context.workspaceState.update('dirview.sidebarStickyHeadersEnabled', value);
     await vscode.commands.executeCommand('setContext', 'dirview.stickyHeadersEnabled', value);
+  }
+
+  get tabStickyHeadersEnabled(): boolean {
+    return this.context.workspaceState.get<boolean>('dirview.tabStickyHeadersEnabled', true);
+  }
+
+  async setTabStickyHeadersEnabled(value: boolean): Promise<void> {
+    await this.context.workspaceState.update('dirview.tabStickyHeadersEnabled', value);
   }
 
   async init(): Promise<void> {
     await vscode.commands.executeCommand('setContext', 'dirview.showIgnored', this.showIgnored);
     await vscode.commands.executeCommand('setContext', 'dirview.truncationEnabled', this.truncationEnabled);
     await vscode.commands.executeCommand('setContext', 'dirview.sortMode', this.sortMode);
-    await vscode.commands.executeCommand('setContext', 'dirview.stickyHeadersEnabled', this.stickyHeadersEnabled);
+    await vscode.commands.executeCommand('setContext', 'dirview.stickyHeadersEnabled', this.sidebarStickyHeadersEnabled);
     await vscode.commands.executeCommand('setContext', 'dirview.allExpanded', false);
   }
 }

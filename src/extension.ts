@@ -15,7 +15,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const sidebarProvider = new SidebarProvider(context.extensionUri);
   const languagesProvider = new LanguagesProvider(context.extensionUri);
   const searchProvider = new SearchProvider(context.extensionUri);
-  const tabProvider = new TabProvider(context.extensionUri);
+  const tabProvider = new TabProvider(context.extensionUri, config);
 
   if (DEV_MODE) {
     sidebarProvider.debug = true;

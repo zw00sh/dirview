@@ -50,7 +50,8 @@ export class ScanCoordinator {
         sortMode: this.config.sortMode,
         truncateThreshold,
         showIgnored: this.config.showIgnored,
-        stickyHeadersEnabled: this.config.stickyHeadersEnabled,
+        sidebarStickyHeadersEnabled: this.config.sidebarStickyHeadersEnabled,
+        tabStickyHeadersEnabled: this.config.tabStickyHeadersEnabled,
       };
       this.sidebar.update(payload);
       this.languages.update(payload);

@@ -16,11 +16,11 @@
   const searchContentEl = document.getElementById('search-content');
   const root = document.getElementById('root');
   const sortBtn = document.getElementById('tab-sort');
-  const toggleIgnoredBtn = document.getElementById('tab-toggle-ignored');
+  const toggleStickyBtn = document.getElementById('tab-toggle-sticky');
   const toggleTruncationBtn = document.getElementById('tab-toggle-truncation');
+  const toggleIgnoredBtn = document.getElementById('tab-toggle-ignored');
   const expandAllBtn = document.getElementById('tab-expand-all');
   const collapseAllBtn = document.getElementById('tab-collapse-all');
-  const toggleStickyBtn = document.getElementById('tab-toggle-sticky');
 
   const scanBar = S.createScanBar();
   const tooltip = S.createTooltip();

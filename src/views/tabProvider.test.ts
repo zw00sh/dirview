@@ -31,19 +31,19 @@ import { TabProvider } from './tabProvider';
 
 describe('TabProvider.getRootPaths', () => {
   it('returns absolute workspace folder paths for root tab (dirPath="")', () => {
-    const provider = new TabProvider({} as any);
+    const provider = new TabProvider({} as any, {} as any);
     const paths = (provider as any).getRootPaths('');
     expect(paths).toEqual([WORKSPACE_ROOT]);
   });
 
   it('returns an absolute path for a subdirectory tab', () => {
-    const provider = new TabProvider({} as any);
+    const provider = new TabProvider({} as any, {} as any);
     const paths = (provider as any).getRootPaths('src/scanner');
     expect(paths).toEqual([`${WORKSPACE_ROOT}/src/scanner`]);
   });
 
   it('returns an absolute path for a deeply nested subdirectory', () => {
-    const provider = new TabProvider({} as any);
+    const provider = new TabProvider({} as any, {} as any);
     const paths = (provider as any).getRootPaths('source/policy-engine');
     expect(paths).toEqual([`${WORKSPACE_ROOT}/source/policy-engine`]);
   });
