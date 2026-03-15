@@ -140,6 +140,16 @@
         }
       },
       {
+        "command": "dirview.toggleStickyHeaders",
+        "title": "Enable Sticky Headers",
+        "icon": "$(pin)"
+      },
+      {
+        "command": "dirview.toggleStickyHeadersOff",
+        "title": "Disable Sticky Headers",
+        "icon": "$(pinned)"
+      },
+      {
         "command": "dirview.contextCopyPath",
         "title": "Copy Path"
       },
@@ -192,6 +202,16 @@
           "command": "dirview.toggleTruncationOff",
           "when": "view == dirview.sidebar && dirview.truncationEnabled",
           "group": "navigation@3"
+        },
+        {
+          "command": "dirview.toggleStickyHeaders",
+          "when": "view == dirview.sidebar && !dirview.stickyHeadersEnabled",
+          "group": "navigation@4"
+        },
+        {
+          "command": "dirview.toggleStickyHeadersOff",
+          "when": "view == dirview.sidebar && dirview.stickyHeadersEnabled",
+          "group": "navigation@4"
         },
         {
           "command": "dirview.openInTab",

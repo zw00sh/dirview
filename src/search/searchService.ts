@@ -8,6 +8,8 @@ export interface SearchMatch {
   /** Pre-rendered syntax-highlighted HTML with match-highlight span injected. Set by the
    *  backend after ripgrep resolves; absent for file-glob results or unknown languages. */
   highlightedHtml?: string;
+  /** True for context lines (no match highlight). Set when contextLines > 0. */
+  isContext?: boolean;
 }
 
 export interface SearchResult {
@@ -21,6 +23,8 @@ export interface SearchOptions {
   caseSensitive?: boolean;
   useRegex?: boolean;
   include?: string;
+  /** Number of context lines to show before and after each match (-C N passed to ripgrep). */
+  contextLines?: number;
   /** Called with partial results as they arrive. Batches are flushed every BATCH_FLUSH_FILES
    *  new files or BATCH_FLUSH_MS milliseconds, whichever comes first. */
   onBatch?: (batch: Map<string, SearchMatch[]>, totals: { fileCount: number; matchCount: number }) => void;
@@ -74,6 +78,7 @@ export class SearchService {
     if (!options.caseSensitive) { args.push('-i'); }
     if (!options.useRegex) { args.push('--fixed-strings'); }
     if (options.include) { args.push('--glob', options.include); }
+    if (options.contextLines && options.contextLines > 0) { args.push('-C', String(options.contextLines)); }
     args.push(...rootPaths);
 
     const proc = child_process.spawn(this.rgPath, args);
@@ -95,9 +100,17 @@ export class SearchService {
       let batchFileCount = 0;
       let batchTimer: ReturnType<typeof setTimeout> | null = null;
 
+      // Buffers context lines that arrive before the first match for a file.
+      // Flushed into matches when the file's first match is processed.
+      const contextBuffer = new Map<string, SearchMatch[]>();
+
       const flushBatch = () => {
         if (batchTimer) { clearTimeout(batchTimer); batchTimer = null; }
         if (batchBuffer.size === 0 || generation !== this.generation) { return; }
+        // Sort each file's entries by line number before delivering the batch.
+        for (const [, fileMatches] of batchBuffer) {
+          fileMatches.sort((a, b) => a.line - b.line);
+        }
         const batch = batchBuffer;
         batchBuffer = new Map();
         batchFileCount = 0;
@@ -129,6 +142,18 @@ export class SearchService {
                   matches.set(filePath, []);
                   fileCount++;
                   if (onBatch) { batchFileCount++; }
+                  // Flush buffered context lines that arrived before this file's first match.
+                  if (contextBuffer.has(filePath)) {
+                    const buffered = contextBuffer.get(filePath)!;
+                    contextBuffer.delete(filePath);
+                    for (const ctx of buffered) {
+                      matches.get(filePath)!.push(ctx);
+                      if (onBatch) {
+                        if (!batchBuffer.has(filePath)) { batchBuffer.set(filePath, []); }
+                        batchBuffer.get(filePath)!.push(ctx);
+                      }
+                    }
+                  }
                 }
                 const match: SearchMatch = {
                   line: lineNum,
@@ -144,6 +169,30 @@ export class SearchService {
                   if (!batchBuffer.has(filePath)) { batchBuffer.set(filePath, []); }
                   batchBuffer.get(filePath)!.push(match);
                 }
+              }
+            } else if (obj.type === 'context') {
+              // Context lines are emitted by ripgrep when -C N is passed. They carry surrounding
+              // lines for each match. Only count toward file entries, not toward MAX_MATCHES.
+              const filePath: string = obj.data.path.text;
+              const lineNum: number = obj.data.line_number;
+              const lineText = (obj.data.lines?.text ?? '').replace(/\n$/, '');
+              const ctxMatch: SearchMatch = {
+                line: lineNum,
+                column: 0,
+                matchLength: 0,
+                lineText,
+                isContext: true,
+              };
+              if (matches.has(filePath)) {
+                matches.get(filePath)!.push(ctxMatch);
+                if (onBatch) {
+                  if (!batchBuffer.has(filePath)) { batchBuffer.set(filePath, []); }
+                  batchBuffer.get(filePath)!.push(ctxMatch);
+                }
+              } else {
+                // Context arrived before the first match for this file — buffer it.
+                if (!contextBuffer.has(filePath)) { contextBuffer.set(filePath, []); }
+                contextBuffer.get(filePath)!.push(ctxMatch);
               }
             }
           } catch { /* ignore JSON parse errors */ }
@@ -163,6 +212,10 @@ export class SearchService {
         if (generation !== this.generation) { return; } // Cancelled — discard stale results
         // Flush any remaining batch before resolving
         if (onBatch && batchBuffer.size > 0) { flushBatch(); }
+        // Sort each file's entries by line number so match and context lines are in order.
+        for (const [, fileMatches] of matches) {
+          fileMatches.sort((a, b) => a.line - b.line);
+        }
         // exit code 0 = matches found, 1 = no matches (both are success in rg)
         if (code !== null && code !== 0 && code !== 1 && matches.size === 0 && errorOutput) {
           reject(new Error(errorOutput.trim()));

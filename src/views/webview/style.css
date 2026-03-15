@@ -535,6 +535,50 @@ body {
   height: 14px;
 }
 
+/* Context lines number input — lives inline in the search input row, after the main container.
+ * Matches VS Code Search Editor: 50px wide, 25px tall, own border/background, left margin 5px. */
+.search-context-input-wrap {
+  width: 50px;
+  height: 25px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+  margin: 0 2px 0 5px;
+  box-sizing: border-box;
+  transition: opacity 0.1s;
+}
+
+.search-context-input-wrap:focus-within {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+
+.search-context-input-wrap input[type=number] {
+  width: 100%;
+  height: 100%;
+  padding: 4px 6px;
+  border: none;
+  background: transparent;
+  color: var(--vscode-input-foreground);
+  font-family: inherit;
+  font-size: 13px;
+  box-sizing: border-box;
+  outline: none;
+  -webkit-appearance: textfield;
+}
+
+/* Hide browser spin buttons on the context number input */
+.search-context-input-wrap input[type=number]::-webkit-inner-spin-button,
+.search-context-input-wrap input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Context toggle sits 2px to the right of the number input, matching VS Code spacing */
+.search-context-toggle {
+  margin-left: 2px;
+}
+
 .search-status {
   font-size: 11px;
   color: var(--vscode-descriptionForeground);
@@ -603,15 +647,10 @@ body {
   font-style: italic;
 }
 
-/* Sidebar has no count column — reduce right padding to file-dot (9px) + sidebar row padding (8px) */
-.tree.sidebar .match-line-row,
-.tree.sidebar .match-more-row {
-  padding: 1px 17px 1px 0;
-}
-
 /* Sticky parent directory headers — parent dir-rows stick to the top of the
    scroll area while their parent <li> is in view, providing spatial context.
-   Shadow is only shown when the row is actually stuck (.is-stuck toggled by JS). */
+   --depth (set in renderDirNode) determines the stacking offset.
+   Shadow is only shown on the bottommost stuck row (.is-stuck-bottom toggled by JS). */
 .sticky-dir {
   position: sticky;
   top: calc(var(--depth) * 22px);
@@ -620,4 +659,18 @@ body {
 }
 .sticky-dir.is-stuck-bottom {
   box-shadow: 0 6px 6px -6px rgba(0, 0, 0, 0.4);
+}
+
+/* When sticky is disabled, revert to normal flow */
+.sticky-disabled .sticky-dir {
+  position: static;
+  z-index: auto;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Sidebar has no count column — reduce right padding to file-dot (9px) + sidebar row padding (8px) */
+.tree.sidebar .match-line-row,
+.tree.sidebar .match-more-row {
+  padding: 1px 17px 1px 0;
 }

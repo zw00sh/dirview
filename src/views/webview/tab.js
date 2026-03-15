@@ -20,14 +20,12 @@
   const toggleTruncationBtn = document.getElementById('tab-toggle-truncation');
   const expandAllBtn = document.getElementById('tab-expand-all');
   const collapseAllBtn = document.getElementById('tab-collapse-all');
+  const toggleStickyBtn = document.getElementById('tab-toggle-sticky');
 
   const scanBar = S.createScanBar();
   const tooltip = S.createTooltip();
   const state = S.createState();
   state.scanBar = scanBar;
-
-  // Track sticky headers — tab scrolls via #root (overflow-y: auto).
-  const updateStuck = S.setupStickyTracking(root);
 
   // Mount search bar inside the collapsible search section.
   const searchBar = S.createSearchBar(state, vscode);
@@ -84,8 +82,20 @@
     toggleTruncationBtn.setAttribute('aria-label', toggleTruncationBtn.title);
   }
 
+  let currentStickyEnabled = true;
+
+  function updateStickyBtn() {
+    toggleStickyBtn.innerHTML = currentStickyEnabled ? S.SVG_STICKY : S.SVG_STICKY_OFF;
+    toggleStickyBtn.title = currentStickyEnabled ? 'Disable Sticky Headers' : 'Enable Sticky Headers';
+    toggleStickyBtn.setAttribute('aria-label', toggleStickyBtn.title);
+  }
+
+  // Set up sticky tracking — returns {updateStuck, setEnabled} for toggling sticky headers.
+  const { updateStuck: _updateStuck, setEnabled: setStickyEnabled } = S.setupStickyTracking(root);
+
   updateToggleIgnoredBtn();
   updateTruncationBtn();
+  updateStickyBtn();
 
   // ── Toolbar event listeners ─────────────────────────────────────────────
 
@@ -117,6 +127,9 @@
     state.truncationExpanded.clear();
     state.emptyGroupExpanded.clear();
     state.rerender();
+  });
+  toggleStickyBtn.addEventListener('click', () => {
+    vscode.postMessage({ command: 'toggleStickyHeaders', enabled: !currentStickyEnabled });
   });
   legendHeader.addEventListener('click', () => {
     legendCollapsed = !legendCollapsed;
@@ -202,7 +215,7 @@
 
     root.querySelector('.empty')?.remove();
     S.renderTree(state, renderer, root, { showRootNode: true });
-    updateStuck();
+    _updateStuck();
   }
 
   state.render = render;
@@ -218,6 +231,11 @@
       updateToggleIgnoredBtn();
       if (typeof message.dirPath === 'string') { state.dirPath = message.dirPath; }
       if (typeof message.workspaceFolderName === 'string') { state.workspaceFolderName = message.workspaceFolderName; }
+      if (typeof message.stickyHeadersEnabled === 'boolean') {
+        currentStickyEnabled = message.stickyHeadersEnabled;
+        updateStickyBtn();
+        setStickyEnabled(message.stickyHeadersEnabled);
+      }
     },
     onLoading: () => {
       legendSection.style.display = 'none';
@@ -226,6 +244,12 @@
 
   window.addEventListener('message', (event) => {
     const message = event.data;
+    if (message.type === 'updateStickyHeaders') {
+      currentStickyEnabled = message.enabled;
+      updateStickyBtn();
+      setStickyEnabled(message.enabled);
+      return;
+    }
     if (message.type === 'updateTruncation') {
       const newThreshold = message.truncateThreshold;
       if (typeof newThreshold === 'number' && newThreshold !== state.truncateThreshold) {

@@ -100,15 +100,6 @@ Toggling the ignored state triggers a full rescan affecting all views.
 - The tooltip repositions to stay within the viewport.
 - Scrolling hides the tooltip.
 
-### Sticky Headers
-
-- Directory rows that have visible children (subdirectories or files) are rendered as sticky headers.
-- Each sticky header sticks at a `top` offset of `depth * 22px`, so nested headers stack below their ancestors without overlapping.
-- `z-index` decreases with depth (`100 - depth`) so shallower ancestors always appear above deeper ones when stacking.
-- In the sidebar, sticky headers use `--vscode-sideBar-background` as their background.
-- In the tab view, sticky headers use `--vscode-editor-background` as their background.
-- Leaf directories (no children and no files) are not sticky.
-
 ### Incremental DOM Patching
 
 - On rescan, existing tree DOM is patched rather than replaced, preserving scroll position and avoiding flicker.
@@ -250,6 +241,7 @@ The tab toolbar contains (left to right):
 - **Sort button**: cycles through sort modes locally.
 - **Truncation toggle**: enables/disables file truncation for all tabs.
 - **Ignored toggle**: shows/hides ignored files (triggers a rescan affecting all views).
+- **Sticky headers toggle**: enables/disables sticky directory headers (pin/unpin icon). Enabled by default. When enabled, expanded directory header rows stick to the top of the scroll container as the user scrolls. Toggling affects both sidebar and all open tabs. State is persisted to workspace state. Also available as a sidebar title bar button.
 - **Expand All / Collapse All**: 3-tier expand/collapse for the tab's tree.
 
 ### Navigation

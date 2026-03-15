@@ -76,6 +76,22 @@ export function registerCommands(
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand('dirview.toggleStickyHeaders', async () => {
+      await config.setStickyHeadersEnabled(true);
+      sidebar.updateStickyHeaders(true);
+      tab.updateStickyHeaders(true);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('dirview.toggleStickyHeadersOff', async () => {
+      await config.setStickyHeadersEnabled(false);
+      sidebar.updateStickyHeaders(false);
+      tab.updateStickyHeaders(false);
+    })
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand('dirview.expandAll', () => {
       sidebar.expandAll();
     })

@@ -30,11 +30,22 @@
   const SVG_REGEX = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><text x="1" y="13" font-family="monospace" font-size="12" fill="currentColor">.*</text></svg>';
   const SVG_CLOSE = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z"/></svg>';
 
+  // Context lines toggle icon: VS Code's list-selection codicon (same icon used by
+  // the native Search Editor's "Show Context Lines" toggle — search-show-context = R.listSelection).
+  const SVG_CONTEXT_LINES = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2 3.5a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 0 1h-8a.5.5 0 0 1-.5-.5Zm0 8a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5ZM2.5 7a.5.5 0 0 0 0 1h11a.5.5 0 0 0 0-1h-11Z"/></svg>';
+
+  // Sticky headers toggle: cascading bars representing stacked sticky headers.
+  // ON: three bars stepping right/down (headers sticking at top).
+  // OFF: same bars dimmed with a diagonal slash (headers free-scrolling).
+  const SVG_STICKY = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><rect x="2" y="2" width="12" height="2" rx="0.5"/><rect x="2" y="4" width="1.5" height="2"/><rect x="3.5" y="6" width="10.5" height="2" rx="0.5"/><rect x="3.5" y="8" width="1.5" height="2"/><rect x="5" y="10" width="9" height="2" rx="0.5"/></svg>';
+  const SVG_STICKY_OFF = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><rect x="2" y="2" width="12" height="2" rx="0.5" opacity="0.4"/><rect x="3.5" y="6" width="10.5" height="2" rx="0.5" opacity="0.4"/><rect x="5" y="10" width="9" height="2" rx="0.5" opacity="0.4"/><path d="M1.146 14.854a.5.5 0 0 0 .708 0l13-13a.5.5 0 0 0-.708-.708l-13 13a.5.5 0 0 0 0 .708Z"/></svg>';
+
   window._DirviewIcons = {
     SVG_CHEVRON, SVG_PLUS, SVG_WARNING,
     SVG_EYE, SVG_EYE_CLOSED, SVG_FOLD, SVG_UNFOLD, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_OPEN_IN_TAB,
     SVG_TARGET,
     SVG_SORT_FILES, SVG_SORT_NAME, SVG_SORT_SIZE,
-    SVG_SEARCH, SVG_REGEX, SVG_CLOSE,
+    SVG_SEARCH, SVG_REGEX, SVG_CLOSE, SVG_CONTEXT_LINES,
+    SVG_STICKY, SVG_STICKY_OFF,
   };
 })();

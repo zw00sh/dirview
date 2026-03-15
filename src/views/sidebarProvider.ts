@@ -74,7 +74,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     if (this.view) {
       this.view.title = roots.length === 1 ? roots[0].name : 'Files';
     }
-    this.view?.webview.postMessage({ type: 'update', roots, autoRescanEnabled, sortMode, truncateThreshold });
+    const stickyHeadersEnabled = payload.stickyHeadersEnabled;
+    this.view?.webview.postMessage({ type: 'update', roots, autoRescanEnabled, sortMode, truncateThreshold, stickyHeadersEnabled });
   }
 
   updateTruncateThreshold(truncateThreshold: number): void {
@@ -122,6 +123,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   /** Clear the active search in the tree webview. */
   clearSearch(): void {
     this.view?.webview.postMessage({ type: 'searchResults', matches: null });
+  }
+
+  updateStickyHeaders(enabled: boolean): void {
+    this.view?.webview.postMessage({ type: 'updateStickyHeaders', enabled });
   }
 
   setFilter(langs: string[]): void {

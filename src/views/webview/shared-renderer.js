@@ -421,6 +421,36 @@
       return li;
     }
 
+    // Renders a single context line (surrounding code) beneath a file row in search-results mode.
+    // Context lines are dimmed relative to match lines and share the same click behaviour.
+    function renderContextLine(file, match, depth, ancestors) {
+      const li = document.createElement('li');
+      li.dataset.nodePath = 'context:' + file.path + ':' + match.line;
+      const row = document.createElement('div');
+      row.className = 'match-context-row';
+      row.dataset.action = 'openFileAtLine';
+      row.dataset.path = file.path;
+      row.dataset.line = String(match.line);
+      row.appendChild(renderIndentGuides(depth, ancestors));
+
+      const lineNumEl = document.createElement('span');
+      lineNumEl.className = 'match-line-number';
+      lineNumEl.textContent = String(match.line);
+      row.appendChild(lineNumEl);
+
+      const textEl = document.createElement('span');
+      textEl.className = 'match-line-text';
+      if (match.highlightedHtml) {
+        textEl.innerHTML = match.highlightedHtml;
+      } else {
+        const { lineText } = trimLeadingWhitespace(match.lineText || '', 0);
+        textEl.textContent = lineText;
+      }
+      row.appendChild(textEl);
+      li.appendChild(row);
+      return li;
+    }
+
     // Renders a "N more matches" summary row when match lines are capped at 5 per file.
     function renderMoreMatchesRow(count, depth, ancestors, filePath) {
       const li = document.createElement('li');
@@ -920,17 +950,53 @@
       return li;
     }
 
-    // Renders inline match lines beneath a file row when content search is active.
-    // Appends up to MAX_MATCH_LINES match-line rows, then a "N more matches" row if needed.
+    // Renders inline match lines (and optional context lines) beneath a file row when content
+    // search is active. Renders up to MAX_MATCH_LINES match lines plus their associated context
+    // lines. Inserts a separator element between non-contiguous line groups (gaps in line numbers).
     function renderFileMatches(container, file, depth, ancestors) {
       if (!state.searchResults?.has(file.path)) { return; }
       const fileMatches = state.searchResults.get(file.path);
       if (!fileMatches || fileMatches.length === 0) { return; }
-      for (const m of fileMatches.slice(0, MAX_MATCH_LINES)) {
-        container.appendChild(renderMatchLine(file, m, depth, ancestors));
+
+      // Sort by line number — entries arrive sorted from the backend but sorting here is
+      // defensive against any reordering during streaming patches.
+      const sorted = fileMatches.slice().sort((a, b) => a.line - b.line);
+
+      // Count total match lines (not context) to compute the "more matches" label.
+      let totalMatchLines = 0;
+      for (const m of sorted) { if (!m.isContext) { totalMatchLines++; } }
+
+      let renderedMatchCount = 0;
+      let prevLine = null;
+
+      for (const m of sorted) {
+        if (!m.isContext) {
+          renderedMatchCount++;
+          if (renderedMatchCount > MAX_MATCH_LINES) { break; }
+        } else if (renderedMatchCount > MAX_MATCH_LINES) {
+          // Context line after the cap has been exceeded — stop rendering.
+          break;
+        }
+
+        // Insert a separator between non-contiguous line groups.
+        if (prevLine !== null && m.line > prevLine + 1) {
+          const sepLi = document.createElement('li');
+          const sepDiv = document.createElement('div');
+          sepDiv.className = 'match-group-separator';
+          sepLi.appendChild(sepDiv);
+          container.appendChild(sepLi);
+        }
+        prevLine = m.line;
+
+        if (m.isContext) {
+          container.appendChild(renderContextLine(file, m, depth, ancestors));
+        } else {
+          container.appendChild(renderMatchLine(file, m, depth, ancestors));
+        }
       }
-      if (fileMatches.length > MAX_MATCH_LINES) {
-        container.appendChild(renderMoreMatchesRow(fileMatches.length - MAX_MATCH_LINES, depth, ancestors, file.path));
+
+      if (totalMatchLines > MAX_MATCH_LINES) {
+        container.appendChild(renderMoreMatchesRow(totalMatchLines - MAX_MATCH_LINES, depth, ancestors, file.path));
       }
     }
 
@@ -938,7 +1004,7 @@
       // Called at the start of each full renderTree pass to flush stale node references.
       beforeRender() { nodeMap.clear(); _searchMatchCache = new WeakMap(); },
       dirMatchesFilter, dirMatchesSearch, renderIndentGuides, renderFileNode,
-      renderMatchLine, renderMoreMatchesRow, renderFileMatches, renderTruncatedRow, renderEmptyGroupNode, renderDirNode,
+      renderMatchLine, renderContextLine, renderMoreMatchesRow, renderFileMatches, renderTruncatedRow, renderEmptyGroupNode, renderDirNode,
     };
   }
 

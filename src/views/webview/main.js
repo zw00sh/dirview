@@ -12,9 +12,6 @@
   const state = S.createState();
   state.scanBar = scanBar;
 
-  // Track sticky headers — sidebar scrolls the viewport (no overflow on root/body).
-  const updateStuck = S.setupStickyTracking(document.documentElement);
-
   // Cmd+F in the tree fold: reveal and focus the search fold instead of showing an inline bar.
   window.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
@@ -22,6 +19,9 @@
       vscode.postMessage({ command: 'focusSearch' });
     }
   });
+
+  // Set up sticky tracking for the sidebar (before render so updateStuck is available).
+  const { updateStuck: _updateStuck, setEnabled: setStickyEnabled } = S.setupStickyTracking(document.documentElement);
 
   const renderer = S.createRenderer(state, {
     vscode,
@@ -66,12 +66,12 @@
 
     root.querySelector('.empty')?.remove();
     S.renderTree(state, renderer, root, { cssClass: 'sidebar' });
-    updateStuck();
+    _updateStuck();
   }
 
   state.render = render;
 
-  window.addEventListener('message', S.createMessageHandler(state, scanBar, root, {
+  const sharedMsgHandler = S.createMessageHandler(state, scanBar, root, {
     vscode,
     render,
     onBeforeUpdate: (message) => {
@@ -82,8 +82,20 @@
         }
         state.truncateThreshold = message.truncateThreshold;
       }
+      if (typeof message.stickyHeadersEnabled === 'boolean') {
+        setStickyEnabled(message.stickyHeadersEnabled);
+      }
     },
-  }));
+  });
+
+  window.addEventListener('message', (event) => {
+    const message = event.data;
+    if (message.type === 'updateStickyHeaders') {
+      setStickyEnabled(message.enabled);
+      return;
+    }
+    sharedMsgHandler(event);
+  });
 
   root.innerHTML = '<div class="loading">Initializing…</div>';
   scanBar.show(true);

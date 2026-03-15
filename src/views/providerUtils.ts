@@ -39,7 +39,7 @@ export function handleCommonMessage(
  *  Runs the ripgrep search and posts searchProgress / searchResults back via postMessage.
  *  Returns true if the message was handled, false otherwise (non-blocking — fires async). */
 export function handleSearchMessage(
-  message: { command: string; pattern?: string; caseSensitive?: boolean; useRegex?: boolean; include?: string; glob?: string },
+  message: { command: string; pattern?: string; caseSensitive?: boolean; useRegex?: boolean; include?: string; glob?: string; contextLines?: number },
   searchService: SearchService,
   postMessage: (msg: object) => void,
   rootPaths: string[]
@@ -49,19 +49,48 @@ export function handleSearchMessage(
     const MAX_MATCH_LINES = 5;
     const CONCURRENCY = 10;
 
-    // Syntax-highlights the first MAX_MATCH_LINES matches per file with concurrency limiting.
-    // Returns a list of { path, idx, html } patches to be sent as a separate message, so
-    // callers can deliver plain-text batches immediately without waiting for Shiki.
+    // Strips lineText from entries beyond the render cap to reduce serialisation payload.
+    // Context lines for rendered match groups are preserved; everything after the
+    // MAX_MATCH_LINES-th match (and its trailing context) is stripped.
+    function stripBeyondCap(fileMatches: SearchMatch[]): void {
+      let renderedMatchCount = 0;
+      for (let i = 0; i < fileMatches.length; i++) {
+        const m = fileMatches[i];
+        if (!m.isContext) {
+          renderedMatchCount++;
+          if (renderedMatchCount > MAX_MATCH_LINES) {
+            // Strip this match and all remaining entries.
+            for (let j = i; j < fileMatches.length; j++) { delete fileMatches[j].lineText; }
+            return;
+          }
+        } else if (renderedMatchCount >= MAX_MATCH_LINES) {
+          // Context line after the last rendered match — strip it and all remaining.
+          for (let j = i; j < fileMatches.length; j++) { delete fileMatches[j].lineText; }
+          return;
+        }
+      }
+    }
+
+    // Syntax-highlights entries up to the render cap per file with concurrency limiting.
+    // Context lines are highlighted too (matchLength=0 produces syntax-highlighted HTML
+    // without a match-highlight span). Returns { path, idx, html } patches.
     async function highlightBatch(batch: Map<string, SearchMatch[]>): Promise<Array<{ path: string; idx: number; html: string }>> {
       const executing = new Set<Promise<void>>();
       const patches: Array<{ path: string; idx: number; html: string }> = [];
       for (const [filePath, matches] of batch) {
         const task = (async () => {
           const langName = getLangInfo(path.basename(filePath)).name;
-          for (let i = 0; i < Math.min(matches.length, MAX_MATCH_LINES); i++) {
-            const lineText = matches[i].lineText;
-            if (lineText === undefined) { continue; }
-            const html = await highlightLine(lineText, matches[i].column, matches[i].matchLength, langName);
+          let matchCount = 0;
+          for (let i = 0; i < matches.length; i++) {
+            const m = matches[i];
+            if (!m.isContext) {
+              matchCount++;
+              if (matchCount > MAX_MATCH_LINES) { break; }
+            } else if (matchCount >= MAX_MATCH_LINES) {
+              break; // Context after the last rendered match — stop.
+            }
+            if (m.lineText === undefined) { continue; }
+            const html = await highlightLine(m.lineText, m.column, m.matchLength, langName);
             if (html !== undefined) { patches.push({ path: filePath, idx: i, html }); }
           }
         })();
@@ -81,11 +110,10 @@ export function handleSearchMessage(
       rootPaths,
       {
         caseSensitive: message.caseSensitive, useRegex: message.useRegex, include: message.include,
+        contextLines: message.contextLines,
         onBatch: (batch, totals) => {
-          // Strip lineText from matches beyond the render cap before serialising.
-          for (const [, matches] of batch) {
-            for (let i = MAX_MATCH_LINES; i < matches.length; i++) { delete matches[i].lineText; }
-          }
+          // Strip lineText from entries beyond the render cap before serialising.
+          for (const [, matches] of batch) { stripBeyondCap(matches); }
           // Send plain-text batch immediately — no waiting for syntax highlighting.
           if (searchService.getGeneration() !== searchGen) { return; }
           const plainObj: Record<string, SearchMatch[]> = {};

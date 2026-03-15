@@ -41,10 +41,20 @@ export class Config {
     return next;
   }
 
+  get stickyHeadersEnabled(): boolean {
+    return this.context.workspaceState.get<boolean>('dirview.stickyHeadersEnabled', true);
+  }
+
+  async setStickyHeadersEnabled(value: boolean): Promise<void> {
+    await this.context.workspaceState.update('dirview.stickyHeadersEnabled', value);
+    await vscode.commands.executeCommand('setContext', 'dirview.stickyHeadersEnabled', value);
+  }
+
   async init(): Promise<void> {
     await vscode.commands.executeCommand('setContext', 'dirview.showIgnored', this.showIgnored);
     await vscode.commands.executeCommand('setContext', 'dirview.truncationEnabled', this.truncationEnabled);
     await vscode.commands.executeCommand('setContext', 'dirview.sortMode', this.sortMode);
+    await vscode.commands.executeCommand('setContext', 'dirview.stickyHeadersEnabled', this.stickyHeadersEnabled);
     await vscode.commands.executeCommand('setContext', 'dirview.allExpanded', false);
   }
 }

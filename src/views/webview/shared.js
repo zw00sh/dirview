@@ -458,6 +458,34 @@
     inputContainer.appendChild(clearBtn);
 
     inputRow.appendChild(inputContainer);
+
+    // ── Context lines — inline after the search input container ────────────
+    // Matches VS Code Search Editor layout: [number input] [toggle], no text label.
+    // The number input sits inside its own bordered wrapper (separate from the main
+    // search container) so it gets its own focus ring and background.
+    const contextInputWrap = document.createElement('div');
+    contextInputWrap.className = 'search-context-input-wrap';
+    const contextInput = document.createElement('input');
+    contextInput.type = 'number';
+    contextInput.min = '0';
+    contextInput.max = '10';
+    contextInput.value = '1';
+    contextInput.setAttribute('aria-label', 'Context lines');
+    contextInputWrap.appendChild(contextInput);
+
+    const contextBtn = document.createElement('button');
+    contextBtn.className = 'search-toggle search-context-toggle';
+    contextBtn.title = 'Show Context Lines';
+    contextBtn.setAttribute('aria-label', 'Show Context Lines');
+    contextBtn.innerHTML = I.SVG_CONTEXT_LINES;
+    let contextLinesEnabled = false;
+    // Start disabled — dim the wrapper until the toggle is on.
+    contextInputWrap.style.opacity = '0.4';
+    contextInput.disabled = true;
+
+    inputRow.appendChild(contextInputWrap);
+    inputRow.appendChild(contextBtn);
+
     el.appendChild(inputRow);
 
     // ── Files to include — label above input, matching VSCode native search ─
@@ -568,6 +596,7 @@
 
       // Detection logic: glob chars or path separators in the main input → filename search.
       const isGlobPattern = /[*?/]/.test(pattern);
+      const contextLines = contextLinesEnabled ? (parseInt(contextInput.value, 10) || 0) : 0;
 
       if (!pattern && includeGlob) {
         // Include glob with no content query → filename-only search.
@@ -583,6 +612,7 @@
           caseSensitive,
           useRegex,
           include: includeGlob || undefined,
+          contextLines: contextLines || undefined,
         });
       }
     }
@@ -610,6 +640,30 @@
     });
 
     clearBtn.addEventListener('click', clearSearch);
+
+    contextBtn.addEventListener('click', () => {
+      contextLinesEnabled = !contextLinesEnabled;
+      contextBtn.classList.toggle('active', contextLinesEnabled);
+      contextInput.disabled = !contextLinesEnabled;
+      contextInputWrap.style.opacity = contextLinesEnabled ? '' : '0.4';
+      if (mainInput.value.trim() || includeInput.value.trim()) { triggerSearch(); }
+    });
+
+    contextInput.addEventListener('input', () => {
+      // Auto-enable the toggle when a value > 0 is typed; auto-disable when cleared to 0.
+      const val = parseInt(contextInput.value, 10);
+      if (val > 0 && !contextLinesEnabled) {
+        contextLinesEnabled = true;
+        contextBtn.classList.add('active');
+        contextInput.disabled = false;
+        contextInputWrap.style.opacity = '';
+      } else if ((val <= 0 || isNaN(val)) && contextLinesEnabled) {
+        contextLinesEnabled = false;
+        contextBtn.classList.remove('active');
+      }
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(triggerSearch, 300);
+    });
 
     mainInput.addEventListener('input', () => {
       clearTimeout(debounceTimer);
@@ -737,47 +791,58 @@
         const result = eval(message.script);
         const serialized = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
         vscode.postMessage({ command: 'debugEvalResult', id, result: serialized });
+        // Also post to parent frame so CDP renderer tools can read results.
+        window.parent.postMessage({ type: 'dirview-debug-result', id, result: serialized }, '*');
       } catch (err) {
-        vscode.postMessage({ command: 'debugEvalResult', id, error: String(err) });
+        const errStr = String(err);
+        vscode.postMessage({ command: 'debugEvalResult', id, error: errStr });
+        window.parent.postMessage({ type: 'dirview-debug-result', id, error: errStr }, '*');
       }
     });
   }
   /* @DEV_END */
 
-  // Sets up scroll-based sticky tracking. Call once per view, passing the scrollable
-  // container element (#root for tab, document.documentElement for sidebar).
-  // Returns an updateStuck() function that should be called after each render to
-  // set initial is-stuck state. The scroll listener handles subsequent updates.
-  //
-  // We use a scroll listener rather than IntersectionObserver because IO reports the
-  // sticky element's rendered position (already clamped to sticky threshold), not its
-  // natural DOM position — making stuck-state detection unreliable. The scroll listener
-  // reads the parent <li> position, which is never sticky and scrolls naturally.
-  function setupStickyTracking(scrollEl) {
-    // For document.documentElement, scroll events fire on window; containerTop is always 0.
-    const isDocRoot = scrollEl === document.documentElement;
-    const eventTarget = isDocRoot ? window : scrollEl;
-
+  /**
+   * Sets up sticky directory header tracking for a scrollable container.
+   * Returns an object with `updateStuck` (to recalculate sticky state) and
+   * `setEnabled` (to toggle sticky headers on/off).
+   *
+   * When disabled, adds 'sticky-disabled' to document.body and clears all
+   * is-stuck / is-stuck-bottom classes. When enabled, removes the class and
+   * recalculates sticky state.
+   *
+   * @param {HTMLElement} scrollRoot — the scrollable container (e.g. #root)
+   * @returns {{ updateStuck: () => void, setEnabled: (enabled: boolean) => void }}
+   */
+  function setupStickyTracking(scrollRoot) {
     function updateStuck() {
-      const containerTop = isDocRoot ? 0 : scrollEl.getBoundingClientRect().top;
-      let bottomRow = null;
-      let bottomDepth = -1;
-      document.querySelectorAll('.sticky-dir').forEach(row => {
-        const depth = parseInt(row.style.getPropertyValue('--depth')) || 0;
-        const threshold = depth * 22;
-        // The parent <li> is not sticky, so its top reflects the natural scroll position.
-        // If it's above the sticky threshold, the row has been stuck at that threshold.
-        const liTop = row.parentElement.getBoundingClientRect().top - containerTop;
-        const stuck = liTop < threshold;
-        row.classList.toggle('is-stuck', stuck);
-        row.classList.remove('is-stuck-bottom');
-        if (stuck && depth > bottomDepth) { bottomRow = row; bottomDepth = depth; }
-      });
-      if (bottomRow) { bottomRow.classList.add('is-stuck-bottom'); }
+      if (document.body.classList.contains('sticky-disabled')) { return; }
+      // Find all sticky-dir elements and update their is-stuck / is-stuck-bottom state
+      // based on their current position relative to the scroll container.
+      const stickyEls = scrollRoot.querySelectorAll('.sticky-dir');
+      const containerRect = scrollRoot.getBoundingClientRect();
+      for (const el of stickyEls) {
+        const rect = el.getBoundingClientRect();
+        // An element is "stuck" at the top when its top is at or above the container top
+        const isStuck = rect.top <= containerRect.top + 1;
+        el.classList.toggle('is-stuck', isStuck);
+      }
     }
 
-    eventTarget.addEventListener('scroll', updateStuck, { passive: true });
-    return updateStuck;
+    function setEnabled(enabled) {
+      document.body.classList.toggle('sticky-disabled', !enabled);
+      if (!enabled) {
+        // Clear all stuck classes when disabling
+        const stickyEls = scrollRoot.querySelectorAll('.sticky-dir');
+        for (const el of stickyEls) {
+          el.classList.remove('is-stuck', 'is-stuck-bottom');
+        }
+      } else {
+        updateStuck();
+      }
+    }
+
+    return { updateStuck, setEnabled };
   }
 
   window.DirviewShared = {
@@ -786,7 +851,8 @@
     SVG_EYE: I.SVG_EYE, SVG_EYE_CLOSED: I.SVG_EYE_CLOSED, SVG_FOLD: I.SVG_FOLD, SVG_UNFOLD: I.SVG_UNFOLD,
     SVG_EXPAND_ALL: I.SVG_EXPAND_ALL, SVG_COLLAPSE_ALL: I.SVG_COLLAPSE_ALL, SVG_OPEN_IN_TAB: I.SVG_OPEN_IN_TAB,
     SVG_SORT_FILES: I.SVG_SORT_FILES, SVG_SORT_NAME: I.SVG_SORT_NAME, SVG_SORT_SIZE: I.SVG_SORT_SIZE,
-    SVG_SEARCH: I.SVG_SEARCH, SVG_REGEX: I.SVG_REGEX, SVG_CLOSE: I.SVG_CLOSE,
+    SVG_SEARCH: I.SVG_SEARCH, SVG_REGEX: I.SVG_REGEX, SVG_CLOSE: I.SVG_CLOSE, SVG_CONTEXT_LINES: I.SVG_CONTEXT_LINES,
+    SVG_STICKY: I.SVG_STICKY, SVG_STICKY_OFF: I.SVG_STICKY_OFF,
     // Utils
     escHtml: U.escHtml, formatBytes: U.formatBytes, sortDirs: U.sortDirs, sortFiles: U.sortFiles,
     computeMaxMetric: U.computeMaxMetric, groupEmptyDirs: U.groupEmptyDirs,
