@@ -206,17 +206,17 @@
         {
           "command": "dirview.toggleStickyHeaders",
           "when": "view == dirview.sidebar && !dirview.stickyHeadersEnabled",
-          "group": "navigation@4"
+          "group": "navigation@7"
         },
         {
           "command": "dirview.toggleStickyHeadersOff",
           "when": "view == dirview.sidebar && dirview.stickyHeadersEnabled",
-          "group": "navigation@4"
+          "group": "navigation@7"
         },
         {
           "command": "dirview.openInTab",
           "when": "view == dirview.sidebar",
-          "group": "navigation@7"
+          "group": "navigation@8"
         },
         {
           "command": "dirview.expandAll",
