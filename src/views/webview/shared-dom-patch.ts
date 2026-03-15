@@ -40,8 +40,12 @@ export function patchTreeChildren(oldEl: HTMLElement, newEl: HTMLElement): void 
         // Dir node: update bar/count in place and recurse into children UL.
         patchDirLi(oldChild as HTMLElement, newChild as HTMLElement);
         fragment.appendChild(oldChild);
+      } else if (p!.startsWith('file:') && oldChild.querySelector(':scope > .file-row')) {
+        // File node: update count text in place, reuse the rest.
+        patchFileLi(oldChild as HTMLElement, newChild as HTMLElement);
+        fragment.appendChild(oldChild);
       } else {
-        // Non-dir keyed node (match line, file row): replace unconditionally.
+        // Non-dir keyed node (match line, etc.): replace unconditionally.
         // Content can change when syntax highlight patches arrive after the plain-text batch.
         fragment.appendChild(newChild);
       }
@@ -54,6 +58,18 @@ export function patchTreeChildren(oldEl: HTMLElement, newEl: HTMLElement): void 
   // the parent element identity (and therefore scroll position).
   while (oldEl.firstChild) { oldEl.removeChild(oldEl.firstChild); }
   oldEl.appendChild(fragment);
+}
+
+/**
+ * Updates a single file <li> in place: file count/size text only.
+ * File name, language dot, and path don't change on rescan.
+ */
+export function patchFileLi(oldLi: HTMLElement, newLi: HTMLElement): void {
+  const oldCount = oldLi.querySelector('.file-count') as HTMLElement | null;
+  const newCount = newLi.querySelector('.file-count') as HTMLElement | null;
+  if (oldCount && newCount) {
+    oldCount.textContent = newCount.textContent;
+  }
 }
 
 /**

@@ -55,31 +55,37 @@ export function setupStickyTracking(scrollRoot: HTMLElement): StickyTracking {
     //   2. Stuck:   rect.top ~ stickyTop (held at its sticky offset by CSS)
     //   3. Leaving: rect.top < stickyTop (parent <li> scrolled past, dragging it up)
     // Only state 2 counts as "stuck" for is-stuck-bottom purposes.
+    //
+    // Read/write batching: all getBoundingClientRect() calls happen in the read phase,
+    // then all classList mutations happen in the write phase. This prevents layout
+    // thrashing (interleaved reads+writes that force the browser to reflow per element).
     const isDocRoot = scrollRoot === document.documentElement;
     const stickyEls = scrollRoot.querySelectorAll('.sticky-dir');
-    // For document.documentElement, getBoundingClientRect().top moves with scroll
-    // and is useless as a reference. Use 0 (viewport top) instead.
     const containerTop = isDocRoot ? 0 : scrollRoot.getBoundingClientRect().top;
-    let lastStuck: Element | null = null;
-    for (const el of stickyEls) {
+
+    // ── Read phase: measure all positions ────────────────────────────────
+    const measurements: Array<{ el: Element; isStuck: boolean }> = [];
+    let lastStuckIdx = -1;
+    for (let i = 0; i < stickyEls.length; i++) {
+      const el = stickyEls[i];
       const rect = el.getBoundingClientRect();
       const depth = parseInt((el as HTMLElement).style.getPropertyValue('--depth')) || 0;
       const stickyTop = containerTop + depth * 22;
-      // An element is truly stuck when:
-      //   1. CSS sticky is holding it — parent <li> has scrolled above the row (liTop < rectTop)
-      //   2. It's at its sticky offset — rectTop ~ stickyTop (not scrolled off-screen)
-      // Both conditions are needed: (1) alone catches off-screen elements whose <li>
-      // extends above them; (2) alone catches elements at their natural position.
       const parentLi = el.parentElement;
       const liTop = parentLi ? parentLi.getBoundingClientRect().top : rect.top;
       const heldBySticky = liTop < rect.top - 1;
       const atOffset = rect.top >= stickyTop - 2 && rect.top <= stickyTop + 2;
       const isStuck = heldBySticky && atOffset;
-      el.classList.toggle('is-stuck', isStuck);
-      el.classList.remove('is-stuck-bottom');
-      if (isStuck) { lastStuck = el; }
+      measurements.push({ el, isStuck });
+      if (isStuck) { lastStuckIdx = i; }
     }
-    if (lastStuck) { lastStuck.classList.add('is-stuck-bottom'); }
+
+    // ── Write phase: apply all class changes ─────────────────────────────
+    for (let i = 0; i < measurements.length; i++) {
+      const { el, isStuck } = measurements[i];
+      el.classList.toggle('is-stuck', isStuck);
+      el.classList.toggle('is-stuck-bottom', i === lastStuckIdx);
+    }
   }
 
   function setEnabled(enabled: boolean): void {

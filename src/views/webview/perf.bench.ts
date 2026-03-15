@@ -3,6 +3,7 @@ import { bench, describe } from 'vitest';
 import {
   createState, createRenderer,
   expandMatchedDirs, expandBatchFiles,
+  renderTree, patchTreeChildren,
 } from './shared';
 import type { DirNode, FileNode } from './types';
 
@@ -59,12 +60,14 @@ function makeRenderer(state: any) {
   const tooltipEl = document.createElement('div');
   tooltipEl.style.display = 'none';
   document.body.appendChild(tooltipEl);
-  return createRenderer(state, {
+  const renderer = createRenderer(state, {
     vscode: { postMessage: () => {} } as any,
     root: rootEl,
     tooltip: tooltipEl,
     options: { skipDepthZeroGuides: false, barFactor: 0.4, barMaxWidth: 200, barFallbackWidth: 300 },
-  });
+  }) as any;
+  renderer._rootEl = rootEl;
+  return renderer;
 }
 
 // ── Trees ────────────────────────────────────────────────────────────────
@@ -206,6 +209,99 @@ describe('full pipeline: expandMatchedDirs + 5 renders with dirMatchesSearch', (
     for (let i = 0; i < 5; i++) {
       renderer.beforeRender();
       renderer.dirMatchesSearch(deepTree);
+    }
+  });
+});
+
+// ── DOM rendering benchmarks ─────────────────────────────────────────────
+
+// Smaller tree for render benchmarks (DOM creation is expensive in jsdom)
+// 4 dirs × 3 levels × 5 files = ~500 files, ~84 dirs
+const renderTree4x3 = buildTree(4, 3, 5);
+
+describe('renderDirNode — full tree render', () => {
+  bench('84 dirs, all expanded (first render)', () => {
+    const state = createState();
+    const renderer = makeRenderer(state);
+    // Expand all dirs so the full tree is rendered
+    function expandAll(node: DirNode) {
+      state.expanded.set(node.path, true);
+      for (const c of node.children) expandAll(c);
+    }
+    expandAll(renderTree4x3);
+    renderer.beforeRender();
+    renderer.renderDirNode(renderTree4x3, 0, 500, [], 300);
+  });
+
+  bench('84 dirs, depth 0+1 expanded only', () => {
+    const state = createState();
+    const renderer = makeRenderer(state);
+    state.expanded.set(renderTree4x3.path, true);
+    for (const c of renderTree4x3.children) state.expanded.set(c.path, true);
+    renderer.beforeRender();
+    renderer.renderDirNode(renderTree4x3, 0, 500, [], 300);
+  });
+});
+
+describe('renderTree + patchTreeChildren (incremental update)', () => {
+  bench('full renderTree with patching (simulating rescan)', () => {
+    const state = createState();
+    state.lastRoots = [renderTree4x3];
+    state.render = () => {};
+    state.rerender = () => {};
+    const renderer = makeRenderer(state);
+    // Expand top 2 levels
+    state.expanded.set(renderTree4x3.path, true);
+    for (const c of renderTree4x3.children) state.expanded.set(c.path, true);
+    const rootEl = renderer._rootEl;
+    // First render — creates the tree
+    renderTree(state, renderer, rootEl, { showRootNode: true });
+    // Subsequent renders — patch against existing tree
+    renderTree(state, renderer, rootEl, { showRootNode: true });
+  });
+});
+
+describe('renderFileNode', () => {
+  bench('100 file nodes', () => {
+    const state = createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const files = Array.from({ length: 100 }, (_, i) => makeFile('/ws', i));
+    for (const f of files) renderer.renderFileNode(f, 3, []);
+  });
+});
+
+describe('renderMatchLine — highlighted HTML + dedent', () => {
+  bench('50 match lines with highlightedHtml', () => {
+    const state = createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const file = { path: '/ws/a.ts', name: 'a.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 } as FileNode;
+    const match = {
+      line: 10,
+      column: 8,
+      matchLength: 5,
+      lineText: '        const value = something;',
+      highlightedHtml: '<span class="hl-kw">const</span> <span class="hl-var">value</span> = something;',
+    };
+    for (let i = 0; i < 50; i++) {
+      renderer.renderMatchLine(file, [{ ...match, line: i + 1 }], 2, [], 4);
+    }
+  });
+
+  bench('50 match lines plain text (no HTML)', () => {
+    const state = createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const file = { path: '/ws/a.ts', name: 'a.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 } as FileNode;
+    const match = {
+      line: 10,
+      column: 8,
+      matchLength: 5,
+      lineText: '        const value = something;',
+    };
+    for (let i = 0; i < 50; i++) {
+      renderer.renderMatchLine(file, [{ ...match, line: i + 1 }], 2, [], 4);
     }
   });
 });

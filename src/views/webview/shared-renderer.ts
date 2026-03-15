@@ -199,7 +199,7 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
       }));
     }
 
-    return h('li', row);
+    return h('li', { dataset: { nodePath: 'file:' + file.path } }, row);
   }
 
   function renderTruncatedRow(hiddenFiles: FileNode[], depth: number, ancestors: IndentAncestor[], dirPath: string, maxMetric: number, clientWidth: number): HTMLLIElement {

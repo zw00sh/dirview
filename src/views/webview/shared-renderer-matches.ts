@@ -35,6 +35,42 @@ export function stripLeadingChars(el: HTMLElement, count: number): void {
   }
 }
 
+/** Strips `count` leading visible characters from an HTML string.
+ *  Operates on the string directly, removing characters from text content
+ *  while preserving HTML tags. Avoids innerHTML + TreeWalker round-trip. */
+export function stripLeadingCharsHtml(html: string, count: number): string {
+  if (count <= 0) { return html; }
+  let remaining = count;
+  let i = 0;
+  let result = '';
+  while (i < html.length && remaining > 0) {
+    if (html[i] === '<') {
+      // Skip over tag — copy it as-is
+      const tagEnd = html.indexOf('>', i);
+      if (tagEnd === -1) break;
+      result += html.slice(i, tagEnd + 1);
+      i = tagEnd + 1;
+    } else if (html[i] === '&') {
+      // HTML entity — counts as 1 visible character
+      const semiIdx = html.indexOf(';', i);
+      if (semiIdx !== -1 && semiIdx - i < 10) {
+        remaining--;
+        i = semiIdx + 1;
+      } else {
+        remaining--;
+        i++;
+      }
+    } else {
+      // Plain text character — skip it
+      remaining--;
+      i++;
+    }
+  }
+  // Append the rest of the string
+  result += html.slice(i);
+  return result;
+}
+
 /** Returns { start, end } visible window when lineLength > maxDisplay, or null if it fits.
  *  Must stay in sync with computeVisibleWindow in highlighter.ts. */
 export function computeVisibleWindow(lineLength: number, col: number, matchLen: number, maxDisplay: number): { start: number; end: number } | null {
@@ -71,9 +107,8 @@ export function renderMatchLine(ctx: RendererContext, file: FileNode, matchGroup
 
   if (first.highlightedHtml) {
     // Backend pre-rendered syntax-highlighted HTML (untrimmed). Strip dedent chars
-    // from the leading text nodes to apply group-level dedent.
-    textEl.innerHTML = first.highlightedHtml;
-    stripLeadingChars(textEl, dedent);
+    // from the HTML string before parsing to avoid innerHTML + TreeWalker round-trip.
+    textEl.innerHTML = dedent > 0 ? stripLeadingCharsHtml(first.highlightedHtml, dedent) : first.highlightedHtml;
     // Detect clipped matches: compare each range against the visible window.
     if (matchGroup.length > 1) {
       const rawText = first.lineText || '';
@@ -155,8 +190,7 @@ export function renderMatchLine(ctx: RendererContext, file: FileNode, matchGroup
 export function renderContextLine(ctx: RendererContext, file: FileNode, match: SearchMatch, depth: number, ancestors: IndentAncestor[], dedent: number = 0): HTMLLIElement {
   const textEl = h('span', { className: 'match-line-text' });
   if (match.highlightedHtml) {
-    textEl.innerHTML = match.highlightedHtml;
-    stripLeadingChars(textEl, dedent);
+    textEl.innerHTML = dedent > 0 ? stripLeadingCharsHtml(match.highlightedHtml, dedent) : match.highlightedHtml;
   } else {
     textEl.textContent = (match.lineText || '').slice(dedent);
   }
