@@ -28,7 +28,9 @@
   state.scanBar = scanBar;
 
   // Mount search bar inside the collapsible search section.
-  const searchBar = S.createSearchBar(state, vscode);
+  const searchBar = S.createSearchBar(state, vscode, {
+    onClearLangFilter: () => clearAllFilters(),
+  });
   searchContentEl.appendChild(searchBar.el);
 
   let searchCollapsed = false;
@@ -163,7 +165,14 @@
       state.expanded.clear();
     }
     vscode.postMessage({ command: 'filter', langs: [...state.activeFilters] });
-    searchBar.updateFilterWarning(state.activeFilters.size > 0);
+    searchBar.updateFilterWarning(state.activeFilters.size);
+    state.rerender();
+  }
+
+  function clearAllFilters() {
+    state.activeFilters.clear();
+    vscode.postMessage({ command: 'filter', langs: [] });
+    searchBar.updateFilterWarning(0);
     state.rerender();
   }
 
@@ -190,7 +199,7 @@
     sortBtn.innerHTML = { files: S.SVG_SORT_FILES, name: S.SVG_SORT_NAME, size: S.SVG_SORT_SIZE }[state.currentSortMode] || S.SVG_SORT_FILES;
 
     updateLegend(roots ? S.computeStats(state.lastRoots) : []);
-    searchBar.updateFilterWarning(state.activeFilters.size > 0);
+    searchBar.updateFilterWarning(state.activeFilters.size);
 
     // Remove one-time placeholders (loading/initializing) without wiping the
     // whole container — preserves any existing tree for incremental patching.

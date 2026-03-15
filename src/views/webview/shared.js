@@ -499,13 +499,29 @@
     includeInput.className = 'search-input search-filter-input';
     includeInput.placeholder = 'e.g. src/**/*.ts';
     includeInput.setAttribute('aria-label', 'Files to include');
-    // Warning icon shown when a language filter is active — alerts the user that search
-    // results are being intersected with the language filter, so some matches may be hidden.
-    const filterWarning = document.createElement('span');
-    filterWarning.className = 'search-filter-warning';
-    filterWarning.innerHTML = I.SVG_WARNING;
-    filterWarning.title = 'Language filter active \u2014 some results may be hidden';
-    filterWarning.style.display = 'none';
+    // Language-filter pill — shown when legend filters are active, alerting the user that
+    // search results are intersected with the language filter. Dismissable via × to clear all.
+    const langPill = document.createElement('span');
+    langPill.className = 'search-lang-pill';
+    langPill.style.display = 'none';
+    const langPillIcon = document.createElement('span');
+    langPillIcon.className = 'search-lang-pill-icon';
+    langPillIcon.innerHTML = I.SVG_WARNING;
+    const langPillText = document.createElement('span');
+    langPillText.className = 'search-lang-pill-text';
+    const langPillClose = document.createElement('button');
+    langPillClose.className = 'search-lang-pill-close';
+    langPillClose.title = 'Clear language filters';
+    langPillClose.setAttribute('aria-label', 'Clear language filters');
+    langPillClose.innerHTML = I.SVG_CLOSE;
+    langPillClose.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (options && options.onClearLangFilter) { options.onClearLangFilter(); }
+    });
+    langPill.appendChild(langPillIcon);
+    langPill.appendChild(langPillText);
+    langPill.appendChild(langPillClose);
+
 
     // Bordered container wrapping pill + input so they appear as one unified input field.
     const filterContainer = document.createElement('div');
@@ -534,12 +550,13 @@
       dirPill.appendChild(dirPillClose);
       filterContainer.appendChild(dirPill);
     }
+    // Lang pill is inserted before the dir pill so it appears on the left.
+    filterContainer.insertBefore(langPill, filterContainer.firstChild);
     filterContainer.appendChild(includeInput);
 
     const inputRow2 = document.createElement('div');
     inputRow2.className = 'search-filter-input-row';
     inputRow2.appendChild(filterContainer);
-    inputRow2.appendChild(filterWarning);
     includeSection.appendChild(includeLabel);
     includeSection.appendChild(inputRow2);
     el.appendChild(includeSection);
@@ -722,8 +739,13 @@
     function show() { mainInput.focus(); }
     function hide() { clearSearch(); }
 
-    function updateFilterWarning(active) {
-      filterWarning.style.display = active ? '' : 'none';
+    function updateFilterWarning(count) {
+      if (!count) {
+        langPill.style.display = 'none';
+        return;
+      }
+      langPillText.textContent = count + ' language' + (count === 1 ? '' : 's');
+      langPill.style.display = '';
     }
 
     /** Show/hide the directory-scope pill based on the tab's current root path. */

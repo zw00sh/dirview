@@ -37,7 +37,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Wire filter: languages panel → sidebar tree + search fold warning
   languagesProvider.onFilterChange = (langs) => {
     sidebarProvider.setFilter(langs);
-    searchProvider.setFilterActive(langs.length > 0);
+    searchProvider.setFilterActive(langs.length);
   };
 
   // Wire search: search fold → tree fold. The search fold runs ripgrep and forwards

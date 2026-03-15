@@ -581,16 +581,46 @@ body {
   gap: 4px;
 }
 
-.search-filter-warning {
-  display: flex;
+.search-lang-pill {
+  display: inline-flex;
   align-items: center;
-  color: var(--vscode-editorWarning-foreground, #cca700);
+  gap: 2px;
+  padding: 1px 2px 1px 4px;
+  margin-left: 2px;
+  font-size: 11px;
+  white-space: nowrap;
   flex-shrink: 0;
-  cursor: default;
+  border-radius: 3px;
+  background: var(--vscode-inputValidation-warningBackground, rgba(200, 150, 0, 0.15));
+  color: var(--vscode-inputValidation-warningForeground, #cca700);
 }
-.search-filter-warning svg {
-  width: 14px;
-  height: 14px;
+.search-lang-pill-icon {
+  display: inline-flex;
+  align-items: center;
+}
+.search-lang-pill-icon svg {
+  width: 12px;
+  height: 12px;
+}
+.search-lang-pill-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 1px;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.7;
+  border-radius: 2px;
+}
+.search-lang-pill-close:hover {
+  opacity: 1;
+  background: var(--vscode-toolbar-hoverBackground, rgba(255, 255, 255, 0.1));
+}
+.search-lang-pill-close svg {
+  width: 12px;
+  height: 12px;
 }
 
 /* Context lines number input — lives inline in the search input row, after the main container.

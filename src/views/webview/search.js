@@ -28,7 +28,7 @@
     } else if (message.type === 'focus') {
       searchBar.focus();
     } else if (message.type === 'filterActive') {
-      searchBar.updateFilterWarning(message.active);
+      searchBar.updateFilterWarning(message.count);
     }
   });
 })();
