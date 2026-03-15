@@ -242,11 +242,6 @@ export type NodeMapEntry =
 
 // ── Action types (delegated click handler) ────────────────────────────────────
 
-export type DirviewAction =
-  | 'collapseGuide' | 'openFile' | 'openFileAtLine'
-  | 'expandDir' | 'collapseDir' | 'openInTab'
-  | 'expandTruncated' | 'expandEmptyGroup';
-
 // ── Grouped children types ────────────────────────────────────────────────────
 
 export type GroupedChild =

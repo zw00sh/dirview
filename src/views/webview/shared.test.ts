@@ -3624,9 +3624,9 @@ describe('renderFileMatches — dedent', () => {
   });
 });
 
-// --- stripLeadingChars ---
+// --- stripLeadingCharsHtml (dedent) ---
 
-describe('stripLeadingChars via renderContextLine', () => {
+describe('HTML dedent via renderContextLine', () => {
   it('strips leading chars from highlighted context HTML', () => {
     const state = createState();
     const renderer = makeRenderer(state);

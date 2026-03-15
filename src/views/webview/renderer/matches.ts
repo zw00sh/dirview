@@ -16,25 +16,6 @@ export function trimLeadingWhitespace(rawText: string, col: number): { lineText:
   return { lineText: rawText.trimStart(), adjustedCol: Math.max(0, col - trimmedStart) };
 }
 
-/** Strips `count` leading characters from the visible text content of an element.
- *  Walks text nodes via TreeWalker and removes characters from the start, preserving
- *  HTML structure (e.g. syntax-highlighted <span> tags). Used for dedent on highlighted HTML. */
-export function stripLeadingChars(el: HTMLElement, count: number): void {
-  if (count <= 0) { return; }
-  let remaining = count;
-  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-  while (remaining > 0 && walker.nextNode()) {
-    const node = walker.currentNode as Text;
-    if (node.textContent!.length <= remaining) {
-      remaining -= node.textContent!.length;
-      node.textContent = '';
-    } else {
-      node.textContent = node.textContent!.slice(remaining);
-      remaining = 0;
-    }
-  }
-}
-
 /** Strips `count` leading visible characters from an HTML string.
  *  Operates on the string directly, removing characters from text content
  *  while preserving HTML tags. Avoids innerHTML + TreeWalker round-trip. */
