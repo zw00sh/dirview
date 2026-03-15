@@ -413,6 +413,7 @@ body {
   display: flex;
   align-items: center;
   height: 25px;
+  min-width: 0;
 }
 
 /* Shared border container wrapping the text input + toggle buttons,
@@ -538,9 +539,10 @@ body {
 /* Context lines number input — lives inline in the search input row, after the main container.
  * Matches VS Code Search Editor: 50px wide, 25px tall, own border/background, left margin 5px. */
 .search-context-input-wrap {
-  width: 50px;
+  width: 42px;
+  min-width: 32px;
   height: 25px;
-  flex-shrink: 0;
+  flex-shrink: 1;
   border-radius: 4px;
   background: var(--vscode-input-background);
   border: 1px solid var(--vscode-input-border, transparent);
