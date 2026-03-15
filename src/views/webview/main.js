@@ -12,14 +12,6 @@
   const state = S.createState();
   state.scanBar = scanBar;
 
-  // Cmd+F in the tree fold: reveal and focus the search fold instead of showing an inline bar.
-  window.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
-      e.preventDefault();
-      vscode.postMessage({ command: 'focusSearch' });
-    }
-  });
-
   // Set up sticky tracking for the sidebar (before render so updateStuck is available).
   const { updateStuck: _updateStuck, setEnabled: setStickyEnabled } = S.setupStickyTracking(document.documentElement);
 

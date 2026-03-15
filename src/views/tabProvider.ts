@@ -7,11 +7,12 @@ import { handleCommonMessage, handleSearchMessage } from './providerUtils';
 import { SearchService } from '../search/searchService';
 
 export class TabProvider {
-  // Map from directory path (relative to workspace root, '' for root) → WebviewPanel.
-  // Each entry is a separate editor tab showing that directory's subtree.
-  private panels: Map<string, vscode.WebviewPanel> = new Map();
-  // Per-panel search service: independent search state per tab.
-  private searchServices: Map<string, SearchService> = new Map();
+  // Map from numeric panel ID → { panel, dirPath }.  Keyed by ID (not dirPath) so
+  // multiple tabs can be open for the same directory when allowDuplicateTabs is true.
+  private nextPanelId = 0;
+  private panels: Map<number, { panel: vscode.WebviewPanel; dirPath: string }> = new Map();
+  // Per-panel search service: independent search state per tab, keyed by panel ID.
+  private searchServices: Map<number, SearchService> = new Map();
   private extensionUri: vscode.Uri;
   // Raw scan data, stored once and used to derive per-panel subtrees on demand.
   private lastPayload: ScanUpdatePayload | undefined;
@@ -26,6 +27,13 @@ export class TabProvider {
   constructor(extensionUri: vscode.Uri, config: Config) {
     this.extensionUri = extensionUri;
     this.config = config;
+  }
+
+  private findPanelId(panel: vscode.WebviewPanel): number | undefined {
+    for (const [id, entry] of this.panels) {
+      if (entry.panel === panel) return id;
+    }
+    return undefined;
   }
 
   private findInChildren(children: DirNode[], targetPath: string): DirNode | undefined {
@@ -92,20 +100,26 @@ export class TabProvider {
     return [dirPath];
   }
 
-  /** Opens the root-level breakdown tab (or focuses it if already open). */
+  /** Opens the root-level breakdown tab (respects allowDuplicateTabs setting). */
   openOrFocus(): void {
     this.openForDir('');
   }
 
-  /** Opens a tab rooted at dirPath, or focuses it if already open.
+  /** Opens a tab rooted at dirPath.  When allowDuplicateTabs is false,
+   *  focuses an existing tab for the same path instead of creating a new one.
    *  dirPath is relative to workspace root; use '' for the full workspace view. */
   openForDir(dirPath: string): void {
-    const existing = this.panels.get(dirPath);
-    if (existing) {
-      existing.reveal();
-      return;
+    const allowDuplicates = vscode.workspace.getConfiguration('dirview').get<boolean>('allowDuplicateTabs', true);
+    if (!allowDuplicates) {
+      for (const entry of this.panels.values()) {
+        if (entry.dirPath === dirPath) {
+          entry.panel.reveal();
+          return;
+        }
+      }
     }
 
+    const id = this.nextPanelId++;
     const title = dirPath === '' ? 'Breakdown' : path.basename(dirPath);
     const panel = vscode.window.createWebviewPanel(
       'dirview.tab',
@@ -121,7 +135,7 @@ export class TabProvider {
     );
 
     const searchService = new SearchService();
-    this.searchServices.set(dirPath, searchService);
+    this.searchServices.set(id, searchService);
 
     panel.iconPath = {
       light: vscode.Uri.joinPath(this.extensionUri, 'media', 'dirview-icon-light.svg'),
@@ -135,12 +149,10 @@ export class TabProvider {
         return;
       }
       // Search messages — scoped to this panel's dirPath for subtree-only results.
-      let currentPath: string | undefined;
-      for (const [dp, p] of this.panels) {
-        if (p === panel) { currentPath = dp; break; }
-      }
+      const panelId = this.findPanelId(panel);
+      const currentPath = panelId !== undefined ? this.panels.get(panelId)!.dirPath : undefined;
       const rootPaths = this.getRootPaths(currentPath ?? '');
-      const svc = currentPath !== undefined ? (this.searchServices.get(currentPath) ?? searchService) : searchService;
+      const svc = panelId !== undefined ? (this.searchServices.get(panelId) ?? searchService) : searchService;
       if (handleSearchMessage(message, svc, (msg) => panel.webview.postMessage(msg), rootPaths)) { return; }
 
       if (handleCommonMessage(message, {
@@ -160,22 +172,15 @@ export class TabProvider {
         const threshold = enabled ? (this.lastPayload?.truncateThreshold ?? 4) : 0;
         this.updateTruncation(threshold, enabled);
       } else if (message.command === 'navigateToDir' && typeof message.path === 'string') {
-        // Find the current dirPath for this panel by searching the map by reference.
-        let currentPath: string | undefined;
-        for (const [dp, p] of this.panels) {
-          if (p === panel) { currentPath = dp; break; }
-        }
-        if (currentPath === undefined || message.path === currentPath) { return; }
+        const navId = this.findPanelId(panel);
+        const navEntry = navId !== undefined ? this.panels.get(navId) : undefined;
+        if (!navEntry || message.path === navEntry.dirPath) { return; }
         const targetPath = message.path;
-        // Re-key the panel and its search service under the new root path.
-        const oldService = this.searchServices.get(currentPath);
-        if (oldService) {
-          oldService.cancel();
-          this.searchServices.delete(currentPath);
-          this.searchServices.set(targetPath, oldService);
-        }
-        this.panels.delete(currentPath);
-        this.panels.set(targetPath, panel);
+        // Cancel any running search since the panel is changing directories.
+        const oldService = navId !== undefined ? this.searchServices.get(navId) : undefined;
+        if (oldService) { oldService.cancel(); }
+        // Update the dirPath in place — no re-keying needed with numeric IDs.
+        navEntry.dirPath = targetPath;
         panel.title = targetPath === '' ? 'Breakdown' : path.basename(targetPath);
         const roots = this.getRootsForDir(targetPath);
         if (roots !== undefined) {
@@ -190,17 +195,14 @@ export class TabProvider {
       }
     });
 
-    // Use panel reference lookup on dispose so the correct key is removed even
-    // if the panel was re-keyed by navigateUp after initial creation.
     // When the panel becomes visible again after being hidden, replay the latest
     // scan data so it shows current state (updates were skipped while hidden).
     panel.onDidChangeViewState(() => {
       if (!panel.visible) { return; }
-      let currentPath: string | undefined;
-      for (const [dp, p] of this.panels) {
-        if (p === panel) { currentPath = dp; break; }
-      }
-      if (currentPath === undefined) { return; }
+      const visId = this.findPanelId(panel);
+      const visEntry = visId !== undefined ? this.panels.get(visId) : undefined;
+      if (!visEntry) { return; }
+      const currentPath = visEntry.dirPath;
       const roots = this.getRootsForDir(currentPath);
       if (roots !== undefined) {
         panel.webview.postMessage({
@@ -214,18 +216,15 @@ export class TabProvider {
     });
 
     panel.onDidDispose(() => {
-      for (const [dp, p] of this.panels) {
-        if (p === panel) {
-          // Cancel any running search for this panel and clean up its service.
-          this.searchServices.get(dp)?.cancel();
-          this.searchServices.delete(dp);
-          this.panels.delete(dp);
-          break;
-        }
+      const disposeId = this.findPanelId(panel);
+      if (disposeId !== undefined) {
+        this.searchServices.get(disposeId)?.cancel();
+        this.searchServices.delete(disposeId);
+        this.panels.delete(disposeId);
       }
     });
 
-    this.panels.set(dirPath, panel);
+    this.panels.set(id, { panel, dirPath });
 
     // Replay latest scan data if available, so the new tab shows content immediately.
     const roots = this.getRootsForDir(dirPath);
@@ -247,7 +246,7 @@ export class TabProvider {
   }
 
   showScanning(): void {
-    for (const panel of this.panels.values()) {
+    for (const { panel } of this.panels.values()) {
       panel.webview.postMessage({ type: 'scanning' });
     }
   }
@@ -255,7 +254,7 @@ export class TabProvider {
   update(payload: ScanUpdatePayload): void {
     this.lastPayload = payload;
     const { autoRescanEnabled, showIgnored, tabStickyHeadersEnabled: stickyHeadersEnabled } = payload;
-    for (const [dirPath, panel] of this.panels) {
+    for (const { panel, dirPath } of this.panels.values()) {
       // Skip hidden panels — onDidChangeViewState will replay when they become visible.
       if (!panel.visible) { continue; }
       const panelRoots = this.getRootsForDir(dirPath);
@@ -270,38 +269,38 @@ export class TabProvider {
   }
 
   updateTruncation(truncateThreshold: number, truncationEnabled: boolean = truncateThreshold > 0): void {
-    for (const panel of this.panels.values()) {
+    for (const { panel } of this.panels.values()) {
       panel.webview.postMessage({ type: 'updateTruncation', truncateThreshold, truncationEnabled });
     }
   }
 
   updateStickyHeaders(enabled: boolean): void {
-    for (const panel of this.panels.values()) {
+    for (const { panel } of this.panels.values()) {
       panel.webview.postMessage({ type: 'updateStickyHeaders', enabled });
     }
   }
 
   expandAll(): void {
-    for (const panel of this.panels.values()) {
+    for (const { panel } of this.panels.values()) {
       panel.webview.postMessage({ type: 'expandAll' });
     }
   }
 
   collapseAll(): void {
-    for (const panel of this.panels.values()) {
+    for (const { panel } of this.panels.values()) {
       panel.webview.postMessage({ type: 'collapseAll' });
     }
   }
 
   showError(message: string): void {
-    for (const panel of this.panels.values()) {
+    for (const { panel } of this.panels.values()) {
       panel.webview.postMessage({ type: 'error', message });
     }
   }
 
   /** Send a debugEval message to all open tab webviews (only works when debug=true). */
   debugEval(script: string, id: number): void {
-    for (const panel of this.panels.values()) {
+    for (const { panel } of this.panels.values()) {
       panel.webview.postMessage({ type: 'debugEval', script, id });
     }
   }
@@ -326,6 +325,7 @@ export class TabProvider {
     <div id="search-header" class="tab-search-header">
       <span id="search-chevron" class="tab-search-header-chevron"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M6.146 3.146a.5.5 0 0 0 0 .707l4.146 4.146-4.146 4.146a.5.5 0 0 0 .707.707l4.5-4.5a.5.5 0 0 0 0-.707l-4.5-4.5a.5.5 0 0 0-.707 0Z"/></svg></span>
       <span class="tab-search-header-title">Search</span>
+      <span id="search-active-alert" class="tab-search-active-alert" title="Results are filtered by active search" style="display:none"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M7.56 1h.88l6.54 12.26-.44.74H1.44l-.42-.74L7.56 1zm.44 1.7L2.43 13H13.57L8 2.7zM8.5 11v1h-1v-1h1zm-1-1V6h1v4h-1z"/></svg></span>
     </div>
     <div id="search-content" class="tab-search-content"></div>
   </div>

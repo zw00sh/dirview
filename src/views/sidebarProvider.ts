@@ -12,7 +12,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   onRefresh?: () => void;
   onOpenDirInTab?: (dirPath: string) => void;
-  onFocusSearch?: () => void;
   onDebugResult?: (msg: { id?: number; result?: string; error?: string }) => void;
 
   constructor(extensionUri: vscode.Uri) {
@@ -38,10 +37,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     webviewView.webview.html = this.getHtml(webviewView.webview);
 
     webviewView.webview.onDidReceiveMessage((message: { command: string; path?: string; line?: number; id?: number; result?: string; error?: string }) => {
-      if (message.command === 'focusSearch') {
-        this.onFocusSearch?.();
-        return;
-      }
       if (message.command === 'debugEvalResult') {
         this.onDebugResult?.(message);
         return;
@@ -87,36 +82,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this.view?.webview.postMessage({ type: 'updateSortMode', sortMode });
   }
 
-
-  /** Forward full search results from the search fold to the tree webview. */
-  postSearchResults(data: { matches: Record<string, any[]> | null; fileCount: number; matchCount: number; truncated: boolean }): void {
-    this.view?.webview.postMessage({ type: 'searchResults', ...data });
-  }
-
-  /** Forward a streaming batch of search results to the tree webview. */
-  postSearchResultsBatch(data: { matches: Record<string, any[]>; fileCount: number; matchCount: number }): void {
-    this.view?.webview.postMessage({ type: 'searchResultsBatch', ...data });
-  }
-
-  /** Forward syntax highlight patches for a previously delivered batch. */
-  postSearchResultsHighlight(data: { patches: Array<{ path: string; idx: number; html: string }> }): void {
-    this.view?.webview.postMessage({ type: 'searchResultsHighlight', ...data });
-  }
-
-  /** Signal that all search result batches have been delivered. */
-  postSearchResultsDone(data: { fileCount: number; matchCount: number; truncated: boolean }): void {
-    this.view?.webview.postMessage({ type: 'searchResultsDone', ...data });
-  }
-
-  /** Notify the tree webview that a search is in progress. */
-  postSearchProgress(): void {
-    this.view?.webview.postMessage({ type: 'searchProgress' });
-  }
-
-  /** Clear the active search in the tree webview. */
-  clearSearch(): void {
-    this.view?.webview.postMessage({ type: 'searchResults', matches: null });
-  }
 
   updateStickyHeaders(enabled: boolean): void {
     this.view?.webview.postMessage({ type: 'updateStickyHeaders', enabled });

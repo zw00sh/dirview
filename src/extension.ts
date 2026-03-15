@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { SidebarProvider } from './views/sidebarProvider';
 import { LanguagesProvider } from './views/languagesProvider';
-import { SearchProvider } from './views/searchProvider';
 import { TabProvider } from './views/tabProvider';
 import { Config } from './config';
 import { ScanCoordinator } from './scanCoordinator';
@@ -14,13 +13,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const sidebarProvider = new SidebarProvider(context.extensionUri);
   const languagesProvider = new LanguagesProvider(context.extensionUri);
-  const searchProvider = new SearchProvider(context.extensionUri);
   const tabProvider = new TabProvider(context.extensionUri, config);
 
   if (DEV_MODE) {
     sidebarProvider.debug = true;
     languagesProvider.debug = true;
-    searchProvider.debug = true;
     tabProvider.debug = true;
   }
 
@@ -30,27 +27,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('dirview.languages', languagesProvider)
   );
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider('dirview.search', searchProvider)
-  );
-
-  // Wire filter: languages panel → sidebar tree + search fold warning
+  // Wire filter: languages panel → sidebar tree
   languagesProvider.onFilterChange = (langs) => {
     sidebarProvider.setFilter(langs);
-    searchProvider.setFilterActive(langs.length);
   };
-
-  // Wire search: search fold → tree fold. The search fold runs ripgrep and forwards
-  // results to the tree fold via sidebarProvider's postMessage methods.
-  searchProvider.onSearchResults = (data) => sidebarProvider.postSearchResults(data);
-  searchProvider.onSearchResultsBatch = (data) => sidebarProvider.postSearchResultsBatch(data);
-  searchProvider.onSearchResultsHighlight = (data) => sidebarProvider.postSearchResultsHighlight(data);
-  searchProvider.onSearchResultsDone = (data) => sidebarProvider.postSearchResultsDone(data);
-  searchProvider.onSearchProgress = () => sidebarProvider.postSearchProgress();
-  searchProvider.onSearchClear = () => sidebarProvider.clearSearch();
-
-  // Wire Cmd+F in the tree fold: the tree posts 'focusSearch' → reveal the search fold.
-  sidebarProvider.onFocusSearch = () => searchProvider.focusInput();
 
   // Wire refresh callbacks so both views trigger a rescan without a VSCode command
   const coordinator = new ScanCoordinator(config, sidebarProvider, languagesProvider, tabProvider);
@@ -108,15 +88,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     sidebarProvider.onDebugResult = onDebugResult;
     tabProvider.onDebugResult = onDebugResult;
     languagesProvider.onDebugResult = onDebugResult;
-    searchProvider.onDebugResult = onDebugResult;
 
     // Named providers for targeted eval. 'all' broadcasts to every provider.
     const providerMap: Record<string, Array<{ debugEval: (s: string, id: number) => void }>> = {
       sidebar: [sidebarProvider],
       tab: [tabProvider],
       languages: [languagesProvider],
-      search: [searchProvider],
-      all: [sidebarProvider, tabProvider, languagesProvider, searchProvider],
+      all: [sidebarProvider, tabProvider, languagesProvider],
     };
 
     // Evaluates a script in the specified target frame(s) and returns the first response.

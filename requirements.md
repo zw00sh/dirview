@@ -4,12 +4,11 @@ This document is the authoritative source for how Dirview should behave. All use
 
 ## Views
 
-Dirview provides three panels in a dedicated activity bar container, plus multi-instance editor tabs:
+Dirview provides two panels in a dedicated activity bar container, plus multi-instance editor tabs:
 
 1. **Languages panel** — a filterable legend showing workspace-wide language composition
-2. **Search panel** — content and filename search with results forwarded to the tree
-3. **Tree panel (sidebar)** — a summarised directory tree with proportional bars, suited to narrow widths
-4. **Editor tab** — the full-featured view with toolbar, inline legend, inline search, and breadcrumb navigation; any directory can be opened in its own tab
+2. **Tree panel (sidebar)** — a summarised directory tree with proportional bars, suited to narrow widths
+3. **Editor tab** — the full-featured view with toolbar, inline legend, inline search, and breadcrumb navigation; any directory can be opened in its own tab
 
 The tab is the primary view; the sidebar is a secondary companion. New features default to the tab and are applied to the sidebar only when they make sense at narrow widths.
 
@@ -162,7 +161,7 @@ Collapse All also clears truncation-expanded and empty-group-expanded state. Whe
 - Each item shows: a color swatch, the language name, and either a file count or percentage.
 - The display mode toggles between counts and percentages via a title bar button.
 - Clicking a language item toggles it as a filter. Active items are highlighted; inactive items are dimmed.
-- Filter changes are forwarded to the sidebar tree (and search panel for warning display). The tab view is NOT affected by the languages panel filter.
+- Filter changes are forwarded to the sidebar tree. The tab view is NOT affected by the languages panel filter.
 
 ### Tab Legend
 
@@ -180,7 +179,7 @@ Collapse All also clears truncation-expanded and empty-group-expanded state. Whe
 
 ## Search
 
-Search is available in two locations: the standalone **Search panel** in the sidebar, and an inline **Search section** in the editor tab.
+Search is available in the inline **Search section** in the editor tab.
 
 ### Content Search
 
@@ -218,17 +217,12 @@ Search is available in two locations: the standalone **Search panel** in the sid
 ### Search + Language Filter Interaction
 
 - When a language filter is active alongside a search, only files matching both the search and the language filter are shown.
-- A warning icon appears in the search panel's "files to include" row when a language filter is active.
+- A warning pill appears in the search bar's "files to include" row when a language filter is active.
 
 ### Tab Search
 
 - Each tab has its own independent search instance scoped to its root directory.
 - The search section is collapsible via its header.
-
-### Sidebar Search
-
-- Cmd+F / Ctrl+F in the tree panel focuses the standalone Search panel.
-- The search panel runs ripgrep and forwards results to the tree panel; the search panel itself only displays status (not the full match data).
 
 ## Editor Tab
 

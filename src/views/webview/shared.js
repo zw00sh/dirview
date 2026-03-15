@@ -1,7 +1,7 @@
 // @ts-check
 // Barrel module for dirview webviews — assembles window.DirviewShared from split modules.
 // Must be loaded after shared-icons.js, shared-utils.js, shared-state.js, shared-renderer.js.
-// Contains: renderRoots, DOM patching, renderTree, createMessageHandler, createSearchBar, expandMatchedDirs.
+// Contains: renderRoots, DOM patching, renderTree, createMessageHandler, createSearchBar (tab only), expandMatchedDirs.
 (function () {
   'use strict';
 
@@ -821,7 +821,7 @@
 
   /* @DEV_START */
   // Sets up the cross-frame debug eval bridge for a webview.
-  // Call once per webview entry point (main.js, tab.js, languages.js, search.js) after
+  // Call once per webview entry point (main.js, tab.js, languages.js) after
   // acquireVsCodeApi(). Registers an independent message listener so the bridge works in
   // all webviews regardless of whether they use createMessageHandler.
   //

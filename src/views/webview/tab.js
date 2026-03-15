@@ -14,6 +14,7 @@
   const searchHeaderEl = document.getElementById('search-header');
   const searchChevronEl = document.getElementById('search-chevron');
   const searchContentEl = document.getElementById('search-content');
+  const searchActiveAlert = document.getElementById('search-active-alert');
   const root = document.getElementById('root');
   const sortBtn = document.getElementById('tab-sort');
   const toggleStickyBtn = document.getElementById('tab-toggle-sticky');
@@ -36,6 +37,24 @@
   let searchCollapsed = false;
   // Initialise chevron to match expanded state (chevron rotated 90° = expanded).
   searchChevronEl.style.transform = 'rotate(90deg)';
+
+  // Cmd+F / Ctrl+F: expand and focus the search section.
+  window.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+      e.preventDefault();
+      if (searchCollapsed) {
+        searchCollapsed = false;
+        searchContentEl.style.display = '';
+        searchChevronEl.style.transform = 'rotate(90deg)';
+        updateSearchActiveAlert();
+      }
+      searchBar.focus();
+    }
+  });
+
+  function updateSearchActiveAlert() {
+    searchActiveAlert.style.display = (searchCollapsed && state.searchResults) ? '' : 'none';
+  }
 
   const renderer = S.createRenderer(state, {
     vscode,
@@ -144,6 +163,7 @@
     searchCollapsed = !searchCollapsed;
     searchContentEl.style.display = searchCollapsed ? 'none' : '';
     searchChevronEl.style.transform = searchCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
+    updateSearchActiveAlert();
   });
   legendDisplayToggle.addEventListener('click', (e) => {
     e.stopPropagation(); // Don't collapse the legend section when clicking the toggle
@@ -227,6 +247,7 @@
     root.querySelector('.empty')?.remove();
     S.renderTree(state, renderer, root, { showRootNode: true });
     _updateStuck();
+    updateSearchActiveAlert();
   }
 
   state.render = render;

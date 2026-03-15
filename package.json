@@ -36,7 +36,6 @@
   "activationEvents": [
     "onView:dirview.sidebar",
     "onView:dirview.languages",
-    "onView:dirview.search",
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
@@ -56,12 +55,6 @@
           "type": "webview",
           "id": "dirview.languages",
           "name": "Languages",
-          "initialSize": 1
-        },
-        {
-          "type": "webview",
-          "id": "dirview.search",
-          "name": "Search",
           "initialSize": 1
         },
         {
@@ -296,6 +289,11 @@
           "type": "boolean",
           "default": false,
           "description": "Automatically open the Breakdown editor tab when a folder is opened."
+        },
+        "dirview.allowDuplicateTabs": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow opening multiple tabs for the same directory. When disabled, opening a directory that already has a tab will focus the existing tab."
         }
       }
     }
