@@ -46,30 +46,10 @@ export function handleSearchMessage(
 ): boolean {
   if (message.command === 'search' && message.pattern !== undefined) {
     postMessage({ type: 'searchProgress' });
-    const MAX_MATCH_LINES = 5;
+    // Cap how many lines per file receive syntax highlighting to avoid Shiki overhead
+    // on files with large numbers of matches. Client-side truncation handles display.
+    const MAX_HIGHLIGHT_LINES = 5;
     const CONCURRENCY = 10;
-
-    // Strips lineText from entries beyond the render cap to reduce serialisation payload.
-    // Context lines for rendered match groups are preserved; everything after the
-    // MAX_MATCH_LINES-th match (and its trailing context) is stripped.
-    function stripBeyondCap(fileMatches: SearchMatch[]): void {
-      let renderedMatchCount = 0;
-      for (let i = 0; i < fileMatches.length; i++) {
-        const m = fileMatches[i];
-        if (!m.isContext) {
-          renderedMatchCount++;
-          if (renderedMatchCount > MAX_MATCH_LINES) {
-            // Strip this match and all remaining entries.
-            for (let j = i; j < fileMatches.length; j++) { delete fileMatches[j].lineText; }
-            return;
-          }
-        } else if (renderedMatchCount >= MAX_MATCH_LINES) {
-          // Context line after the last rendered match — strip it and all remaining.
-          for (let j = i; j < fileMatches.length; j++) { delete fileMatches[j].lineText; }
-          return;
-        }
-      }
-    }
 
     // Syntax-highlights entries up to the render cap per file with concurrency limiting.
     // Context lines are highlighted too (matchLength=0 produces syntax-highlighted HTML
@@ -85,8 +65,8 @@ export function handleSearchMessage(
             const m = matches[i];
             if (!m.isContext) {
               matchCount++;
-              if (matchCount > MAX_MATCH_LINES) { break; }
-            } else if (matchCount >= MAX_MATCH_LINES) {
+              if (matchCount > MAX_HIGHLIGHT_LINES) { break; }
+            } else if (matchCount >= MAX_HIGHLIGHT_LINES) {
               break; // Context after the last rendered match — stop.
             }
             if (m.lineText === undefined) { continue; }
@@ -112,9 +92,8 @@ export function handleSearchMessage(
         caseSensitive: message.caseSensitive, useRegex: message.useRegex, include: message.include,
         contextLines: message.contextLines,
         onBatch: (batch, totals) => {
-          // Strip lineText from entries beyond the render cap before serialising.
-          for (const [, matches] of batch) { stripBeyondCap(matches); }
           // Send plain-text batch immediately — no waiting for syntax highlighting.
+          // All match lineText is preserved; truncation display is managed client-side.
           if (searchService.getGeneration() !== searchGen) { return; }
           const plainObj: Record<string, SearchMatch[]> = {};
           for (const [p, m] of batch) { plainObj[p] = m; }

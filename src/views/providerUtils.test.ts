@@ -355,24 +355,21 @@ describe('handleSearchMessage — miscellaneous', () => {
     expect(result.error).toContain('spawn failed');
   });
 
-  it('strips lineText from matches beyond index 4 in the batch message', () => {
+  it('preserves lineText for all matches in the batch message (client-side truncation)', () => {
     const messages: any[] = [];
     const service = createFakeSearchService();
     handleSearchMessage({ command: 'search', pattern: 'x' }, service, (m) => messages.push(m), ['/ws']);
 
-    // 7 matches — only the first 5 (indices 0–4) should retain lineText
+    // 7 matches — all should retain lineText (truncation is now managed client-side)
     const rawMatches = [1, 2, 3, 4, 5, 6, 7].map(line => makeMatch(line, `line ${line}`));
     service.deliverBatch(new Map([['/ws/a.ts', rawMatches]]), { fileCount: 1, matchCount: 7 });
 
     const batchMsg = messages.find((m: any) => m.type === 'searchResultsBatch');
     const sentMatches: SearchMatch[] = batchMsg.matches['/ws/a.ts'];
-    // Indices 0–4: lineText preserved
-    for (let i = 0; i < 5; i++) {
+    // All 7 matches should have lineText preserved
+    for (let i = 0; i < 7; i++) {
       expect(sentMatches[i].lineText).toBe(`line ${i + 1}`);
     }
-    // Indices 5–6: lineText stripped
-    expect(sentMatches[5].lineText).toBeUndefined();
-    expect(sentMatches[6].lineText).toBeUndefined();
   });
 });
 

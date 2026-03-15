@@ -119,6 +119,7 @@
   expandAllBtn.addEventListener('click', () => {
     if (!state.lastRoots) { return; }
     S.tieredExpandAll(state, state.lastRoots);
+    // tieredExpandAll clears matchesCollapsed.
     state.rerender();
   });
   collapseAllBtn.addEventListener('click', () => {
@@ -126,6 +127,7 @@
     S.tieredCollapseAll(state, state.lastRoots);
     state.truncationExpanded.clear();
     state.emptyGroupExpanded.clear();
+    // tieredCollapseAll populates matchesCollapsed when search is active.
     state.rerender();
   });
   toggleStickyBtn.addEventListener('click', () => {

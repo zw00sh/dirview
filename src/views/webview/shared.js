@@ -80,7 +80,9 @@
         }
       }
       // File truncation — disabled when search is active.
-      const shouldTruncate = !state.searchResults && state.truncateThreshold > 0 && visibleFiles.length > state.truncateThreshold && !state.truncationExpanded.has(r.path);
+      // Also disabled when the root has no directory children (single-dir root).
+      const isSingleDirRoot = visibleChildren.length === 0;
+      const shouldTruncate = !state.searchResults && !isSingleDirRoot && state.truncateThreshold > 0 && visibleFiles.length > state.truncateThreshold && !state.truncationExpanded.has(r.path);
       const shownFiles = shouldTruncate ? visibleFiles.slice(0, state.truncateThreshold) : visibleFiles;
       const hiddenFiles = shouldTruncate ? visibleFiles.slice(state.truncateThreshold) : [];
       for (const file of shownFiles) {
@@ -301,6 +303,7 @@
           St.tieredCollapseAll(state, state.lastRoots);
           state.truncationExpanded.clear();
           state.emptyGroupExpanded.clear();
+          // tieredCollapseAll already populates matchesCollapsed when search is active.
           state.rerender();
           if (deps.onCollapseAll) { deps.onCollapseAll(); }
         }

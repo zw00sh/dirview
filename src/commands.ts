@@ -112,14 +112,14 @@ export function registerCommands(
 
   context.subscriptions.push(
     vscode.commands.registerCommand('dirview.contextCopyPath', (ctx) => {
-      const absPath = ctx.webviewSection === 'file'
+      const absPath = (ctx.webviewSection === 'file' || ctx.webviewSection === 'matchLine')
         ? ctx.path
         : resolveDirPath(ctx.path, ctx.rootName);
       if (absPath) { vscode.env.clipboard.writeText(absPath); }
     }),
 
     vscode.commands.registerCommand('dirview.contextRevealInExplorer', (ctx) => {
-      const absPath = ctx.webviewSection === 'file'
+      const absPath = (ctx.webviewSection === 'file' || ctx.webviewSection === 'matchLine')
         ? ctx.path
         : resolveDirPath(ctx.path, ctx.rootName);
       if (absPath) { vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(absPath)); }
@@ -132,6 +132,10 @@ export function registerCommands(
     vscode.commands.registerCommand('dirview.contextOpenInTerminal', (ctx) => {
       const absPath = resolveDirPath(ctx.path, ctx.rootName);
       if (absPath) { vscode.commands.executeCommand('openInTerminal', vscode.Uri.file(absPath)); }
+    }),
+
+    vscode.commands.registerCommand('dirview.contextCopyLineText', (ctx) => {
+      if (ctx.lineText) { vscode.env.clipboard.writeText(ctx.lineText); }
     })
   );
 }

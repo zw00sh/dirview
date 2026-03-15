@@ -164,6 +164,10 @@
       {
         "command": "dirview.contextOpenInTerminal",
         "title": "Open in Integrated Terminal"
+      },
+      {
+        "command": "dirview.contextCopyLineText",
+        "title": "Copy Line Text"
       }
     ],
     "menus": {
@@ -255,6 +259,18 @@
         {
           "command": "dirview.contextOpenInTerminal",
           "when": "webviewSection == 'directory'"
+        },
+        {
+          "command": "dirview.contextCopyPath",
+          "when": "webviewSection == 'matchLine'"
+        },
+        {
+          "command": "dirview.contextRevealInExplorer",
+          "when": "webviewSection == 'matchLine'"
+        },
+        {
+          "command": "dirview.contextCopyLineText",
+          "when": "webviewSection == 'matchLine'"
         }
       ]
     },

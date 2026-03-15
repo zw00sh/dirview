@@ -967,7 +967,7 @@ describe('delegated click handler', () => {
       expect(row.dataset.groupKey).toBe('/r/empty1');
     });
 
-    it('renderFileNode has data-action="openFile" and data-path', () => {
+    it('renderFileNode has data-action="openFile" and data-path when no search matches', () => {
       const state = S.createState();
       const renderer = makeRenderer(state);
       const li = renderer.renderFileNode(
@@ -1292,7 +1292,9 @@ describe('delegated click handler', () => {
         { name: 'c.ts', path: '/r/c.ts', langName: 'TypeScript', langColor: '#2b7489', sizeBytes: 300 },
         { name: 'd.rb', path: '/r/d.rb', langName: 'Ruby', langColor: '#701516', sizeBytes: 400 },
       ];
-      const root = makeDir('/r', 'r', { children: [], files, totalFiles: 4, stats: [
+      // Include a child dir so truncation is not disabled (single-dir root check)
+      const child = makeDir('/r/sub', 'sub', { totalFiles: 1, stats: [] });
+      const root = makeDir('/r', 'r', { children: [child], files, totalFiles: 5, stats: [
         { name: 'JavaScript', color: '#f1e05a', count: 1 },
         { name: 'Python', color: '#3572A5', count: 1 },
         { name: 'TypeScript', color: '#2b7489', count: 1 },
@@ -1326,7 +1328,9 @@ describe('delegated click handler', () => {
         { name: 'b.js', path: '/r/b.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 1 },
         { name: 'c.js', path: '/r/c.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 1 },
       ];
-      const root = makeDir('/r', 'r', { children: [], files, totalFiles: 3, stats: [{ name: 'JS', color: '#f1e05a', count: 3 }] });
+      // Include a child dir so truncation is not disabled (single-dir root check)
+      const child = makeDir('/r/sub', 'sub', { totalFiles: 1, stats: [] });
+      const root = makeDir('/r', 'r', { children: [child], files, totalFiles: 4, stats: [{ name: 'JS', color: '#f1e05a', count: 3 }] });
       state.expanded.set('/r', true);
 
       renderer.beforeRender();
@@ -1349,7 +1353,9 @@ describe('delegated click handler', () => {
         { name: 'c.ts', path: '/r/c.ts', langName: 'TypeScript', langColor: '#2b7489', sizeBytes: 300 },
         { name: 'd.rb', path: '/r/d.rb', langName: 'Ruby', langColor: '#701516', sizeBytes: 400 },
       ];
-      const root = makeDir('/r', 'r', { children: [], files, totalFiles: 4, stats: [
+      // Include a child dir so truncation is not disabled (single-dir root check)
+      const child = makeDir('/r/sub', 'sub', { totalFiles: 1, stats: [] });
+      const root = makeDir('/r', 'r', { children: [child], files, totalFiles: 5, stats: [
         { name: 'JavaScript', color: '#f1e05a', count: 1 },
         { name: 'Python', color: '#3572A5', count: 1 },
         { name: 'TypeScript', color: '#2b7489', count: 1 },
@@ -1499,7 +1505,9 @@ describe('delegated click handler', () => {
         { name: 'b.js', path: '/r/b.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 200 },
         { name: 'c.js', path: '/r/c.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 300 },
       ];
-      const root = makeDir('/r', 'r', { children: [], files, totalFiles: 3, stats: [{ name: 'JS', color: '#f1e05a', count: 3 }] });
+      // Include a child dir so truncation is not disabled (single-dir root check)
+      const child = makeDir('/r/sub', 'sub', { totalFiles: 1, stats: [] });
+      const root = makeDir('/r', 'r', { children: [child], files, totalFiles: 4, stats: [{ name: 'JS', color: '#f1e05a', count: 3 }] });
       state.expanded.set('/r', true);
 
       // Initial render
@@ -2013,8 +2021,9 @@ describe('search rendering integration', () => {
     expect(li.querySelector('.truncated-row')).toBeNull();
   });
 
-  it('caps match lines at 5 per file and shows more-matches row', () => {
+  it('caps match lines at truncateThreshold per file and shows more-matches row', () => {
     const state = S.createState();
+    state.truncateThreshold = 4; // default
     const matches = [1, 2, 3, 4, 5, 6, 7].map(line => ({ line, column: 0, matchLength: 1, lineText: 'x' }));
     state.searchResults = new Map([['/r/foo.ts', matches]]);
     state.render = vi.fn();
@@ -2024,10 +2033,10 @@ describe('search rendering integration', () => {
     const renderer = makeRenderer(state);
     renderer.beforeRender();
     const li = renderer.renderDirNode(dir, 0, 10, [], 300);
-    expect(li.querySelectorAll('.match-line-row').length).toBe(5);
+    expect(li.querySelectorAll('.match-line-row').length).toBe(4);
     const moreRow = li.querySelector('.match-more-label');
     expect(moreRow).not.toBeNull();
-    expect(moreRow.textContent).toBe('2 more matches');
+    expect(moreRow.textContent).toBe('3 more matches');
   });
 });
 
@@ -2648,23 +2657,25 @@ describe('renderFileMatches', () => {
     expect(container.children.length).toBe(0);
   });
 
-  it('appends up to 5 match-line rows', () => {
+  it('appends up to truncateThreshold match-line rows', () => {
     const state = S.createState();
+    state.truncateThreshold = 4; // default
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
     renderer._rootEl.appendChild(container);
     const file = makeFile('/ws/a.ts');
     state.searchResults = new Map([['/ws/a.ts', [
-      makeMatch(1), makeMatch(2), makeMatch(3), makeMatch(4), makeMatch(5),
+      makeMatch(1), makeMatch(2), makeMatch(3), makeMatch(4),
     ]]]);
     renderer.renderFileMatches(container, file, 1, []);
-    // 5 match-line rows, no "more matches" row
-    expect(container.querySelectorAll('.match-line-row').length).toBe(5);
+    // 4 match-line rows, no "more matches" row
+    expect(container.querySelectorAll('.match-line-row').length).toBe(4);
     expect(container.querySelectorAll('.match-more-row').length).toBe(0);
   });
 
-  it('appends a "more matches" row when there are more than 5 matches', () => {
+  it('appends a "more matches" row when there are more than truncateThreshold matches', () => {
     const state = S.createState();
+    state.truncateThreshold = 4; // default
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
     renderer._rootEl.appendChild(container);
@@ -2673,10 +2684,10 @@ describe('renderFileMatches', () => {
       makeMatch(1), makeMatch(2), makeMatch(3), makeMatch(4), makeMatch(5), makeMatch(6), makeMatch(7),
     ]]]);
     renderer.renderFileMatches(container, file, 1, []);
-    expect(container.querySelectorAll('.match-line-row').length).toBe(5);
+    expect(container.querySelectorAll('.match-line-row').length).toBe(4);
     const moreRow = container.querySelector('.match-more-row');
     expect(moreRow).not.toBeNull();
-    expect(moreRow.textContent).toContain('2 more match');
+    expect(moreRow.textContent).toContain('3 more match');
   });
 
   it('appends nothing when file path is not in searchResults', () => {
@@ -3032,5 +3043,204 @@ describe('setupStickyTracking', () => {
     updateStuck();
     expect(stickyEl.classList.contains('is-stuck')).toBe(false);
     document.body.classList.remove('sticky-disabled');
+  });
+});
+
+// --- Feature 3: single-dir root truncation disabled ---
+
+describe('single-dir root truncation disabled', () => {
+  function makeFile(dir, name) {
+    return { name, path: `${dir}/${name}`, langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 100 };
+  }
+
+  it('does not truncate files when depth=0 dir has no child directories', () => {
+    const state = S.createState();
+    state.truncateThreshold = 2;
+    const files = [
+      makeFile('/r', 'a.ts'), makeFile('/r', 'b.ts'), makeFile('/r', 'c.ts'), makeFile('/r', 'd.ts'),
+    ];
+    // No child dirs — this is a single-dir root
+    const root = makeDir('/r', 'r', { files, children: [], totalFiles: 4, stats: [] });
+    state.expanded.set('/r', true);
+
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderDirNode(root, 0, 4, [], 300);
+    // All 4 files shown, no truncated row
+    expect(li.querySelectorAll('.file-row').length).toBe(4);
+    expect(li.querySelector('.truncated-row')).toBeNull();
+  });
+
+  it('still truncates at depth=0 when the dir has child directories', () => {
+    const state = S.createState();
+    state.truncateThreshold = 2;
+    const files = [
+      makeFile('/r', 'a.ts'), makeFile('/r', 'b.ts'), makeFile('/r', 'c.ts'), makeFile('/r', 'd.ts'),
+    ];
+    const child = makeDir('/r/sub', 'sub', { totalFiles: 1, stats: [] });
+    const root = makeDir('/r', 'r', { files, children: [child], totalFiles: 5, stats: [] });
+    state.expanded.set('/r', true);
+
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderDirNode(root, 0, 5, [], 300);
+    // Truncated: only first 2 shown + truncated row
+    expect(li.querySelectorAll('.file-row').length).toBe(2);
+    expect(li.querySelector('.truncated-row')).not.toBeNull();
+  });
+});
+
+// --- Feature 2: matchesCollapsed state management ---
+
+describe('matchesCollapsed — tieredCollapseAll', () => {
+  it('populates matchesCollapsed with all search result paths when collapsing', () => {
+    const state = S.createState();
+    state.searchResults = new Map([
+      ['/ws/a.ts', []],
+      ['/ws/b.ts', []],
+    ]);
+    const a = makeDir('/ws/a', 'a', { totalFiles: 1 });
+    const ws = makeDir('/ws', 'ws', { children: [a], totalFiles: 1 });
+    state.expanded.set('/ws/a', true);
+
+    S.tieredCollapseAll(state, [ws]);
+
+    // All search result file paths added to matchesCollapsed
+    expect(state.matchesCollapsed.has('/ws/a.ts')).toBe(true);
+    expect(state.matchesCollapsed.has('/ws/b.ts')).toBe(true);
+  });
+
+  it('does not modify matchesCollapsed when searchResults is null', () => {
+    const state = S.createState();
+    state.matchesCollapsed.add('/existing');
+    // searchResults is null (no active search)
+    const a = makeDir('/ws/a', 'a', { totalFiles: 1 });
+    const ws = makeDir('/ws', 'ws', { children: [a], totalFiles: 1 });
+    state.expanded.set('/ws/a', true);
+
+    S.tieredCollapseAll(state, [ws]);
+
+    // matchesCollapsed should only have the pre-existing path, not be modified by the collapse
+    // (the if (state.searchResults) guard prevents population when search is null)
+    expect(state.matchesCollapsed.has('/existing')).toBe(true);
+  });
+});
+
+describe('matchesCollapsed — tieredExpandAll', () => {
+  it('clears matchesCollapsed when expanding', () => {
+    const state = S.createState();
+    state.matchesCollapsed.add('/ws/a.ts');
+    state.matchesCollapsed.add('/ws/b.ts');
+    const a = makeDir('/ws/a', 'a', { totalFiles: 1 });
+    const ws = makeDir('/ws', 'ws', { children: [a], totalFiles: 1 });
+
+    S.tieredExpandAll(state, [ws]);
+
+    expect(state.matchesCollapsed.size).toBe(0);
+  });
+});
+
+// --- Feature 2: collapsible file-row with matches ---
+
+describe('collapsible file-row with search matches', () => {
+  function makeFile(path, name = null) {
+    return { path, name: name || path.split('/').pop(), langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+  }
+
+  it('file row has has-matches class and chevron when file has matches', () => {
+    const state = S.createState();
+    const file = makeFile('/r/foo.ts');
+    state.searchResults = new Map([['/r/foo.ts', [{ line: 1, column: 0, matchLength: 3, lineText: 'abc' }]]]);
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderFileNode(file, 0, []);
+    const row = li.querySelector('.file-row');
+    expect(row.classList.contains('has-matches')).toBe(true);
+    // Should have a chevron before the dot slot
+    const chevrons = row.querySelectorAll('.chevron');
+    expect(chevrons.length).toBeGreaterThanOrEqual(2); // match chevron + dot slot
+  });
+
+  it('file row does NOT have has-matches class when file has no matches in searchResults', () => {
+    const state = S.createState();
+    const file = makeFile('/r/foo.ts');
+    state.searchResults = new Map([['/r/foo.ts', []]]); // empty matches array
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderFileNode(file, 0, []);
+    const row = li.querySelector('.file-row');
+    expect(row.classList.contains('has-matches')).toBe(false);
+  });
+
+  it('clicking the file row (outside filename) toggles matchesCollapsed and rerenders', async () => {
+    const state = S.createState();
+    state.render = vi.fn();
+    state.lastRoots = [];
+    const file = makeFile('/r/foo.ts');
+    state.searchResults = new Map([['/r/foo.ts', [{ line: 1, column: 0, matchLength: 3, lineText: 'abc' }]]]);
+    const dir = makeDir('/r', 'r', { files: [file], totalFiles: 1, stats: [] });
+    state.expanded.set('/r', true);
+
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderDirNode(dir, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
+
+    // Click the file row (not the filename)
+    const fileRow = li.querySelector('.file-row.has-matches');
+    expect(fileRow).not.toBeNull();
+    fileRow.click();
+
+    expect(state.matchesCollapsed.has('/r/foo.ts')).toBe(true);
+    await awaitRerender();
+    expect(state.render).toHaveBeenCalled();
+  });
+
+  it('clicking the filename (data-action=openFile) posts openFile, not toggle', () => {
+    const state = S.createState();
+    state.render = vi.fn();
+    state.lastRoots = [];
+    const file = makeFile('/r/foo.ts');
+    state.searchResults = new Map([['/r/foo.ts', [{ line: 1, column: 0, matchLength: 3, lineText: 'abc' }]]]);
+    const dir = makeDir('/r', 'r', { files: [file], totalFiles: 1, stats: [] });
+    state.expanded.set('/r', true);
+
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderDirNode(dir, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
+
+    const fileName = li.querySelector('.file-row.has-matches .file-name');
+    expect(fileName).not.toBeNull();
+    fileName.click();
+
+    expect(renderer._vscode.postMessage).toHaveBeenCalledWith({ command: 'openFile', path: '/r/foo.ts' });
+    // matchesCollapsed should NOT have been populated
+    expect(state.matchesCollapsed.has('/r/foo.ts')).toBe(false);
+  });
+
+  it('renderFileMatches returns early when file is in matchesCollapsed', () => {
+    const state = S.createState();
+    state.matchesCollapsed.add('/ws/a.ts');
+    state.searchResults = new Map([['/ws/a.ts', [{ line: 1, column: 0, matchLength: 3, lineText: 'abc' }]]]);
+    const file = { path: '/ws/a.ts', name: 'a.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    renderer.renderFileMatches(container, file, 1, []);
+    expect(container.children.length).toBe(0);
+  });
+
+  it('more-matches row has data-action="expandTruncated" for clickable expand', () => {
+    const state = S.createState();
+    state.truncateThreshold = 2;
+    const matches = [1, 2, 3, 4].map(line => ({ line, column: 0, matchLength: 1, lineText: 'x' }));
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderMoreMatchesRow(2, 1, [], '/ws/a.ts');
+    const row = li.querySelector('.match-more-row');
+    expect(row.dataset.action).toBe('expandTruncated');
+    expect(row.dataset.dirPath).toBe('/ws/a.ts');
   });
 });

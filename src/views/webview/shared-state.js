@@ -26,6 +26,8 @@
       // Search state — local to each webview instance, not synced with host.
       /** @type {Map<string, Array>|null} Absolute path → match array. null = no active search. */
       searchResults: null,
+      /** @type {Set<string>} File paths where the user has manually collapsed inline matches. */
+      matchesCollapsed: new Set(),
       searchActive: false,
       searchTruncated: false,
       searchFileCount: 0,
@@ -96,6 +98,8 @@
 
     // Tier 2: recursively expand entire subtree
     walkExpand(state, topLevel);
+    // Also expand all file match groups when search is active.
+    state.matchesCollapsed.clear();
   }
 
   // 3-tier collapse for the toolbar/sidebar "collapse all" button, mirroring per-dir collapse button behaviour.
@@ -127,6 +131,12 @@
       // Tier 2: collapse all top-level items
       for (const node of topLevel) {
         state.expanded.set(compactedPath(node), false);
+      }
+    }
+    // Collapse all file match groups when search is active.
+    if (state.searchResults) {
+      for (const path of state.searchResults.keys()) {
+        state.matchesCollapsed.add(path);
       }
     }
   }

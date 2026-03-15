@@ -188,6 +188,24 @@
         return;
       }
 
+      // File-row toggle for files with inline matches — clicking outside the filename
+      // collapses/expands the match group for that file.
+      const hasMatchesRow = e.target.closest('.file-row.has-matches');
+      if (hasMatchesRow && !e.target.closest('[data-action]')) {
+        const filePath = hasMatchesRow.dataset.path;
+        if (filePath) {
+          if (state.matchesCollapsed.has(filePath)) {
+            state.matchesCollapsed.delete(filePath);
+          } else {
+            state.matchesCollapsed.add(filePath);
+            // Reset match truncation when collapsing so it re-truncates on next expand.
+            state.truncationExpanded.delete(filePath);
+          }
+          state.rerender();
+        }
+        return;
+      }
+
       // Dir-name click → navigate (tab mode only; onNavigate is not set in sidebar).
       if (deps.onNavigate) {
         // Breadcrumb ancestor segment: navigate to that specific ancestor path.
@@ -369,6 +387,12 @@
       row.dataset.action = 'openFileAtLine';
       row.dataset.path = file.path;
       row.dataset.line = String(match.line);
+      row.setAttribute('data-vscode-context', JSON.stringify({
+        webviewSection: 'matchLine',
+        path: file.path,
+        lineText: match.lineText || '',
+        preventDefaultContextMenuItems: true
+      }));
       row.appendChild(renderIndentGuides(depth, ancestors));
 
       const lineNumEl = document.createElement('span');
@@ -451,13 +475,20 @@
       return li;
     }
 
-    // Renders a "N more matches" summary row when match lines are capped at 5 per file.
+    // Renders a clickable "N more matches" summary row when match lines exceed the truncation threshold.
     function renderMoreMatchesRow(count, depth, ancestors, filePath) {
       const li = document.createElement('li');
       if (filePath) { li.dataset.nodePath = 'more:' + filePath; }
       const row = document.createElement('div');
       row.className = 'match-more-row';
+      // data-action + data-dir-path reuse the expandTruncated handler to expand match lines.
+      row.dataset.action = 'expandTruncated';
+      row.dataset.dirPath = filePath;
       row.appendChild(renderIndentGuides(depth, ancestors));
+      const plusSlot = document.createElement('span');
+      plusSlot.className = 'chevron';
+      plusSlot.innerHTML = SVG_PLUS;
+      row.appendChild(plusSlot);
       const label = document.createElement('span');
       label.className = 'match-more-label';
       label.textContent = `${count} more match${count !== 1 ? 'es' : ''}`;
@@ -468,10 +499,14 @@
 
     function renderFileNode(file, depth, ancestors) {
       const li = document.createElement('li');
+      const hasMatches = !!(state.searchResults?.has(file.path) && state.searchResults.get(file.path).length > 0);
       const row = document.createElement('div');
-      row.className = 'file-row clickable';
-      // data-action + data-path enable the delegated click handler in createRenderer.
-      row.dataset.action = 'openFile';
+      row.className = 'file-row clickable' + (hasMatches ? ' has-matches' : '');
+      // For files without matches: data-action opens the file via delegated click handler.
+      // For files with matches: click is handled below (toggle vs. open-file by target).
+      if (!hasMatches) {
+        row.dataset.action = 'openFile';
+      }
       row.dataset.path = file.path;
       row.setAttribute('data-vscode-context', JSON.stringify({
         webviewSection: 'file',
@@ -479,6 +514,15 @@
         preventDefaultContextMenuItems: true
       }));
       row.appendChild(renderIndentGuides(depth, ancestors));
+
+      if (hasMatches) {
+        // Chevron for collapsible matches — sits in the chevron slot before the dot.
+        const matchChevron = document.createElement('span');
+        const isCollapsed = state.matchesCollapsed.has(file.path);
+        matchChevron.className = 'chevron' + (isCollapsed ? '' : ' open');
+        matchChevron.innerHTML = SVG_CHEVRON;
+        row.appendChild(matchChevron);
+      }
 
       const dotSlot = document.createElement('span');
       dotSlot.className = 'chevron';
@@ -493,6 +537,11 @@
       nameEl.className = 'file-name';
       nameEl.textContent = file.name;
       nameEl.title = file.path;
+      if (hasMatches) {
+        // Clicking the filename opens the file; clicking elsewhere on the row toggles matches.
+        nameEl.dataset.action = 'openFile';
+        nameEl.dataset.path = file.path;
+      }
       row.appendChild(nameEl);
 
       const spacer = document.createElement('div');
@@ -930,7 +979,10 @@
           }
 
           // File truncation — disabled when search is active (all matched files must be shown).
-          const shouldTruncate = !state.searchResults && state.truncateThreshold > 0 && visibleFiles.length > state.truncateThreshold && !state.truncationExpanded.has(displayNode.path);
+          // Also disabled when depth === 0 and there are no directory children (single-dir root):
+          // truncation at the root level is confusing when all files are already at the top level.
+          const isSingleDirRoot = depth === 0 && visibleChildren.length === 0;
+          const shouldTruncate = !state.searchResults && !isSingleDirRoot && state.truncateThreshold > 0 && visibleFiles.length > state.truncateThreshold && !state.truncationExpanded.has(displayNode.path);
           const shownFiles = shouldTruncate ? visibleFiles.slice(0, state.truncateThreshold) : visibleFiles;
           const hiddenFiles = shouldTruncate ? visibleFiles.slice(state.truncateThreshold) : [];
 
@@ -951,20 +1003,26 @@
     }
 
     // Renders inline match lines (and optional context lines) beneath a file row when content
-    // search is active. Renders up to MAX_MATCH_LINES match lines plus their associated context
-    // lines. Inserts a separator element between non-contiguous line groups (gaps in line numbers).
+    // search is active. Respects matchesCollapsed state and uses truncateThreshold for truncation.
+    // Inserts a separator element between non-contiguous line groups (gaps in line numbers).
     function renderFileMatches(container, file, depth, ancestors) {
       if (!state.searchResults?.has(file.path)) { return; }
       const fileMatches = state.searchResults.get(file.path);
       if (!fileMatches || fileMatches.length === 0) { return; }
 
+      // If the user has collapsed this file's matches, don't render any.
+      if (state.matchesCollapsed.has(file.path)) { return; }
+
       // Sort by line number — entries arrive sorted from the backend but sorting here is
       // defensive against any reordering during streaming patches.
       const sorted = fileMatches.slice().sort((a, b) => a.line - b.line);
 
-      // Count total match lines (not context) to compute the "more matches" label.
+      // Count total match lines (not context) for truncation and "more matches" label.
       let totalMatchLines = 0;
       for (const m of sorted) { if (!m.isContext) { totalMatchLines++; } }
+
+      const threshold = state.truncateThreshold;
+      const shouldTruncateMatches = threshold > 0 && totalMatchLines > threshold && !state.truncationExpanded.has(file.path);
 
       let renderedMatchCount = 0;
       let prevLine = null;
@@ -972,8 +1030,8 @@
       for (const m of sorted) {
         if (!m.isContext) {
           renderedMatchCount++;
-          if (renderedMatchCount > MAX_MATCH_LINES) { break; }
-        } else if (renderedMatchCount > MAX_MATCH_LINES) {
+          if (shouldTruncateMatches && renderedMatchCount > threshold) { break; }
+        } else if (shouldTruncateMatches && renderedMatchCount >= threshold) {
           // Context line after the cap has been exceeded — stop rendering.
           break;
         }
@@ -995,8 +1053,8 @@
         }
       }
 
-      if (totalMatchLines > MAX_MATCH_LINES) {
-        container.appendChild(renderMoreMatchesRow(totalMatchLines - MAX_MATCH_LINES, depth, ancestors, file.path));
+      if (shouldTruncateMatches) {
+        container.appendChild(renderMoreMatchesRow(totalMatchLines - threshold, depth, ancestors, file.path));
       }
     }
 

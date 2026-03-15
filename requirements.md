@@ -85,6 +85,7 @@ Toggling the ignored state triggers a full rescan affecting all views.
 - The "N more files" row displays: up to 5 colored language dots, a bar showing language composition, and a file count.
 - Clicking the row expands all truncated files inline.
 - Truncation is disabled when a content search is active (all matched files must be visible).
+- Truncation is disabled when only a single directory is displayed (root node has no directory children).
 - Truncation state resets when a directory is collapsed.
 
 ### Indent Guides
@@ -151,7 +152,7 @@ Uses the same 3-tier logic as per-directory buttons, applied at the workspace ro
 2. Only top-level items expanded → collapse all top-level items
 3. Nothing expanded → no-op
 
-Collapse All also clears truncation-expanded and empty-group-expanded state.
+Collapse All also clears truncation-expanded and empty-group-expanded state. When search is active, Collapse All also collapses all file match groups. Expand All expands all file match groups.
 
 ## Language Filtering
 
@@ -190,8 +191,12 @@ Search is available in two locations: the standalone **Search panel** in the sid
 - Results are delivered progressively (batched every 50 files or 200ms) and rendered incrementally.
 - Syntax highlighting is applied to match lines via Shiki, patched in after the initial plain-text render.
 - Match lines show: line number, trimmed line text with the match highlighted, and context-windowed truncation for long lines (max 120 visible characters, centered on the match).
-- Up to 5 match lines are shown per file; additional matches show an "N more matches" summary row.
+- Match lines per file are governed by the truncation threshold (`dirview.truncateThreshold`). Additional matches show a clickable "+ N more matches" row that expands inline.
 - Clicking a match line opens the file at that line.
+- Files with inline search matches are collapsible: clicking the file row (outside the filename) toggles match visibility. Clicking the filename opens the file.
+- Files with matches show a chevron before the colored dot to indicate collapsibility.
+- Collapsible file matches respond to Expand All / Collapse All.
+- Files with matches do NOT show per-row hover action buttons (expand children, collapse children, open-in-tab).
 
 ### Filename Search
 
@@ -207,7 +212,7 @@ Search is available in two locations: the standalone **Search panel** in the sid
 
 - When a content search is active, the tree filters to show only files with matches and their ancestor directories.
 - Directories are auto-expanded to reveal matched files; the expand state is rebuilt from scratch for each new search.
-- Truncation is disabled during active search so all matched files are visible.
+- File truncation (directory-level) is disabled during active search so all matched files are visible. Match-line truncation within each file is controlled by the truncation threshold.
 - Clearing the search (Escape or clear button) restores the full tree.
 
 ### Search + Language Filter Interaction
@@ -261,10 +266,11 @@ Right-clicking a directory or file row provides:
 
 | Item | Availability | Action |
 |------|-------------|--------|
-| Copy Path | Directories, files | Copies the absolute path to clipboard |
-| Reveal in Explorer | Directories, files | Opens VS Code's file explorer at that path |
+| Copy Path | Directories, files, match lines | Copies the absolute path to clipboard |
+| Reveal in Explorer | Directories, files, match lines | Opens VS Code's file explorer at that path |
 | Open File | Files only | Opens the file in the editor |
 | Open in Integrated Terminal | Directories only | Opens a terminal at that directory |
+| Copy Line Text | Match lines only | Copies the full raw line text to clipboard |
 
 ## Configuration
 

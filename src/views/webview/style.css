@@ -637,6 +637,11 @@ body {
   min-height: 16px;
   overflow: hidden;
   padding: 1px 57px 1px 0; /* vertical 1px matches dir/file-row for indent guide continuity */
+  cursor: pointer;
+}
+
+.match-more-row:hover {
+  background: var(--vscode-list-hoverBackground);
 }
 
 .match-more-label {
@@ -666,6 +671,16 @@ body {
   z-index: auto;
   background: transparent;
   box-shadow: none;
+}
+
+/* Files with inline search matches: filename is clickable (opens file) */
+.has-matches .file-name {
+  cursor: pointer;
+}
+
+.has-matches .file-name:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* Sidebar has no count column — reduce right padding to file-dot (9px) + sidebar row padding (8px) */
