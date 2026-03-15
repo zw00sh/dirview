@@ -22,7 +22,7 @@
     return { start: Math.max(0, col - half), end: Math.min(lineLength, col + matchLen + half) };
   }
 
-  const { SVG_CHEVRON, SVG_PLUS, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_OPEN_IN_TAB } = window._DirviewIcons;
+  const { SVG_CHEVRON, SVG_PLUS, SVG_WARNING, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_OPEN_IN_TAB } = window._DirviewIcons;
   const {
     escHtml, formatBytes, sortDirs, sortFiles, groupEmptyDirs,
     compactedNode, compactedPath, hasExpandedDescendant,
@@ -357,66 +357,113 @@
       return false;
     }
 
-    // Renders a single match line beneath a file row in search-results mode.
-    // file: FileNode (needed for path/line target), match: { line, column, matchLength, lineText }
-    function renderMatchLine(file, match, depth, ancestors) {
+    // Renders a single row for one or more matches on the same line.
+    // matchGroup: array of { line, column, matchLength, lineText, highlightedHtml? } sharing the same line.
+    function renderMatchLine(file, matchGroup, depth, ancestors) {
+      const first = matchGroup[0];
       const li = document.createElement('li');
-      // Stable key for DOM patching — lets patchTreeChildren reuse match-line nodes.
-      li.dataset.nodePath = 'match:' + file.path + ':' + match.line + ':' + match.column;
+      // Stable key: one row per line (column dropped since same-line matches are merged).
+      li.dataset.nodePath = 'match:' + file.path + ':' + first.line;
       const row = document.createElement('div');
       row.className = 'match-line-row';
-      // data-action + data-path + data-line use the delegated click handler in createRenderer.
       row.dataset.action = 'openFileAtLine';
       row.dataset.path = file.path;
-      row.dataset.line = String(match.line);
+      row.dataset.line = String(first.line);
       row.appendChild(renderIndentGuides(depth, ancestors));
 
       const lineNumEl = document.createElement('span');
       lineNumEl.className = 'match-line-number';
-      lineNumEl.textContent = String(match.line);
+      lineNumEl.textContent = String(first.line);
       row.appendChild(lineNumEl);
 
       const textEl = document.createElement('span');
       textEl.className = 'match-line-text';
 
-      if (match.highlightedHtml) {
-        // Backend pre-rendered syntax-highlighted HTML; already includes match-highlight span
-        // and truncation. Trusted server-generated markup — safe to set as innerHTML.
-        textEl.innerHTML = match.highlightedHtml;
+      let clippedCount = 0;
+
+      if (first.highlightedHtml) {
+        // Backend pre-rendered syntax-highlighted HTML with all same-line highlights merged.
+        textEl.innerHTML = first.highlightedHtml;
+        // Detect clipped matches: compare each range against the visible window.
+        if (matchGroup.length > 1) {
+          const rawText = first.lineText || '';
+          const trimmedStart = rawText.length - rawText.trimStart().length;
+          const lineText = rawText.trimStart();
+          const adjFirst = Math.max(0, first.column - trimmedStart);
+          const win = computeVisibleWindow(lineText.length, adjFirst, first.matchLength || 0, MAX_MATCH_LINE_DISPLAY);
+          if (win) {
+            for (let i = 1; i < matchGroup.length; i++) {
+              const adjCol = Math.max(0, matchGroup[i].column - trimmedStart);
+              if (adjCol < win.start || adjCol + (matchGroup[i].matchLength || 0) > win.end) {
+                clippedCount++;
+              }
+            }
+          }
+        }
       } else {
-        // Plain-text fallback: trim leading whitespace, highlight match substring manually.
-        const rawText = match.lineText || '';
-        const { lineText, adjustedCol: col } = trimLeadingWhitespace(rawText, match.column || 0);
-        const len = match.matchLength || 0;
-        const win = computeVisibleWindow(lineText.length, col, len, MAX_MATCH_LINE_DISPLAY);
+        // Plain-text fallback: highlight all match ranges on this line.
+        const rawText = first.lineText || '';
+        const trimmedStart = rawText.length - rawText.trimStart().length;
+        const lineText = rawText.trimStart();
+
+        // Build sorted ranges adjusted for trimmed whitespace
+        const ranges = matchGroup.map(m => ({
+          col: Math.max(0, (m.column || 0) - trimmedStart),
+          len: m.matchLength || 0,
+        }));
+
+        // Window centered on the first match
+        const win = computeVisibleWindow(lineText.length, ranges[0].col, ranges[0].len, MAX_MATCH_LINE_DISPLAY);
 
         if (!win) {
-          if (len > 0 && col + len <= lineText.length) {
-            textEl.appendChild(document.createTextNode(lineText.slice(0, col)));
-            const hl = document.createElement('span');
-            hl.className = 'match-highlight';
-            hl.textContent = lineText.slice(col, col + len);
-            textEl.appendChild(hl);
-            textEl.appendChild(document.createTextNode(lineText.slice(col + len)));
-          } else {
-            textEl.textContent = lineText;
+          // Line fits — highlight all ranges
+          let pos = 0;
+          for (const r of ranges) {
+            if (r.len > 0 && r.col + r.len <= lineText.length) {
+              textEl.appendChild(document.createTextNode(lineText.slice(pos, r.col)));
+              const hl = document.createElement('span');
+              hl.className = 'match-highlight';
+              hl.textContent = lineText.slice(r.col, r.col + r.len);
+              textEl.appendChild(hl);
+              pos = r.col + r.len;
+            }
           }
+          textEl.appendChild(document.createTextNode(lineText.slice(pos)));
         } else {
-          // Truncate: show context centered around the match
-          const prefix = (win.start > 0 ? '\u2026' : '') + lineText.slice(win.start, col);
-          const suffix = lineText.slice(col + len, win.end) + (win.end < lineText.length ? '\u2026' : '');
-          textEl.appendChild(document.createTextNode(prefix));
-          if (len > 0) {
-            const hl = document.createElement('span');
-            hl.className = 'match-highlight';
-            hl.textContent = lineText.slice(col, col + len);
-            textEl.appendChild(hl);
+          // Truncated: highlight ranges within the visible window
+          if (win.start > 0) { textEl.appendChild(document.createTextNode('\u2026')); }
+          let pos = win.start;
+          for (const r of ranges) {
+            const rEnd = r.col + r.len;
+            if (rEnd <= win.start || r.col >= win.end) {
+              clippedCount++;
+              continue;
+            }
+            if (r.len > 0) {
+              textEl.appendChild(document.createTextNode(lineText.slice(pos, r.col)));
+              const hl = document.createElement('span');
+              hl.className = 'match-highlight';
+              hl.textContent = lineText.slice(r.col, rEnd);
+              textEl.appendChild(hl);
+              pos = rEnd;
+            }
           }
-          textEl.appendChild(document.createTextNode(suffix));
+          textEl.appendChild(document.createTextNode(lineText.slice(pos, win.end)));
+          if (win.end < lineText.length) { textEl.appendChild(document.createTextNode('\u2026')); }
         }
       }
 
       row.appendChild(textEl);
+
+      // Append warning badge when some matches were clipped by the visible window
+      if (clippedCount > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'match-clipped-badge';
+        badge.innerHTML = SVG_WARNING + ' +' + clippedCount;
+        badge.title = clippedCount + ' more match' + (clippedCount !== 1 ? 'es' : '') + ' on this line (not visible)';
+        row.appendChild(badge);
+      }
+
       li.appendChild(row);
       return li;
     }
@@ -919,11 +966,34 @@
       if (!state.searchResults?.has(file.path)) { return; }
       const fileMatches = state.searchResults.get(file.path);
       if (!fileMatches || fileMatches.length === 0) { return; }
-      for (const m of fileMatches.slice(0, MAX_MATCH_LINES)) {
-        container.appendChild(renderMatchLine(file, m, depth, ancestors));
-      }
-      if (fileMatches.length > MAX_MATCH_LINES) {
-        container.appendChild(renderMoreMatchesRow(fileMatches.length - MAX_MATCH_LINES, depth, ancestors, file.path));
+
+      // Group consecutive same-line non-context matches into single rows.
+      const sorted = fileMatches.slice().sort((a, b) => a.line - b.line);
+      let renderedRows = 0;
+      let totalMatchesRendered = 0;
+      for (let i = 0; i < sorted.length; ) {
+        const m = sorted[i];
+        // Collect same-line matches
+        const group = [m];
+        let j = i + 1;
+        while (j < sorted.length && sorted[j].line === m.line) {
+          group.push(sorted[j]);
+          j++;
+        }
+        renderedRows++;
+        totalMatchesRendered += group.length;
+        if (renderedRows > MAX_MATCH_LINES) {
+          // Exceeded row cap — report remaining matches (not rows)
+          let remaining = 0;
+          for (let k = i; k < sorted.length; ) {
+            const line = sorted[k].line;
+            while (k < sorted.length && sorted[k].line === line) { remaining++; k++; }
+          }
+          container.appendChild(renderMoreMatchesRow(remaining, depth, ancestors, file.path));
+          break;
+        }
+        container.appendChild(renderMatchLine(file, group, depth, ancestors));
+        i = j;
       }
     }
 

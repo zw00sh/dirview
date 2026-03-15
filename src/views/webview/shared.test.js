@@ -1794,7 +1794,7 @@ describe('renderMatchLine', () => {
     renderer.beforeRender();
     const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
     const match = { line: 42, column: 6, matchLength: 3, lineText: 'const api = true;' };
-    const li = renderer.renderMatchLine(file, match, 1, []);
+    const li = renderer.renderMatchLine(file, [match], 1, []);
     const row = li.querySelector('.match-line-row');
     expect(row).not.toBeNull();
     expect(row.dataset.action).toBe('openFileAtLine');
@@ -1812,7 +1812,7 @@ describe('renderMatchLine', () => {
     renderer.beforeRender();
     const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
     const match = { line: 1, column: 0, matchLength: 0, lineText: 'plain text' };
-    const li = renderer.renderMatchLine(file, match, 1, []);
+    const li = renderer.renderMatchLine(file, [match], 1, []);
     expect(li.querySelector('.match-highlight')).toBeNull();
     expect(li.querySelector('.match-line-text').textContent).toBe('plain text');
   });
@@ -1824,7 +1824,7 @@ describe('renderMatchLine', () => {
     renderer.beforeRender();
     const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
     const match = { line: 7, column: 0, matchLength: 3, lineText: 'abc def' };
-    const li = renderer.renderMatchLine(file, match, 1, []);
+    const li = renderer.renderMatchLine(file, [match], 1, []);
     renderer._rootEl.appendChild(li);
     li.querySelector('.match-line-row').click();
     expect(renderer._vscode.postMessage).toHaveBeenCalledWith({ command: 'openFile', path: '/a/foo.ts', line: 7 });
@@ -1842,7 +1842,7 @@ describe('renderMatchLine', () => {
       lineText: 'const x = 1;',
       highlightedHtml: '<span style="color:#569cd6">const</span> x = 1;',
     };
-    const li = renderer.renderMatchLine(file, match, 1, []);
+    const li = renderer.renderMatchLine(file, [match], 1, []);
     const textEl = li.querySelector('.match-line-text');
     // innerHTML should contain the syntax-highlighted span from the backend
     expect(textEl.innerHTML).toContain('#569cd6');
@@ -1857,7 +1857,7 @@ describe('renderMatchLine', () => {
     renderer.beforeRender();
     const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
     const match = { line: 1, column: 0, matchLength: 3, lineText: 'abc def' };
-    const li = renderer.renderMatchLine(file, match, 1, []);
+    const li = renderer.renderMatchLine(file, [match], 1, []);
     // Plain-text path: match-highlight span should be present
     expect(li.querySelector('.match-highlight')).not.toBeNull();
     expect(li.querySelector('.match-highlight').textContent).toBe('abc');
@@ -1875,7 +1875,7 @@ describe('renderMatchLine', () => {
       lineText: 'abc',
       highlightedHtml: '<span class="match-highlight">abc</span>',
     };
-    const li = renderer.renderMatchLine(file, match, 1, []);
+    const li = renderer.renderMatchLine(file, [match], 1, []);
     const textEl = li.querySelector('.match-line-text');
     // The highlight span should come from the pre-rendered HTML
     expect(textEl.querySelector('.match-highlight')).not.toBeNull();
@@ -1889,8 +1889,45 @@ describe('renderMatchLine', () => {
     renderer.beforeRender();
     const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
     const match = { line: 42, column: 6, matchLength: 3, lineText: 'const api = true;' };
-    const li = renderer.renderMatchLine(file, match, 1, []);
-    expect(li.dataset.nodePath).toBe('match:/a/foo.ts:42:6');
+    const li = renderer.renderMatchLine(file, [match], 1, []);
+    expect(li.dataset.nodePath).toBe('match:/a/foo.ts:42');
+  });
+
+  it('merges multiple same-line matches into a single row with all highlights', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+    const matches = [
+      { line: 5, column: 0, matchLength: 3, lineText: 'foo bar foo' },
+      { line: 5, column: 8, matchLength: 3, lineText: 'foo bar foo' },
+    ];
+    const li = renderer.renderMatchLine(file, matches, 1, []);
+    const highlights = li.querySelectorAll('.match-highlight');
+    expect(highlights.length).toBe(2);
+    expect(highlights[0].textContent).toBe('foo');
+    expect(highlights[1].textContent).toBe('foo');
+    // Only one row, one line number
+    expect(li.querySelector('.match-line-number').textContent).toBe('5');
+  });
+
+  it('renderFileMatches groups same-line matches into one row', () => {
+    const state = S.createState();
+    state.searchResults = new Map([
+      ['/a/foo.ts', [
+        { line: 5, column: 0, matchLength: 3, lineText: 'foo bar foo' },
+        { line: 5, column: 8, matchLength: 3, lineText: 'foo bar foo' },
+        { line: 10, column: 0, matchLength: 3, lineText: 'baz qux' },
+      ]],
+    ]);
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const container = document.createElement('ul');
+    const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+    renderer.renderFileMatches(container, file, 1, []);
+    const matchRows = container.querySelectorAll('.match-line-row');
+    // 2 same-line matches on line 5 → 1 row, plus 1 row for line 10 = 2 rows total
+    expect(matchRows.length).toBe(2);
   });
 });
 
@@ -2342,7 +2379,7 @@ describe('renderMatchLine — edge cases', () => {
     // lineText is absent — simulates a match stripped by the backend
     const match = { line: 10, column: 0, matchLength: 3 };
     let li;
-    expect(() => { li = renderer.renderMatchLine(file, match, 1, []); }).not.toThrow();
+    expect(() => { li = renderer.renderMatchLine(file, [match], 1, []); }).not.toThrow();
     // Text element should be empty (no crash, no content)
     expect(li.querySelector('.match-line-text').textContent).toBe('');
   });
@@ -2353,7 +2390,7 @@ describe('renderMatchLine — edge cases', () => {
     renderer.beforeRender();
     const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
     const match = { line: 1, column: 0, matchLength: 2, lineText: 'if (a < b && c > d) {}' };
-    const li = renderer.renderMatchLine(file, match, 1, []);
+    const li = renderer.renderMatchLine(file, [match], 1, []);
     const textEl = li.querySelector('.match-line-text');
     // textContent should contain the raw characters (browser decodes entities when reading textContent)
     expect(textEl.textContent).toContain('<');

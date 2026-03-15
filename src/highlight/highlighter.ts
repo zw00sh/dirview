@@ -109,9 +109,9 @@ function renderSpan(content: string, color: string | undefined): string {
 }
 
 /**
- * Builds a flat HTML string from Shiki tokens with a match highlight injected.
- * The match highlight spans character range [col, col+len). Syntax-color spans
- * are nested inside `<span class="match-highlight">` where they overlap.
+ * Builds a flat HTML string from Shiki tokens with one or more match highlights injected.
+ * Each range in `ranges` is highlighted with `<span class="match-highlight">`.
+ * Ranges must be non-overlapping and sorted by `col` (ascending).
  *
  * When `visibleStart`/`visibleEnd` are provided, only the characters within
  * [visibleStart, visibleEnd) are emitted, with `…` ellipsis at the boundaries.
@@ -119,13 +119,16 @@ function renderSpan(content: string, color: string | undefined): string {
  */
 export function buildHighlightedHtml(
   tokens: ThemedToken[], col: number, len: number,
-  visibleStart?: number, visibleEnd?: number
+  visibleStart?: number, visibleEnd?: number,
+  ranges?: Array<{ col: number; len: number }>
 ): string {
-  const matchEnd = col + len;
+  // Normalise to a sorted ranges array
+  const matchRanges = ranges ?? (len > 0 ? [{ col, len }] : []);
   const hasWindow = visibleStart !== undefined && visibleEnd !== undefined;
   let pos = 0;
   let html = '';
   let inMatch = false;
+  let rangeIdx = 0; // index into matchRanges
 
   if (hasWindow && visibleStart! > 0) { html += '\u2026'; } // leading ellipsis
 
@@ -145,42 +148,48 @@ export function buildHighlightedHtml(
       if (tokenEnd > visibleEnd!) { sliceEnd = visibleEnd! - pos; }
     }
 
-    // The visible portion of the token, in terms of absolute positions
-    const absStart = pos + sliceStart;
-    const absEnd = pos + sliceEnd;
-
-    // Close match-highlight if we've moved past the match range
-    if (inMatch && absStart >= matchEnd) { html += '</span>'; inMatch = false; }
-
-    // Fast path: visible portion entirely before or after match range
-    if (absEnd <= col || absStart >= matchEnd) {
-      html += renderSpan(token.content.slice(sliceStart, sliceEnd), token.color);
-      pos = tokenEnd;
-      continue;
-    }
-
-    // Token's visible portion overlaps with match range — split at boundaries
+    // Walk through the visible slice, splitting at match range boundaries
     let offset = sliceStart;
+    while (offset < sliceEnd) {
+      const absPos = pos + offset;
 
-    // Part before match start (within visible window)
-    if (absStart < col) {
-      const take = col - pos;
-      html += renderSpan(token.content.slice(offset, take), token.color);
-      offset = take;
-    }
+      // Close current match-highlight if we've passed its end
+      if (inMatch) {
+        const curEnd = matchRanges[rangeIdx].col + matchRanges[rangeIdx].len;
+        if (absPos >= curEnd) {
+          html += '</span>';
+          inMatch = false;
+          rangeIdx++;
+        }
+      }
 
-    // Open match-highlight if not already open
-    if (!inMatch) { html += '<span class="match-highlight">'; inMatch = true; }
+      // Skip past any ranges that end before the current position
+      while (rangeIdx < matchRanges.length && matchRanges[rangeIdx].col + matchRanges[rangeIdx].len <= absPos) {
+        rangeIdx++;
+      }
 
-    // Part inside match range (within visible window)
-    const insideEnd = Math.min(sliceEnd, matchEnd - pos);
-    html += renderSpan(token.content.slice(offset, insideEnd), token.color);
+      if (rangeIdx >= matchRanges.length) {
+        // No more match ranges — emit the rest of the token slice
+        html += renderSpan(token.content.slice(offset, sliceEnd), token.color);
+        offset = sliceEnd;
+        break;
+      }
 
-    // Close match-highlight if token extends past match end (within visible window)
-    if (absEnd > matchEnd) {
-      html += '</span>';
-      inMatch = false;
-      html += renderSpan(token.content.slice(insideEnd, sliceEnd), token.color);
+      const range = matchRanges[rangeIdx];
+      const rangeEnd = range.col + range.len;
+
+      if (absPos < range.col) {
+        // Before the next range — emit text up to the range start or slice end
+        const take = Math.min(range.col - pos, sliceEnd);
+        html += renderSpan(token.content.slice(offset, take), token.color);
+        offset = take;
+      } else if (absPos < rangeEnd) {
+        // Inside a range
+        if (!inMatch) { html += '<span class="match-highlight">'; inMatch = true; }
+        const take = Math.min(rangeEnd - pos, sliceEnd);
+        html += renderSpan(token.content.slice(offset, take), token.color);
+        offset = take;
+      }
     }
 
     pos = tokenEnd;
@@ -198,27 +207,34 @@ function totalLength(tokens: ThemedToken[]): number {
 }
 
 /**
- * Syntax-highlights a single match line and injects a match-highlight span.
+ * Syntax-highlights a line with multiple match ranges highlighted.
+ * Ranges must be non-overlapping and sorted by column (ascending).
  * Returns `undefined` if the language is unsupported (fall back to plain text).
- *
- * @param rawText   The raw line text from ripgrep (may have leading whitespace)
- * @param col       0-based match start column in rawText
- * @param len       Match length in characters
- * @param langName  Linguist language name (e.g. 'TypeScript')
  */
-export async function highlightLine(
+export async function highlightLineMulti(
   rawText: string,
-  col: number,
-  len: number,
+  ranges: Array<{ col: number; len: number }>,
   langName: string
 ): Promise<string | undefined> {
   const shikiLang = resolveShikiLang(langName);
   if (!shikiLang) { return undefined; }
 
-  const { lineText, adjustedCol } = trimLeadingWhitespace(rawText, col);
+  // Trim leading whitespace once, adjusting all columns
+  const trimmedStart = rawText.length - rawText.trimStart().length;
+  const lineText = rawText.trimStart();
 
-  // Skip highlighting for very long lines (too expensive to tokenize)
   if (lineText.length > MAX_HIGHLIGHT) { return undefined; }
+
+  const adjustedRanges = ranges.map(r => ({
+    col: Math.max(0, r.col - trimmedStart),
+    len: r.len,
+  }));
+
+  // Compute visible window centered on the first match (option 1 from plan)
+  const firstRange = adjustedRanges[0];
+  const win = firstRange
+    ? computeVisibleWindow(lineText.length, firstRange.col, firstRange.len, MAX_DISPLAY)
+    : null;
 
   try {
     const h = await getHighlighter();
@@ -230,9 +246,21 @@ export async function highlightLine(
     });
     const lineTokens = tokens[0] ?? [];
 
-    const win = computeVisibleWindow(lineText.length, adjustedCol, len, MAX_DISPLAY);
-    return buildHighlightedHtml(lineTokens, adjustedCol, len, win?.start, win?.end);
+    return buildHighlightedHtml(lineTokens, 0, 0, win?.start, win?.end, adjustedRanges);
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Syntax-highlights a single match line and injects a match-highlight span.
+ * Returns `undefined` if the language is unsupported (fall back to plain text).
+ */
+export async function highlightLine(
+  rawText: string,
+  col: number,
+  len: number,
+  langName: string
+): Promise<string | undefined> {
+  return highlightLineMulti(rawText, [{ col, len }], langName);
 }
