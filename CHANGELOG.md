@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.0.0] — 2026-03-15
+
+### Added
+- **Content search** with syntax-highlighted results: search file contents via ripgrep with progressive streaming, syntax highlighting (Shiki), case sensitivity and regex toggles, and configurable context lines.
+- **File filter** ("find or filter files"): filter displayed files by name using substring matching, glob patterns (case-insensitive), or regex (with toggle). Works standalone or combined with content search.
+- **Inline search results**: match lines rendered under files in the tree with line numbers, match highlighting, context lines, and clickable navigation. Collapsible per-file, with match truncation governed by the truncation threshold.
+- **Search history**: up/down arrow navigation through previous search patterns and file filter inputs.
+- **Sticky directory headers**: pinnable directory rows that stick to the top during scroll (separate setting for sidebar and tab).
+- **Collapsible sections**: search, legend, and tree sections in the tab are independently collapsible with chevron indicators. Active search/filter badges shown on collapsed sections.
+- **Language filter pill**: warning pill in the file filter row when a language filter is active, dismissable to clear all filters.
+- **Directory-scope pill**: "in: dirname" pill in the file filter when a tab is scoped to a subdirectory, with dismiss to reset to workspace root.
+- **Scan progress bar** added to the languages panel.
+
+### Changed
+- Search UI labels: main input placeholder is "Search Text", file filter label is "find or filter files" with "Search Files" placeholder.
+- Globs are now case-insensitive (`--iglob`) in both content search scoping and filename search.
+- Same-line search matches are merged into a single row with multi-range highlighting.
+- Context lines are grouped with their parent match, with empty/whitespace-only lines trimmed from edges.
+- Match groups are dedented to remove shared leading whitespace for cleaner display.
+- Tab tree rendering: fold-style TREE header, root displayed as a node, root bar hidden.
+- Tab styling matches native VS Code search panel (inputs, toolbar buttons, headers).
+- Sidebar search panel removed (search is tab-only).
+- Sidebar title updates from root workspace name.
+
+### Fixed
+- Expand All / Collapse All now correctly updates chevrons for compacted (single-child chain) directories.
+- Search results in subdirectory tabs no longer return empty.
+- Breadcrumb hover no longer highlights all path segments.
+- Search context input no longer clips at narrow sidebar widths.
+- Sticky header shadow works correctly in both sidebar and tab.
+- Security, memory leak, and accessibility fixes across search and rendering code.
+
 ## [0.5.1] — 2026-03-13
 
 ### Changed
