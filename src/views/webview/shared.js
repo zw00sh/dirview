@@ -917,7 +917,9 @@
       }
     }
 
-    scrollRoot.addEventListener('scroll', updateStuck, { passive: true });
+    // For document.documentElement, scroll events fire on the window, not the element.
+    const scrollTarget = scrollRoot === document.documentElement ? window : scrollRoot;
+    scrollTarget.addEventListener('scroll', updateStuck, { passive: true });
 
     return { updateStuck, setEnabled };
   }
