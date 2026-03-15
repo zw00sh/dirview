@@ -47,8 +47,6 @@ export function handleSearchMessage(
   if (message.command === 'search' && message.pattern !== undefined) {
     postMessage({ type: 'searchProgress' });
     // Cap how many lines per file receive syntax highlighting to avoid Shiki overhead
-    // on files with large numbers of matches. Client-side truncation handles display.
-    const MAX_HIGHLIGHT_LINES = 5;
     const CONCURRENCY = 10;
 
     // Syntax-highlights entries up to the render cap per file with concurrency limiting.
@@ -60,15 +58,8 @@ export function handleSearchMessage(
       for (const [filePath, matches] of batch) {
         const task = (async () => {
           const langName = getLangInfo(path.basename(filePath)).name;
-          let matchCount = 0;
           for (let i = 0; i < matches.length; i++) {
             const m = matches[i];
-            if (!m.isContext) {
-              matchCount++;
-              if (matchCount > MAX_HIGHLIGHT_LINES) { break; }
-            } else if (matchCount >= MAX_HIGHLIGHT_LINES) {
-              break; // Context after the last rendered match — stop.
-            }
             if (m.lineText === undefined) { continue; }
             const html = await highlightLine(m.lineText, m.column, m.matchLength, langName);
             if (html !== undefined) { patches.push({ path: filePath, idx: i, html }); }
