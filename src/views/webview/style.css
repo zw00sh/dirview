@@ -5,6 +5,7 @@
 }
 
 body {
+  --row-height: 22px;
   font-family: var(--vscode-font-family);
   font-size: var(--vscode-font-size);
   color: var(--vscode-foreground);
@@ -42,7 +43,7 @@ body {
   cursor: pointer;
   user-select: none;
   gap: 4px;
-  min-height: 22px;
+  min-height: var(--row-height);
   overflow: hidden;
 }
 
@@ -85,7 +86,7 @@ body {
   align-items: center;
   padding: 1px 0;
   gap: 4px;
-  min-height: 22px;
+  min-height: var(--row-height);
   cursor: default;
   overflow: hidden;
 }
@@ -807,7 +808,7 @@ li:not(.match-group) > .match-context-row:hover {
    Shadow is only shown on the bottommost stuck row (.is-stuck-bottom toggled by JS). */
 .sticky-dir {
   position: sticky;
-  top: calc(var(--depth) * 22px);
+  top: calc(var(--depth) * var(--row-height));
   z-index: calc(100 - var(--depth));
   background: var(--vscode-sideBar-background);
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { VCS_DIRS } from './constants';
+import { VCS_DIRS, isVcsDir } from './constants';
 
 describe('VCS_DIRS', () => {
   it('contains .git', () => {
@@ -26,5 +26,19 @@ describe('VCS_DIRS', () => {
     expect(VCS_DIRS.has('node_modules')).toBe(false);
     expect(VCS_DIRS.has('.github')).toBe(false);
     expect(VCS_DIRS.has('src')).toBe(false);
+  });
+});
+
+describe('isVcsDir', () => {
+  it('matches case-insensitively', () => {
+    expect(isVcsDir('.GIT')).toBe(true);
+    expect(isVcsDir('.Git')).toBe(true);
+    expect(isVcsDir('.Hg')).toBe(true);
+    expect(isVcsDir('.SVN')).toBe(true);
+  });
+
+  it('rejects non-VCS directories', () => {
+    expect(isVcsDir('node_modules')).toBe(false);
+    expect(isVcsDir('.github')).toBe(false);
   });
 });

@@ -9,6 +9,7 @@
   const legendHeader = document.getElementById('legend-header');
   const legendChevron = document.getElementById('legend-chevron');
   const legendDisplayToggle = document.getElementById('legend-display-toggle');
+  const legendActiveAlert = document.getElementById('legend-active-alert');
   const legendEl = document.getElementById('legend');
   const searchSection = document.getElementById('search-section');
   const searchHeaderEl = document.getElementById('search-header');
@@ -58,6 +59,10 @@
 
   function updateSearchActiveAlert() {
     searchActiveAlert.style.display = (searchCollapsed && state.searchResults) ? '' : 'none';
+  }
+
+  function updateLegendActiveAlert() {
+    legendActiveAlert.style.display = (legendCollapsed && state.activeFilters.size > 0) ? '' : 'none';
   }
 
   const renderer = S.createRenderer(state, {
@@ -158,24 +163,39 @@
   toggleStickyBtn.addEventListener('click', () => {
     vscode.postMessage({ command: 'toggleStickyHeaders', enabled: !currentStickyEnabled });
   });
-  legendHeader.addEventListener('click', () => {
+  function toggleLegend() {
     legendCollapsed = !legendCollapsed;
     legendEl.style.display = legendCollapsed ? 'none' : '';
     legendChevron.style.transform = legendCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
-  });
-  treeHeaderEl.addEventListener('click', (e) => {
+    legendHeader.setAttribute('aria-expanded', String(!legendCollapsed));
+    updateLegendActiveAlert();
+  }
+  function toggleTree(e) {
     // Don't collapse when clicking toolbar action buttons inside the header.
-    if (e.target.closest('.tab-action')) { return; }
+    if (e && e.target && e.target.closest('.tab-action')) { return; }
     treeCollapsed = !treeCollapsed;
     root.style.display = treeCollapsed ? 'none' : '';
     treeChevronEl.style.transform = treeCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
-  });
-  searchHeaderEl.addEventListener('click', () => {
+    treeHeaderEl.setAttribute('aria-expanded', String(!treeCollapsed));
+  }
+  function toggleSearch() {
     searchCollapsed = !searchCollapsed;
     searchContentEl.style.display = searchCollapsed ? 'none' : '';
     searchChevronEl.style.transform = searchCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
+    searchHeaderEl.setAttribute('aria-expanded', String(!searchCollapsed));
     updateSearchActiveAlert();
-  });
+  }
+  function onHeaderKeydown(toggleFn) {
+    return (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFn(e); }
+    };
+  }
+  legendHeader.addEventListener('click', toggleLegend);
+  legendHeader.addEventListener('keydown', onHeaderKeydown(toggleLegend));
+  treeHeaderEl.addEventListener('click', toggleTree);
+  treeHeaderEl.addEventListener('keydown', onHeaderKeydown(toggleTree));
+  searchHeaderEl.addEventListener('click', toggleSearch);
+  searchHeaderEl.addEventListener('keydown', onHeaderKeydown(toggleSearch));
   legendDisplayToggle.addEventListener('click', (e) => {
     e.stopPropagation(); // Don't collapse the legend section when clicking the toggle
     legendShowPct = !legendShowPct;
@@ -197,12 +217,14 @@
     }
     vscode.postMessage({ command: 'filter', langs: [...state.activeFilters] });
     searchBar.updateFilterWarning(state.activeFilters.size);
+    updateLegendActiveAlert();
     state.rerender();
   }
 
   function clearAllFilters() {
     state.activeFilters.clear();
     vscode.postMessage({ command: 'filter', langs: [] });
+    updateLegendActiveAlert();
     searchBar.updateFilterWarning(0);
     state.rerender();
   }
@@ -297,6 +319,11 @@
       currentStickyEnabled = message.enabled;
       updateStickyBtn();
       setStickyEnabled(message.enabled);
+      return;
+    }
+    if (message.type === 'themeChanged') {
+      // Re-trigger the current search so highlighted results use the new theme colors.
+      if (state.searchResults) { searchBar.triggerSearch(); }
       return;
     }
     if (message.type === 'updateTruncation') {

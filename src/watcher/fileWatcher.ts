@@ -13,6 +13,7 @@ export class FileWatcher {
   }
 
   start(): void {
+    this.watcher?.dispose();
     this.watcher = vscode.workspace.createFileSystemWatcher('**/*');
     this.watcher.onDidCreate(() => this.trigger());
     this.watcher.onDidDelete(() => this.trigger());

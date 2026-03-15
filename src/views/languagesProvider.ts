@@ -9,6 +9,7 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
   private lastPayload: ScanUpdatePayload | undefined;
   private activeFilters: string[] = [];
   private showPct: boolean = false;
+  private disposables: vscode.Disposable[] = [];
   debug = false;
 
   onFilterChange: ((langs: string[]) => void) | undefined;
@@ -19,6 +20,7 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
+    this.disposeListeners();
     this.view = webviewView;
 
     webviewView.webview.options = {
@@ -30,14 +32,20 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this.getHtml(webviewView.webview);
 
-    webviewView.webview.onDidReceiveMessage((message: { command: string; langs?: string[]; id?: number; result?: string; error?: string }) => {
-      if (message.command === 'filter') {
-        this.activeFilters = message.langs ?? [];
-        this.onFilterChange?.(this.activeFilters);
-      } else if (message.command === 'debugEvalResult') {
-        this.onDebugResult?.(message);
-      }
-    });
+    this.disposables.push(
+      webviewView.webview.onDidReceiveMessage((message: { command: string; langs?: string[]; id?: number; result?: string; error?: string }) => {
+        if (message.command === 'filter') {
+          this.activeFilters = message.langs ?? [];
+          this.onFilterChange?.(this.activeFilters);
+        } else if (message.command === 'debugEvalResult') {
+          this.onDebugResult?.(message);
+        }
+      })
+    );
+
+    this.disposables.push(
+      webviewView.onDidDispose(() => this.disposeListeners())
+    );
 
     setupVisibilityReplay(webviewView, () =>
       this.lastPayload ? { type: 'update', roots: this.stripRoots(this.lastPayload.roots), activeFilters: this.activeFilters, showPct: this.showPct } : undefined
@@ -76,6 +84,11 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
   /** Send a debugEval message to the webview (only works when debug=true). */
   debugEval(script: string, id: number): void {
     this.view?.webview.postMessage({ type: 'debugEval', script, id });
+  }
+
+  private disposeListeners(): void {
+    this.disposables.forEach(d => d.dispose());
+    this.disposables = [];
   }
 
   private getHtml(webview: vscode.Webview): string {

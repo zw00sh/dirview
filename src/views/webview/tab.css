@@ -136,13 +136,15 @@ body {
   color: var(--vscode-foreground);
 }
 
-.tab-search-active-alert {
+.tab-search-active-alert,
+.tab-legend-active-alert {
   display: inline-flex;
   align-items: center;
   color: var(--vscode-editorWarning-foreground, #cca700);
   margin-left: 4px;
 }
-.tab-search-active-alert svg {
+.tab-search-active-alert svg,
+.tab-legend-active-alert svg {
   width: 14px;
   height: 14px;
 }

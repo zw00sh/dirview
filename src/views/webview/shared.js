@@ -429,7 +429,7 @@
     const mainInput = document.createElement('input');
     mainInput.type = 'text';
     mainInput.className = 'search-main-input';
-    mainInput.placeholder = 'Search file contents\u2026';
+    mainInput.placeholder = 'Search';
     mainInput.setAttribute('aria-label', 'Search');
     inputContainer.appendChild(mainInput);
 
@@ -497,7 +497,7 @@
     const includeInput = document.createElement('input');
     includeInput.type = 'text';
     includeInput.className = 'search-input search-filter-input';
-    includeInput.placeholder = 'e.g. src/**/*.ts';
+    includeInput.placeholder = '';
     includeInput.setAttribute('aria-label', 'Files to include');
     // Language-filter pill — shown when legend filters are active, alerting the user that
     // search results are intersected with the language filter. Dismissable via × to clear all.
@@ -569,6 +569,29 @@
 
     // ── State ──────────────────────────────────────────────────────────────
     let debounceTimer = null;
+
+    // Search history — two independent stacks (oldest → newest)
+    const searchHistory = [];
+    let searchHistoryIdx = -1;
+    let searchSavedInput = '';
+    const includeHistory = [];
+    let includeHistoryIdx = -1;
+    let includeSavedInput = '';
+    const MAX_HISTORY = 50;
+
+    function navigateHistory(history, index, saved, input, direction) {
+      if (history.length === 0) { return { index, saved }; }
+      if (direction === 'up') {
+        if (index === -1) { saved = input.value; index = history.length - 1; }
+        else if (index > 0) { index--; }
+        input.value = history[index];
+      } else {
+        if (index === -1) { return { index, saved }; }
+        if (index < history.length - 1) { index++; input.value = history[index]; }
+        else { index = -1; input.value = saved; }
+      }
+      return { index, saved };
+    }
 
     // Shared status text formatting — deduplicates updateStatus/setStatus logic.
     function formatSearchStatus(active, hasResults, resultCount, matchCount, fileCount, truncated) {
@@ -665,6 +688,7 @@
     }
 
     function clearSearch() {
+      clearTimeout(debounceTimer);
       mainInput.value = '';
       includeInput.value = '';
       clearBtn.style.display = 'none';
@@ -879,11 +903,12 @@
       // For document.documentElement, getBoundingClientRect().top moves with scroll
       // and is useless as a reference. Use 0 (viewport top) instead.
       const containerTop = isDocRoot ? 0 : scrollRoot.getBoundingClientRect().top;
+      const rowHeight = parseInt(getComputedStyle(document.body).getPropertyValue('--row-height')) || 22;
       let lastStuck = null;
       for (const el of stickyEls) {
         const rect = el.getBoundingClientRect();
         const depth = parseInt(el.style.getPropertyValue('--depth')) || 0;
-        const stickyTop = containerTop + depth * 22;
+        const stickyTop = containerTop + depth * rowHeight;
         // An element is truly stuck when:
         //   1. CSS sticky is holding it — parent <li> has scrolled above the row (liTop < rectTop)
         //   2. It's at its sticky offset — rectTop ≈ stickyTop (not scrolled off-screen)

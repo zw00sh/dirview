@@ -280,6 +280,12 @@ export class TabProvider {
     }
   }
 
+  notifyThemeChanged(): void {
+    for (const { panel } of this.panels.values()) {
+      panel.webview.postMessage({ type: 'themeChanged' });
+    }
+  }
+
   expandAll(): void {
     for (const { panel } of this.panels.values()) {
       panel.webview.postMessage({ type: 'expandAll' });
@@ -315,15 +321,16 @@ export class TabProvider {
       debug: this.debug,
       skipRoot: true,
       bodyHtml: `  <div id="legend-section" class="tab-legend-section" style="display:none">
-    <div id="legend-header" class="tab-legend-header">
+    <div id="legend-header" class="tab-legend-header" tabindex="0" role="button" aria-expanded="true">
       <span id="legend-chevron" class="tab-legend-header-chevron"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M6.146 3.146a.5.5 0 0 0 0 .707l4.146 4.146-4.146 4.146a.5.5 0 0 0 .707.707l4.5-4.5a.5.5 0 0 0 0-.707l-4.5-4.5a.5.5 0 0 0-.707 0Z"/></svg></span>
       <span class="tab-legend-header-title">Languages</span>
+      <span id="legend-active-alert" class="tab-legend-active-alert" title="Tree is filtered by active language selection" style="display:none"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M7.56 1h.88l6.54 12.26-.44.74H1.44l-.42-.74L7.56 1zm.44 1.7L2.43 13H13.57L8 2.7zM8.5 11v1h-1v-1h1zm-1-1V6h1v4h-1z"/></svg></span>
       <button id="legend-display-toggle" class="tab-action" style="margin-left:auto" title="Show percentages" aria-label="Show percentages"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><text x="8" y="12.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-weight="600" font-size="13" fill="currentColor">%</text></svg></button>
     </div>
     <div id="legend" class="tab-legend-wrap"></div>
   </div>
   <div id="search-section" class="tab-search-section">
-    <div id="search-header" class="tab-search-header">
+    <div id="search-header" class="tab-search-header" tabindex="0" role="button" aria-expanded="true">
       <span id="search-chevron" class="tab-search-header-chevron"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M6.146 3.146a.5.5 0 0 0 0 .707l4.146 4.146-4.146 4.146a.5.5 0 0 0 .707.707l4.5-4.5a.5.5 0 0 0 0-.707l-4.5-4.5a.5.5 0 0 0-.707 0Z"/></svg></span>
       <span class="tab-search-header-title">Search</span>
       <span id="search-active-alert" class="tab-search-active-alert" title="Results are filtered by active search" style="display:none"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M7.56 1h.88l6.54 12.26-.44.74H1.44l-.42-.74L7.56 1zm.44 1.7L2.43 13H13.57L8 2.7zM8.5 11v1h-1v-1h1zm-1-1V6h1v4h-1z"/></svg></span>
@@ -331,7 +338,7 @@ export class TabProvider {
     <div id="search-content" class="tab-search-content"></div>
   </div>
   <div id="tree-section" class="tab-tree-section">
-    <div id="tree-header" class="tab-tree-header">
+    <div id="tree-header" class="tab-tree-header" tabindex="0" role="button" aria-expanded="true">
       <span id="tree-chevron" class="tab-tree-header-chevron"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M6.146 3.146a.5.5 0 0 0 0 .707l4.146 4.146-4.146 4.146a.5.5 0 0 0 .707.707l4.5-4.5a.5.5 0 0 0 0-.707l-4.5-4.5a.5.5 0 0 0-.707 0Z"/></svg></span>
       <span class="tab-tree-header-title">Tree</span>
       <div style="display:flex;align-items:center;gap:2px;margin-left:auto">

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { DirNode, FileNode } from './types';
 import { IgnoreFilter } from './ignoreFilter';
 import { getLangInfo } from '../language/languageMap';
-import { VCS_DIRS } from './constants';
+import { isVcsDir } from './constants';
 import { parallelMap } from './concurrency';
 
 export interface ScanResult {
@@ -51,10 +51,10 @@ async function scanDir(
     return emptyNode(name, relPath);
   }
 
-  // Each level gets its own copy of the visited set so parallel sibling branches
-  // don't interfere with each other's cycle detection.
-  const myVisited = new Set(visitedPaths);
-  myVisited.add(fsPath);
+  // Add to the shared visited set. This is safe because parallelMap runs in a
+  // single JS thread — no concurrent mutation. Using a shared set (instead of
+  // per-branch copies) ensures sibling branches detect symlinks to the same target.
+  visitedPaths.add(fsPath);
 
   const node: DirNode = {
     name,
@@ -75,7 +75,8 @@ async function scanDir(
   let entries: [string, vscode.FileType][];
   try {
     entries = await vscode.workspace.fs.readDirectory(dirUri);
-  } catch {
+  } catch (err) {
+    if (DEV_MODE) { console.warn(`dirview: failed to read ${dirUri.fsPath}:`, err); }
     return node;
   }
 
@@ -92,7 +93,7 @@ async function scanDir(
     const isFile = (fileType & vscode.FileType.File) !== 0;
 
     if (isDir || (isSymlink && !isFile)) {
-      if (VCS_DIRS.has(entryName)) { continue; }
+      if (isVcsDir(entryName)) { continue; }
       const exclude = await filter.shouldExcludeDir(entryName, entryRelPath, dirUri);
       if (exclude) { continue; }
       pendingDirs.push({ entryName, entryRelPath, entryUri });
@@ -107,7 +108,7 @@ async function scanDir(
   const childResults = await parallelMap(
     pendingDirs,
     ({ entryName, entryRelPath, entryUri }) =>
-      scanDir(entryUri, entryName, entryRelPath, filter, myVisited, depth + 1, maxDepth, signal),
+      scanDir(entryUri, entryName, entryRelPath, filter, visitedPaths, depth + 1, maxDepth, signal),
     20,
     signal
   );

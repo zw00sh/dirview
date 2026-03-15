@@ -8,6 +8,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private extensionUri: vscode.Uri;
   private lastUpdate: ScanUpdatePayload | undefined;
+  private disposables: vscode.Disposable[] = [];
   debug = false;
 
   onRefresh?: () => void;
@@ -19,6 +20,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
+    this.disposeListeners();
     this.view = webviewView;
     // Default title; overridden below if scan data already arrived before this view was shown.
     this.view.title = 'Tree';
@@ -36,16 +38,22 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this.getHtml(webviewView.webview);
 
-    webviewView.webview.onDidReceiveMessage((message: { command: string; path?: string; line?: number; id?: number; result?: string; error?: string }) => {
-      if (message.command === 'debugEvalResult') {
-        this.onDebugResult?.(message);
-        return;
-      }
-      handleCommonMessage(message, {
-        onRefresh: this.onRefresh,
-        onOpenDirInTab: this.onOpenDirInTab,
-      });
-    });
+    this.disposables.push(
+      webviewView.webview.onDidReceiveMessage((message: { command: string; path?: string; line?: number; id?: number; result?: string; error?: string }) => {
+        if (message.command === 'debugEvalResult') {
+          this.onDebugResult?.(message);
+          return;
+        }
+        handleCommonMessage(message, {
+          onRefresh: this.onRefresh,
+          onOpenDirInTab: this.onOpenDirInTab,
+        });
+      })
+    );
+
+    this.disposables.push(
+      webviewView.onDidDispose(() => this.disposeListeners())
+    );
 
     setupVisibilityReplay(webviewView, () =>
       this.lastUpdate ? { type: 'update', ...this.lastUpdate } : undefined
@@ -106,6 +114,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   /** Send a debugEval message to the webview (only works when debug=true). */
   debugEval(script: string, id: number): void {
     this.view?.webview.postMessage({ type: 'debugEval', script, id });
+  }
+
+  private disposeListeners(): void {
+    this.disposables.forEach(d => d.dispose());
+    this.disposables = [];
   }
 
   private getHtml(webview: vscode.Webview): string {

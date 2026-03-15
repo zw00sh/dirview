@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import ignore, { Ignore } from 'ignore';
 import { Minimatch } from 'minimatch';
-import { VCS_DIRS } from './constants';
+import { isVcsDir } from './constants';
 
 export class IgnoreFilter {
   private rootIgnore: Ignore;
@@ -53,7 +53,7 @@ export class IgnoreFilter {
   }
 
   async shouldExcludeDir(name: string, relPath: string, parentUri: vscode.Uri): Promise<boolean> {
-    if (VCS_DIRS.has(name)) { return true; }
+    if (isVcsDir(name)) { return true; }
     if (this.showIgnored) { return false; }
 
     if (this.isFilesExcluded(relPath + '/')) { return true; }
