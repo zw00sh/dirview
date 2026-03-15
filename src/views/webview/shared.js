@@ -877,21 +877,26 @@
       //   2. Stuck:   rect.top ≈ stickyTop (held at its sticky offset by CSS)
       //   3. Leaving: rect.top < stickyTop (parent <li> scrolled past, dragging it up)
       // Only state 2 counts as "stuck" for is-stuck-bottom purposes.
+      const isDocRoot = scrollRoot === document.documentElement;
       const stickyEls = scrollRoot.querySelectorAll('.sticky-dir');
       // For document.documentElement, getBoundingClientRect().top moves with scroll
       // and is useless as a reference. Use 0 (viewport top) instead.
-      const containerTop = scrollRoot === document.documentElement
-        ? 0
-        : scrollRoot.getBoundingClientRect().top;
+      const containerTop = isDocRoot ? 0 : scrollRoot.getBoundingClientRect().top;
       let lastStuck = null;
       for (const el of stickyEls) {
         const rect = el.getBoundingClientRect();
         const depth = parseInt(el.style.getPropertyValue('--depth')) || 0;
         const stickyTop = containerTop + depth * 22;
-        // Stuck: element is at its sticky offset (within 2px tolerance to handle
-        // subpixel rounding when scrolled to exact row boundaries).
-        // Leaving: rect.top < stickyTop - 2 means the parent <li> is dragging it up.
-        const isStuck = rect.top <= stickyTop + 2 && rect.top >= stickyTop - 2;
+        // An element is truly stuck when:
+        //   1. CSS sticky is holding it — parent <li> has scrolled above the row (liTop < rectTop)
+        //   2. It's at its sticky offset — rectTop ≈ stickyTop (not scrolled off-screen)
+        // Both conditions are needed: (1) alone catches off-screen elements whose <li>
+        // extends above them; (2) alone catches elements at their natural position.
+        const parentLi = el.parentElement;
+        const liTop = parentLi ? parentLi.getBoundingClientRect().top : rect.top;
+        const heldBySticky = liTop < rect.top - 1;
+        const atOffset = rect.top >= stickyTop - 2 && rect.top <= stickyTop + 2;
+        const isStuck = heldBySticky && atOffset;
         el.classList.toggle('is-stuck', isStuck);
         el.classList.remove('is-stuck-bottom');
         if (isStuck) { lastStuck = el; }

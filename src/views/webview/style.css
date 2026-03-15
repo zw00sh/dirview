@@ -813,7 +813,16 @@ li:not(.match-group) > .match-context-row:hover {
   background: var(--vscode-sideBar-background);
 }
 .sticky-dir.is-stuck-bottom {
-  box-shadow: 0 6px 6px -6px rgba(0, 0, 0, 1);
+  overflow: visible;
+}
+.sticky-dir.is-stuck-bottom::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  box-shadow: 0 6px 6px -6px rgba(0, 0, 0, 1) inset;
 }
 
 /* When sticky is disabled, revert to normal flow */
