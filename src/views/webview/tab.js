@@ -26,6 +26,9 @@
   const state = S.createState();
   state.scanBar = scanBar;
 
+  // Track sticky headers — tab scrolls via #root (overflow-y: auto).
+  const updateStuck = S.setupStickyTracking(root);
+
   // Mount search bar inside the collapsible search section.
   const searchBar = S.createSearchBar(state, vscode);
   searchContentEl.appendChild(searchBar.el);
@@ -199,6 +202,7 @@
 
     root.querySelector('.empty')?.remove();
     S.renderTree(state, renderer, root, { showRootNode: true });
+    updateStuck();
   }
 
   state.render = render;

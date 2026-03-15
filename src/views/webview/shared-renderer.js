@@ -685,6 +685,13 @@
       // Dir row
       const row = document.createElement('div');
       row.className = 'dir-row' + (displayNode.totalFiles === 0 ? ' empty-dir' : '');
+
+      // Sticky positioning: dirs with children stick at a depth-based top offset so
+      // ancestors remain visible while scrolling through long child lists.
+      if (hasChildren) {
+        row.classList.add('sticky-dir');
+        row.style.setProperty('--depth', String(depth));
+      }
       row.setAttribute('data-path', displayNode.path);
       row.setAttribute('data-vscode-context', JSON.stringify({
         webviewSection: 'directory',

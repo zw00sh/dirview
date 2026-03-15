@@ -12,6 +12,9 @@
   const state = S.createState();
   state.scanBar = scanBar;
 
+  // Track sticky headers — sidebar scrolls the viewport (no overflow on root/body).
+  const updateStuck = S.setupStickyTracking(document.documentElement);
+
   // Cmd+F in the tree fold: reveal and focus the search fold instead of showing an inline bar.
   window.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
@@ -63,6 +66,7 @@
 
     root.querySelector('.empty')?.remove();
     S.renderTree(state, renderer, root, { cssClass: 'sidebar' });
+    updateStuck();
   }
 
   state.render = render;

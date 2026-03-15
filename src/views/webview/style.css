@@ -608,3 +608,16 @@ body {
 .tree.sidebar .match-more-row {
   padding: 1px 17px 1px 0;
 }
+
+/* Sticky parent directory headers — parent dir-rows stick to the top of the
+   scroll area while their parent <li> is in view, providing spatial context.
+   Shadow is only shown when the row is actually stuck (.is-stuck toggled by JS). */
+.sticky-dir {
+  position: sticky;
+  top: calc(var(--depth) * 22px);
+  z-index: calc(100 - var(--depth));
+  background: var(--vscode-sideBar-background);
+}
+.sticky-dir.is-stuck-bottom {
+  box-shadow: 0 6px 6px -6px rgba(0, 0, 0, 0.4);
+}

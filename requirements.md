@@ -100,6 +100,15 @@ Toggling the ignored state triggers a full rescan affecting all views.
 - The tooltip repositions to stay within the viewport.
 - Scrolling hides the tooltip.
 
+### Sticky Headers
+
+- Directory rows that have visible children (subdirectories or files) are rendered as sticky headers.
+- Each sticky header sticks at a `top` offset of `depth * 22px`, so nested headers stack below their ancestors without overlapping.
+- `z-index` decreases with depth (`100 - depth`) so shallower ancestors always appear above deeper ones when stacking.
+- In the sidebar, sticky headers use `--vscode-sideBar-background` as their background.
+- In the tab view, sticky headers use `--vscode-editor-background` as their background.
+- Leaf directories (no children and no files) are not sticky.
+
 ### Incremental DOM Patching
 
 - On rescan, existing tree DOM is patched rather than replaced, preserving scroll position and avoiding flicker.

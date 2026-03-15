@@ -737,16 +737,48 @@
         const result = eval(message.script);
         const serialized = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
         vscode.postMessage({ command: 'debugEvalResult', id, result: serialized });
-        // Also post to parent frame so CDP renderer tools can read results.
-        window.parent.postMessage({ type: 'dirview-debug-result', id, result: serialized }, '*');
       } catch (err) {
-        const errStr = String(err);
-        vscode.postMessage({ command: 'debugEvalResult', id, error: errStr });
-        window.parent.postMessage({ type: 'dirview-debug-result', id, error: errStr }, '*');
+        vscode.postMessage({ command: 'debugEvalResult', id, error: String(err) });
       }
     });
   }
   /* @DEV_END */
+
+  // Sets up scroll-based sticky tracking. Call once per view, passing the scrollable
+  // container element (#root for tab, document.documentElement for sidebar).
+  // Returns an updateStuck() function that should be called after each render to
+  // set initial is-stuck state. The scroll listener handles subsequent updates.
+  //
+  // We use a scroll listener rather than IntersectionObserver because IO reports the
+  // sticky element's rendered position (already clamped to sticky threshold), not its
+  // natural DOM position — making stuck-state detection unreliable. The scroll listener
+  // reads the parent <li> position, which is never sticky and scrolls naturally.
+  function setupStickyTracking(scrollEl) {
+    // For document.documentElement, scroll events fire on window; containerTop is always 0.
+    const isDocRoot = scrollEl === document.documentElement;
+    const eventTarget = isDocRoot ? window : scrollEl;
+
+    function updateStuck() {
+      const containerTop = isDocRoot ? 0 : scrollEl.getBoundingClientRect().top;
+      let bottomRow = null;
+      let bottomDepth = -1;
+      document.querySelectorAll('.sticky-dir').forEach(row => {
+        const depth = parseInt(row.style.getPropertyValue('--depth')) || 0;
+        const threshold = depth * 22;
+        // The parent <li> is not sticky, so its top reflects the natural scroll position.
+        // If it's above the sticky threshold, the row has been stuck at that threshold.
+        const liTop = row.parentElement.getBoundingClientRect().top - containerTop;
+        const stuck = liTop < threshold;
+        row.classList.toggle('is-stuck', stuck);
+        row.classList.remove('is-stuck-bottom');
+        if (stuck && depth > bottomDepth) { bottomRow = row; bottomDepth = depth; }
+      });
+      if (bottomRow) { bottomRow.classList.add('is-stuck-bottom'); }
+    }
+
+    eventTarget.addEventListener('scroll', updateStuck, { passive: true });
+    return updateStuck;
+  }
 
   window.DirviewShared = {
     // Icons
@@ -770,7 +802,7 @@
     renderRoots, createRescanWarning, renderTree, createMessageHandler,
     patchTreeChildren, patchDirLi, createSearchBar,
     walkMatchingDirs, expandMatchedDirs, expandBatchFiles,
-    updateSearchStatus, scheduleSearchRender,
+    updateSearchStatus, scheduleSearchRender, setupStickyTracking,
     /* @DEV_START */
     setupDebugEval,
     /* @DEV_END */

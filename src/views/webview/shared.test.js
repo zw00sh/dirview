@@ -2985,3 +2985,80 @@ describe('onNavigate dir-name click', () => {
     expect(state.expanded.get('/ws/src')).toBe(true);
   });
 });
+
+// --- sticky-dir class ---
+describe('sticky-dir class on dir rows', () => {
+  it('adds sticky-dir class and --depth CSS variable to a dir row with multiple children (no compaction)', () => {
+    const state = S.createState();
+    // Two children prevent compaction (compaction only fires with exactly 1 child dir, 0 files)
+    const child1 = makeDir('/r/a', 'a', { totalFiles: 2, stats: [] });
+    const child2 = makeDir('/r/b', 'b', { totalFiles: 3, stats: [] });
+    const parent = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 5, stats: [] });
+
+    const renderer = makeRenderer(state);
+    const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
+
+    // :scope > .dir-row selects the direct child dir-row of the <li> (the parent's own row)
+    const row = li.querySelector(':scope > .dir-row');
+    expect(row.classList.contains('sticky-dir')).toBe(true);
+    expect(row.style.getPropertyValue('--depth')).toBe('0');
+  });
+
+  it('sets --depth to the correct depth value for a nested child dir', () => {
+    const state = S.createState();
+    // /r/a has two grandchildren — prevents compaction within /r/a
+    const gc1 = makeDir('/r/a/x', 'x', { totalFiles: 1, stats: [] });
+    const gc2 = makeDir('/r/a/y', 'y', { totalFiles: 1, stats: [] });
+    const child1 = makeDir('/r/a', 'a', { children: [gc1, gc2], totalFiles: 2, stats: [] });
+    const child2 = makeDir('/r/b', 'b', { totalFiles: 3, stats: [] });
+    // Two children at root to prevent root compaction
+    const parent = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 5, stats: [] });
+    state.expanded.set('/r', true);
+    state.expanded.set('/r/a', true);
+
+    const renderer = makeRenderer(state);
+    const li = renderer.renderDirNode(parent, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
+
+    // The child (/r/a) is rendered at depth 1
+    const childLi = li.querySelector('[data-node-path="/r/a"]');
+    const childRow = childLi.querySelector(':scope > .dir-row');
+    expect(childRow.classList.contains('sticky-dir')).toBe(true);
+    expect(childRow.style.getPropertyValue('--depth')).toBe('1');
+  });
+
+  it('does NOT add sticky-dir class to a leaf dir row with no children and no files', () => {
+    const state = S.createState();
+    // A single leaf dir at root — no sibling to trigger empty-dir grouping.
+    // The leaf has files so it's not empty (totalFiles > 0), but no subdirectories,
+    // and its own file list is empty so after rendering it has no visible children.
+    // Actually we want: no children, no files → hasChildren = false.
+    // Use a standalone leaf at depth 0 so there's no parent to query through.
+    const leaf = makeDir('/r', 'r', { totalFiles: 0, stats: [] });
+
+    const renderer = makeRenderer(state);
+    const li = renderer.renderDirNode(leaf, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
+
+    const row = li.querySelector(':scope > .dir-row');
+    expect(row.classList.contains('sticky-dir')).toBe(false);
+  });
+
+  it('adds sticky-dir class to a dir row that has files but no subdirectories', () => {
+    const state = S.createState();
+    const dirWithFiles = makeDir('/r', 'r', {
+      files: [{ name: 'foo.js', path: '/r/foo.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 10 }],
+      totalFiles: 1,
+      stats: [],
+    });
+
+    const renderer = makeRenderer(state);
+    const li = renderer.renderDirNode(dirWithFiles, 0, 10, [], 300);
+    renderer._rootEl.appendChild(li);
+
+    const row = li.querySelector(':scope > .dir-row');
+    expect(row.classList.contains('sticky-dir')).toBe(true);
+    expect(row.style.getPropertyValue('--depth')).toBe('0');
+  });
+});
