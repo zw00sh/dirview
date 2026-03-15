@@ -2840,7 +2840,7 @@ describe('renderFileMatches — context grouping', () => {
     expect(g2ctx.length).toBe(2);
   });
 
-  it('inserts separator between non-contiguous groups', () => {
+  it('adds gap-before class between non-contiguous groups', () => {
     const state = S.createState();
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
@@ -2852,12 +2852,13 @@ describe('renderFileMatches — context grouping', () => {
     const file = makeFile('/ws/a.ts');
     renderer.renderFileMatches(container, file, 1, []);
 
-    // separator + 2 groups
-    const seps = container.querySelectorAll('.match-group-separator');
-    expect(seps.length).toBe(1);
+    const groups = container.querySelectorAll('.match-group');
+    expect(groups.length).toBe(2);
+    expect(groups[0].classList.contains('gap-before')).toBe(false);
+    expect(groups[1].classList.contains('gap-before')).toBe(true);
   });
 
-  it('no separator between contiguous groups', () => {
+  it('no gap-before between contiguous groups', () => {
     const state = S.createState();
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
@@ -2869,8 +2870,8 @@ describe('renderFileMatches — context grouping', () => {
     const file = makeFile('/ws/a.ts');
     renderer.renderFileMatches(container, file, 1, []);
 
-    const seps = container.querySelectorAll('.match-group-separator');
-    expect(seps.length).toBe(0);
+    const gapGroups = container.querySelectorAll('.match-group.gap-before');
+    expect(gapGroups.length).toBe(0);
   });
 
   it('truncation counts match groups, not context lines', () => {

@@ -869,14 +869,34 @@
       if (document.body.classList.contains('sticky-disabled')) { return; }
       // Find all sticky-dir elements and update their is-stuck / is-stuck-bottom state
       // based on their current position relative to the scroll container.
+      // Each element sticks at its depth-based offset (depth * 22px from container top),
+      // so the stuck check must account for the element's --depth CSS variable.
+      //
+      // Three states for a sticky element:
+      //   1. Natural: rect.top > stickyTop (hasn't reached its sticky offset yet)
+      //   2. Stuck:   rect.top ≈ stickyTop (held at its sticky offset by CSS)
+      //   3. Leaving: rect.top < stickyTop (parent <li> scrolled past, dragging it up)
+      // Only state 2 counts as "stuck" for is-stuck-bottom purposes.
       const stickyEls = scrollRoot.querySelectorAll('.sticky-dir');
-      const containerRect = scrollRoot.getBoundingClientRect();
+      // For document.documentElement, getBoundingClientRect().top moves with scroll
+      // and is useless as a reference. Use 0 (viewport top) instead.
+      const containerTop = scrollRoot === document.documentElement
+        ? 0
+        : scrollRoot.getBoundingClientRect().top;
+      let lastStuck = null;
       for (const el of stickyEls) {
         const rect = el.getBoundingClientRect();
-        // An element is "stuck" at the top when its top is at or above the container top
-        const isStuck = rect.top <= containerRect.top + 1;
+        const depth = parseInt(el.style.getPropertyValue('--depth')) || 0;
+        const stickyTop = containerTop + depth * 22;
+        // Stuck: element is at its sticky offset (within 2px tolerance to handle
+        // subpixel rounding when scrolled to exact row boundaries).
+        // Leaving: rect.top < stickyTop - 2 means the parent <li> is dragging it up.
+        const isStuck = rect.top <= stickyTop + 2 && rect.top >= stickyTop - 2;
         el.classList.toggle('is-stuck', isStuck);
+        el.classList.remove('is-stuck-bottom');
+        if (isStuck) { lastStuck = el; }
       }
+      if (lastStuck) { lastStuck.classList.add('is-stuck-bottom'); }
     }
 
     function setEnabled(enabled) {
@@ -891,6 +911,8 @@
         updateStuck();
       }
     }
+
+    scrollRoot.addEventListener('scroll', updateStuck, { passive: true });
 
     return { updateStuck, setEnabled };
   }

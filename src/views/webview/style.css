@@ -747,13 +747,12 @@ li:not(.match-group) > .match-context-row:hover {
   opacity: 0.5;
 }
 
-/* Separator between non-contiguous line groups in search results */
-.match-group-separator {
+/* Spacer between non-contiguous match groups — a short div carrying
+   indent guides so the vertical lines remain continuous through the gap. */
+.match-group-spacer {
   display: flex;
   align-items: center;
-  padding: 1px 57px 1px 0;
-  gap: 4px;
-  min-height: 18px;
+  min-height: 6px;
   overflow: hidden;
 }
 
@@ -805,7 +804,8 @@ li:not(.match-group) > .match-context-row:hover {
 /* Sticky parent directory headers — parent dir-rows stick to the top of the
    scroll area while their parent <li> is in view, providing spatial context.
    --depth (set in renderDirNode) determines the stacking offset.
-   Shadow is only shown on the bottommost stuck row (.is-stuck-bottom toggled by JS). */
+   Border is only shown on the bottommost stuck row (.is-stuck-bottom toggled by JS).
+   A transparent border is always present to prevent layout shift when toggling. */
 .sticky-dir {
   position: sticky;
   top: calc(var(--depth) * 22px);
@@ -813,8 +813,7 @@ li:not(.match-group) > .match-context-row:hover {
   background: var(--vscode-sideBar-background);
 }
 .sticky-dir.is-stuck-bottom {
-  border-bottom: 1px solid var(--vscode-sideBar-border, rgba(128,128,128,0.2));
-  box-shadow: 0 6px 6px -6px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 6px 6px -6px rgba(0, 0, 0, 1);
 }
 
 /* When sticky is disabled, revert to normal flow */
@@ -822,7 +821,6 @@ li:not(.match-group) > .match-context-row:hover {
   position: static;
   z-index: auto;
   background: transparent;
-  box-shadow: none;
 }
 
 /* Files with inline search matches: filename is clickable (opens file) */
@@ -838,7 +836,6 @@ li:not(.match-group) > .match-context-row:hover {
 /* Sidebar has no count column — reduce right padding to file-dot (9px) + sidebar row padding (8px) */
 .tree.sidebar .match-line-row,
 .tree.sidebar .match-context-row,
-.tree.sidebar .match-group-separator,
 .tree.sidebar .match-more-row {
   padding: 1px 17px 1px 0;
 }

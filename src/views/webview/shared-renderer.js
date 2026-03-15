@@ -1144,19 +1144,11 @@
         const g = groups[gi];
         const firstLineInGroup = g.contextBefore.length > 0 ? g.contextBefore[0].line : g.matchLine;
 
-        // Insert separator between non-contiguous groups.
-        if (prevLastLine !== null && firstLineInGroup > prevLastLine + 1) {
-          const sepLi = document.createElement('li');
-          const sepDiv = document.createElement('div');
-          sepDiv.className = 'match-group-separator';
-          sepDiv.appendChild(renderIndentGuides(depth, ancestors));
-          sepLi.appendChild(sepDiv);
-          container.appendChild(sepLi);
-        }
-
         // Create wrapper <li> that carries click/context-menu for the match line.
+        // Add gap-before class when there's a line discontinuity from the previous group.
+        const hasGap = prevLastLine !== null && firstLineInGroup > prevLastLine + 1;
         const wrapper = document.createElement('li');
-        wrapper.className = 'match-group';
+        wrapper.className = 'match-group' + (hasGap ? ' gap-before' : '');
         wrapper.dataset.nodePath = 'match:' + file.path + ':' + g.matchGroup[0].line;
         wrapper.dataset.action = 'openFileAtLine';
         wrapper.dataset.path = file.path;
@@ -1167,6 +1159,14 @@
           lineText: g.matchGroup[0].lineText || '',
           preventDefaultContextMenuItems: true
         }));
+
+        // Insert a spacer div with indent guides to bridge the gap between groups.
+        if (hasGap) {
+          const spacer = document.createElement('div');
+          spacer.className = 'match-group-spacer';
+          spacer.appendChild(renderIndentGuides(depth, ancestors));
+          wrapper.appendChild(spacer);
+        }
 
         // Append context-before divs (no data-action — clicks bubble to wrapper).
         for (const ctx of g.contextBefore) {
