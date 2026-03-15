@@ -546,7 +546,6 @@ body {
   border: 1px solid var(--vscode-input-border, transparent);
   margin: 0 2px 0 5px;
   box-sizing: border-box;
-  transition: opacity 0.1s;
 }
 
 .search-context-input-wrap:focus-within {

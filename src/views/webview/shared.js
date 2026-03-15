@@ -469,7 +469,7 @@
     contextInput.type = 'number';
     contextInput.min = '0';
     contextInput.max = '10';
-    contextInput.value = '1';
+    contextInput.value = '0';
     contextInput.setAttribute('aria-label', 'Context lines');
     contextInputWrap.appendChild(contextInput);
 
@@ -479,9 +479,6 @@
     contextBtn.setAttribute('aria-label', 'Show Context Lines');
     contextBtn.innerHTML = I.SVG_CONTEXT_LINES;
     let contextLinesEnabled = false;
-    // Start disabled — dim the wrapper until the toggle is on.
-    contextInputWrap.style.opacity = '0.4';
-    contextInput.disabled = true;
 
     inputRow.appendChild(contextInputWrap);
     inputRow.appendChild(contextBtn);
@@ -644,23 +641,10 @@
     contextBtn.addEventListener('click', () => {
       contextLinesEnabled = !contextLinesEnabled;
       contextBtn.classList.toggle('active', contextLinesEnabled);
-      contextInput.disabled = !contextLinesEnabled;
-      contextInputWrap.style.opacity = contextLinesEnabled ? '' : '0.4';
       if (mainInput.value.trim() || includeInput.value.trim()) { triggerSearch(); }
     });
 
     contextInput.addEventListener('input', () => {
-      // Auto-enable the toggle when a value > 0 is typed; auto-disable when cleared to 0.
-      const val = parseInt(contextInput.value, 10);
-      if (val > 0 && !contextLinesEnabled) {
-        contextLinesEnabled = true;
-        contextBtn.classList.add('active');
-        contextInput.disabled = false;
-        contextInputWrap.style.opacity = '';
-      } else if ((val <= 0 || isNaN(val)) && contextLinesEnabled) {
-        contextLinesEnabled = false;
-        contextBtn.classList.remove('active');
-      }
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(triggerSearch, 300);
     });
