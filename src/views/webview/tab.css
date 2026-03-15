@@ -111,7 +111,7 @@ body {
 
 .tab-search-header {
   height: 22px;
-  padding: 0 8px;
+  padding: 0 8px 0 4px;
   cursor: pointer;
   user-select: none;
   display: flex;
