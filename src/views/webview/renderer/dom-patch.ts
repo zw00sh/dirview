@@ -73,14 +73,21 @@ export function patchFileLi(oldLi: HTMLElement, newLi: HTMLElement): void {
 }
 
 /**
- * Updates a single dir <li> in place: bar width/segments, file count, and
- * recurses into the children <ul>. Non-structural changes only (hover actions,
- * chevron state, dir name are left as-is since they don't change on rescan).
+ * Updates a single dir <li> in place: bar width/segments, file count, chevron
+ * state, and recurses into the children <ul>. Dir name and hover actions are
+ * left as-is since they don't change.
  */
 export function patchDirLi(oldLi: HTMLElement, newLi: HTMLElement): void {
   const oldRow = oldLi.querySelector(':scope > .dir-row') as HTMLElement | null;
   const newRow = newLi.querySelector(':scope > .dir-row') as HTMLElement | null;
   if (oldRow && newRow) {
+    // Update chevron open/closed state (changes when search expands/collapses dirs).
+    const oldChevron = oldRow.querySelector(':scope > .chevron') as HTMLElement | null;
+    const newChevron = newRow.querySelector(':scope > .chevron') as HTMLElement | null;
+    if (oldChevron && newChevron) {
+      oldChevron.className = newChevron.className;
+    }
+
     // Update bar-wrap width and segment colors/widths.
     const oldBarWrap = oldRow.querySelector('.bar-wrap') as HTMLElement | null;
     const newBarWrap = newRow.querySelector('.bar-wrap') as HTMLElement | null;
