@@ -2953,6 +2953,160 @@ describe('renderFileMatches — context grouping', () => {
   });
 });
 
+// --- renderFileMatches: dedent ---
+
+describe('renderFileMatches — dedent', () => {
+  function makeFile(path) {
+    return { path, name: path.split('/').pop(), langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+  }
+
+  function makeMatchWithText(line, text, col = 0, len = 3) {
+    return { line, column: col, matchLength: len, lineText: text };
+  }
+
+  function makeContextWithText(line, text) {
+    return { line, column: 0, matchLength: 0, lineText: text, isContext: true };
+  }
+
+  it('strips shared leading indentation from all lines in a group', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    // All lines indented by at least 4 spaces; inner line has 8
+    state.searchResults = new Map([['/ws/a.ts', [
+      makeContextWithText(1, '    outer line'),
+      makeMatchWithText(2, '        inner line', 8, 5),
+      makeContextWithText(3, '    outer line'),
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const group = container.querySelector('.match-group');
+    const rows = group.querySelectorAll('.match-context-row, .match-line-row');
+    // Context rows should have 0 leading spaces (4 stripped)
+    expect(rows[0].querySelector('.match-line-text').textContent).toBe('outer line');
+    // Match row should have 4 leading spaces (8 - 4 = 4 relative)
+    expect(rows[1].querySelector('.match-line-text').textContent).toBe('    inner line');
+    expect(rows[2].querySelector('.match-line-text').textContent).toBe('outer line');
+  });
+
+  it('blank lines do not affect dedent calculation', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    state.searchResults = new Map([['/ws/a.ts', [
+      makeContextWithText(1, '    indented'),
+      makeContextWithText(2, ''),
+      makeMatchWithText(3, '    match here', 4, 5),
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const group = container.querySelector('.match-group');
+    const rows = group.querySelectorAll('.match-context-row, .match-line-row');
+    // Dedent should be 4 (blank line ignored), so "indented" has no leading spaces
+    expect(rows[0].querySelector('.match-line-text').textContent).toBe('indented');
+    // Blank line should be empty
+    expect(rows[1].querySelector('.match-line-text').textContent).toBe('');
+    // Match should have no leading spaces (4 - 4 = 0)
+    expect(rows[2].querySelector('.match-line-text').textContent).toBe('match here');
+  });
+
+  it('no dedent when first line has no indentation', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    state.searchResults = new Map([['/ws/a.ts', [
+      makeMatchWithText(1, 'no indent', 0, 2),
+      makeContextWithText(2, '    indented'),
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const group = container.querySelector('.match-group');
+    const rows = group.querySelectorAll('.match-line-row, .match-context-row');
+    expect(rows[0].querySelector('.match-line-text').textContent).toBe('no indent');
+    expect(rows[1].querySelector('.match-line-text').textContent).toBe('    indented');
+  });
+
+  it('dedent works with highlightedHtml (strips from DOM text nodes)', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    // Simulate highlighted HTML with leading whitespace in a text node
+    state.searchResults = new Map([['/ws/a.ts', [
+      {
+        line: 1, column: 4, matchLength: 3, lineText: '    abc def',
+        highlightedHtml: '    <span style="color:#569cd6">abc</span> def',
+      },
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const group = container.querySelector('.match-group');
+    const textEl = group.querySelector('.match-line-text');
+    // Dedent=4, so the 4 leading spaces should be stripped from the text node
+    expect(textEl.textContent).toBe('abc def');
+  });
+
+  it('dedent adjusts match highlight position in plain-text path', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    // Match at column 8 with 4-space dedent -> should highlight at column 4
+    state.searchResults = new Map([['/ws/a.ts', [
+      makeMatchWithText(1, '    foo bar baz', 8, 3),
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const group = container.querySelector('.match-group');
+    const highlight = group.querySelector('.match-highlight');
+    expect(highlight).not.toBeNull();
+    expect(highlight.textContent).toBe('bar');
+  });
+});
+
+// --- stripLeadingChars ---
+
+describe('stripLeadingChars via renderContextLine', () => {
+  it('strips leading chars from highlighted context HTML', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+    const match = {
+      line: 1, column: 0, matchLength: 0, lineText: '    context line', isContext: true,
+      highlightedHtml: '    <span style="color:#569cd6">context</span> line',
+    };
+    const li = renderer.renderContextLine(file, match, 1, [], 4);
+    const textEl = li.querySelector('.match-line-text');
+    // 4 leading spaces should be stripped from the first text node
+    expect(textEl.textContent).toBe('context line');
+  });
+
+  it('strips chars across multiple text nodes', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+    const match = {
+      line: 1, column: 0, matchLength: 0, lineText: '      deep indent', isContext: true,
+      // HTML: 3 chars in first span, 3 in second text node, then content
+      highlightedHtml: '<span style="color:#888">   </span>   <span style="color:#569cd6">deep</span> indent',
+    };
+    const li = renderer.renderContextLine(file, match, 1, [], 6);
+    const textEl = li.querySelector('.match-line-text');
+    // 6 leading whitespace chars (3 in span + 3 bare) should be stripped
+    expect(textEl.textContent).toBe('deep indent');
+  });
+});
+
 // --- setupDebugEval ---
 describe('setupDebugEval', () => {
   it('is exported on DirviewShared', () => {
@@ -3541,5 +3695,224 @@ describe('createSearchBar setDirPill', () => {
     bar.setDirPill('src/scanner');
     const pill = bar.el.querySelector('.search-dir-pill');
     expect(pill).toBeNull();
+  });
+});
+
+// --- file filter: getVisibleFiles with fileFilterFn ---
+describe('getVisibleFiles with fileFilterFn', () => {
+  const files = [
+    { name: 'apiHandler.ts', path: '/ws/apiHandler.ts', langName: 'TypeScript' },
+    { name: 'utils.ts', path: '/ws/utils.ts', langName: 'TypeScript' },
+    { name: 'auth.js', path: '/ws/auth.js', langName: 'JavaScript' },
+  ];
+
+  it('returns all files when fileFilterFn is null', () => {
+    const result = window._DirviewUtils.getVisibleFiles(files, new Set(), null, null);
+    expect(result).toEqual(files);
+  });
+
+  it('filters files by name with fileFilterFn', () => {
+    const fn = (name) => name.toLowerCase().includes('api');
+    const result = window._DirviewUtils.getVisibleFiles(files, new Set(), null, fn);
+    expect(result).toEqual([files[0]]);
+  });
+
+  it('combines fileFilterFn with activeFilters', () => {
+    const fn = (name) => /\.ts$/.test(name);
+    const result = window._DirviewUtils.getVisibleFiles(files, new Set(['TypeScript']), null, fn);
+    expect(result.map(f => f.name)).toEqual(['apiHandler.ts', 'utils.ts']);
+  });
+
+  it('combines fileFilterFn with searchResults', () => {
+    const fn = (name) => name.includes('api') || name.includes('auth');
+    const searchResults = new Map([['/ws/apiHandler.ts', []]]);
+    const result = window._DirviewUtils.getVisibleFiles(files, new Set(), searchResults, fn);
+    // Must match BOTH searchResults and fileFilterFn
+    expect(result.map(f => f.name)).toEqual(['apiHandler.ts']);
+  });
+});
+
+// --- file filter: dirMatchesFileFilter ---
+describe('dirMatchesFileFilter', () => {
+  it('returns true for all dirs when fileFilterFn is null', () => {
+    const state = S.createState();
+    state.fileFilterFn = null;
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const dir = makeDir('/ws/src', 'src', {
+      files: [{ name: 'index.ts', path: '/ws/src/index.ts', langName: 'TypeScript' }],
+    });
+    expect(renderer.dirMatchesFileFilter(dir)).toBe(true);
+  });
+
+  it('returns true when a direct file matches', () => {
+    const state = S.createState();
+    state.fileFilterFn = (name) => name.includes('api');
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const dir = makeDir('/ws/src', 'src', {
+      files: [
+        { name: 'apiHandler.ts', path: '/ws/src/apiHandler.ts', langName: 'TypeScript' },
+        { name: 'utils.ts', path: '/ws/src/utils.ts', langName: 'TypeScript' },
+      ],
+    });
+    expect(renderer.dirMatchesFileFilter(dir)).toBe(true);
+  });
+
+  it('returns false when no file matches', () => {
+    const state = S.createState();
+    state.fileFilterFn = (name) => name.includes('api');
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const dir = makeDir('/ws/src', 'src', {
+      files: [{ name: 'utils.ts', path: '/ws/src/utils.ts', langName: 'TypeScript' }],
+    });
+    expect(renderer.dirMatchesFileFilter(dir)).toBe(false);
+  });
+
+  it('returns true when a descendant file matches', () => {
+    const state = S.createState();
+    state.fileFilterFn = (name) => name.includes('api');
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const child = makeDir('/ws/src/handlers', 'handlers', {
+      files: [{ name: 'apiHandler.ts', path: '/ws/src/handlers/apiHandler.ts', langName: 'TypeScript' }],
+    });
+    const dir = makeDir('/ws/src', 'src', { children: [child] });
+    expect(renderer.dirMatchesFileFilter(dir)).toBe(true);
+  });
+
+  it('respects activeFilters intersection', () => {
+    const state = S.createState();
+    state.fileFilterFn = (name) => name.includes('api');
+    state.activeFilters = new Set(['JavaScript']);
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const dir = makeDir('/ws/src', 'src', {
+      files: [{ name: 'apiHandler.ts', path: '/ws/src/apiHandler.ts', langName: 'TypeScript' }],
+    });
+    // File matches name filter but not language filter
+    expect(renderer.dirMatchesFileFilter(dir)).toBe(false);
+  });
+});
+
+// --- file filter: search bar regex toggle ---
+describe('search bar file filter regex toggle', () => {
+  function makeSearchBar(standalone) {
+    const state = S.createState();
+    state.render = vi.fn();
+    state.lastRoots = [];
+    state.lastAutoRescanEnabled = true;
+    state.currentSortMode = 'files';
+    state.scanBar = { show: vi.fn() };
+    const vscode = { postMessage: vi.fn() };
+    const bar = S.createSearchBar(state, vscode, standalone ? { standalone: true } : undefined);
+    return { bar, state, vscode };
+  }
+
+  it('has a regex toggle button in the file filter row', () => {
+    const { bar } = makeSearchBar(false);
+    const row = bar.el.querySelector('.search-filter-input-row');
+    const regexBtns = row.querySelectorAll('.search-toggle');
+    expect(regexBtns.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('posts searchFiles with *text* glob when regex is off and no glob chars', () => {
+    vi.useFakeTimers();
+    const { bar, vscode } = makeSearchBar(false);
+    const includeInput = bar.el.querySelector('.search-filter-input');
+    includeInput.value = 'api';
+    includeInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    expect(vscode.postMessage).toHaveBeenCalledWith({ command: 'searchFiles', glob: '*api*' });
+    vi.useRealTimers();
+  });
+
+  it('posts searchFiles with glob as-is when glob chars present', () => {
+    vi.useFakeTimers();
+    const { bar, vscode } = makeSearchBar(false);
+    const includeInput = bar.el.querySelector('.search-filter-input');
+    includeInput.value = '*.ts';
+    includeInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    expect(vscode.postMessage).toHaveBeenCalledWith({ command: 'searchFiles', glob: '*.ts' });
+    vi.useRealTimers();
+  });
+
+  it('sets fileFilterFn and rerenders when regex toggle is on', () => {
+    vi.useFakeTimers();
+    const { bar, state } = makeSearchBar(false);
+    // Activate regex toggle
+    const filterRow = bar.el.querySelector('.search-filter-input-row');
+    const regexBtn = filterRow.querySelector('.search-toggle');
+    regexBtn.click();
+    // Type regex pattern
+    const includeInput = bar.el.querySelector('.search-filter-input');
+    includeInput.value = 'api|auth';
+    includeInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    expect(state.fileFilterFn).toBeInstanceOf(Function);
+    expect(state.fileFilterFn('apiHandler.ts')).toBe(true);
+    expect(state.fileFilterFn('authService.js')).toBe(true);
+    expect(state.fileFilterFn('utils.ts')).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it('clears fileFilterFn on clearSearch', () => {
+    vi.useFakeTimers();
+    const { bar, state } = makeSearchBar(false);
+    // Set up regex filter
+    const filterRow = bar.el.querySelector('.search-filter-input-row');
+    const regexBtn = filterRow.querySelector('.search-toggle');
+    regexBtn.click();
+    const includeInput = bar.el.querySelector('.search-filter-input');
+    includeInput.value = 'api';
+    includeInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    expect(state.fileFilterFn).toBeInstanceOf(Function);
+    // Clear
+    const clearBtn = bar.el.querySelector('.search-toggle[title="Clear Search (Escape)"]');
+    clearBtn.click();
+    expect(state.fileFilterFn).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('does not send to ripgrep when regex toggle is on with content search', () => {
+    vi.useFakeTimers();
+    const { bar, vscode, state } = makeSearchBar(false);
+    // Activate regex toggle
+    const filterRow = bar.el.querySelector('.search-filter-input-row');
+    const regexBtn = filterRow.querySelector('.search-toggle');
+    regexBtn.click();
+    // Type in both inputs
+    const mainInput = bar.el.querySelector('.search-main-input');
+    const includeInput = bar.el.querySelector('.search-filter-input');
+    includeInput.value = 'api|auth';
+    mainInput.value = 'fetchUser';
+    mainInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    // Should send content search WITHOUT include (regex is client-side)
+    expect(vscode.postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      command: 'search',
+      pattern: 'fetchUser',
+      include: undefined,
+    }));
+    expect(state.fileFilterFn).toBeInstanceOf(Function);
+    vi.useRealTimers();
+  });
+
+  it('main input always does content search even with glob chars', () => {
+    vi.useFakeTimers();
+    const { bar, vscode } = makeSearchBar(false);
+    const mainInput = bar.el.querySelector('.search-main-input');
+    mainInput.value = '*.ts';
+    mainInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    // Should NOT send searchFiles — main input always does content search now
+    expect(vscode.postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      command: 'search',
+      pattern: '*.ts',
+    }));
+    vi.useRealTimers();
   });
 });

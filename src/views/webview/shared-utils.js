@@ -202,16 +202,19 @@
 
   // Filter helpers — shared by renderDirNode and renderRoots.
   // searchResults and searchMatchFn are optional; omit them for callers that don't need search filtering.
-  function getVisibleChildren(sortedChildren, activeFilters, matchFn, searchResults, searchMatchFn) {
+  // fileFilterFn is optional; when set (regex file filter mode), filters files by name client-side.
+  function getVisibleChildren(sortedChildren, activeFilters, matchFn, searchResults, searchMatchFn, fileFilterFn, fileFilterDirMatchFn) {
     let dirs = sortedChildren;
     if (activeFilters.size > 0) { dirs = dirs.filter(matchFn); }
     if (searchResults && searchMatchFn) { dirs = dirs.filter(searchMatchFn); }
+    if (fileFilterFn && fileFilterDirMatchFn) { dirs = dirs.filter(fileFilterDirMatchFn); }
     return dirs;
   }
-  function getVisibleFiles(sortedFiles, activeFilters, searchResults) {
+  function getVisibleFiles(sortedFiles, activeFilters, searchResults, fileFilterFn) {
     let files = sortedFiles;
     if (activeFilters.size > 0) { files = files.filter(f => activeFilters.has(f.langName)); }
     if (searchResults) { files = files.filter(f => searchResults.has(f.path)); }
+    if (fileFilterFn) { files = files.filter(f => fileFilterFn(f.name)); }
     return files;
   }
 

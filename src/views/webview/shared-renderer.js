@@ -14,6 +14,25 @@
     return { lineText: rawText.trimStart(), adjustedCol: Math.max(0, col - trimmedStart) };
   }
 
+  /** Strips `count` leading characters from the visible text content of an element.
+   *  Walks text nodes via TreeWalker and removes characters from the start, preserving
+   *  HTML structure (e.g. syntax-highlighted <span> tags). Used for dedent on highlighted HTML. */
+  function stripLeadingChars(el, count) {
+    if (count <= 0) { return; }
+    let remaining = count;
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    while (remaining > 0 && walker.nextNode()) {
+      const node = walker.currentNode;
+      if (node.textContent.length <= remaining) {
+        remaining -= node.textContent.length;
+        node.textContent = '';
+      } else {
+        node.textContent = node.textContent.slice(remaining);
+        remaining = 0;
+      }
+    }
+  }
+
   /** Returns { start, end } visible window when lineLength > maxDisplay, or null if it fits.
    *  Must stay in sync with computeVisibleWindow in highlighter.ts. */
   function computeVisibleWindow(lineLength, col, matchLen, maxDisplay) {
@@ -367,6 +386,30 @@
     // Prevents redundant recursive tree walks when the same node is checked multiple times.
     let _searchMatchCache = new WeakMap();
 
+    // Returns true if any descendant file matches the client-side filename filter.
+    // Used when regex file filter is active. Memoized per render cycle.
+    let _fileFilterMatchCache = new WeakMap();
+    function dirMatchesFileFilter(node) {
+      if (!state.fileFilterFn) { return true; }
+      const cached = _fileFilterMatchCache.get(node);
+      if (cached !== undefined) { return cached; }
+      for (const f of (node.files || [])) {
+        if (state.fileFilterFn(f.name) &&
+          (state.activeFilters.size === 0 || state.activeFilters.has(f.langName))) {
+          _fileFilterMatchCache.set(node, true);
+          return true;
+        }
+      }
+      for (const c of (node.children || [])) {
+        if (dirMatchesFileFilter(c)) {
+          _fileFilterMatchCache.set(node, true);
+          return true;
+        }
+      }
+      _fileFilterMatchCache.set(node, false);
+      return false;
+    }
+
     // Returns true if any descendant file of node has a path in state.searchResults.
     // Short-circuits as soon as a match is found; results are memoized in _searchMatchCache.
     function dirMatchesSearch(node) {
@@ -392,7 +435,9 @@
 
     // Renders a single row for one or more matches on the same line.
     // matchGroup: array of { line, column, matchLength, lineText, highlightedHtml? } sharing the same line.
-    function renderMatchLine(file, matchGroup, depth, ancestors) {
+    // dedent: number of leading characters to strip (computed per match group for relative indentation).
+    function renderMatchLine(file, matchGroup, depth, ancestors, dedent) {
+      if (dedent === undefined) { dedent = 0; }
       const first = matchGroup[0];
       const li = document.createElement('li');
       // Stable key: one row per line (column dropped since same-line matches are merged).
@@ -421,18 +466,19 @@
       let clippedCount = 0;
 
       if (first.highlightedHtml) {
-        // Backend pre-rendered syntax-highlighted HTML with all same-line highlights merged.
+        // Backend pre-rendered syntax-highlighted HTML (untrimmed). Strip dedent chars
+        // from the leading text nodes to apply group-level dedent.
         textEl.innerHTML = first.highlightedHtml;
+        stripLeadingChars(textEl, dedent);
         // Detect clipped matches: compare each range against the visible window.
         if (matchGroup.length > 1) {
           const rawText = first.lineText || '';
-          const trimmedStart = rawText.length - rawText.trimStart().length;
-          const lineText = rawText.trimStart();
-          const adjFirst = Math.max(0, first.column - trimmedStart);
-          const win = computeVisibleWindow(lineText.length, adjFirst, first.matchLength || 0, MAX_MATCH_LINE_DISPLAY);
+          const adjFirst = Math.max(0, first.column - dedent);
+          const lineLength = rawText.length - dedent;
+          const win = computeVisibleWindow(lineLength, adjFirst, first.matchLength || 0, MAX_MATCH_LINE_DISPLAY);
           if (win) {
             for (let i = 1; i < matchGroup.length; i++) {
-              const adjCol = Math.max(0, matchGroup[i].column - trimmedStart);
+              const adjCol = Math.max(0, matchGroup[i].column - dedent);
               if (adjCol < win.start || adjCol + (matchGroup[i].matchLength || 0) > win.end) {
                 clippedCount++;
               }
@@ -442,12 +488,11 @@
       } else {
         // Plain-text fallback: highlight all match ranges on this line.
         const rawText = first.lineText || '';
-        const trimmedStart = rawText.length - rawText.trimStart().length;
-        const lineText = rawText.trimStart();
+        const lineText = rawText.slice(dedent);
 
-        // Build sorted ranges adjusted for trimmed whitespace
+        // Build sorted ranges adjusted for dedent
         const ranges = matchGroup.map(m => ({
-          col: Math.max(0, (m.column || 0) - trimmedStart),
+          col: Math.max(0, (m.column || 0) - dedent),
           len: m.matchLength || 0,
         }));
 
@@ -509,7 +554,9 @@
 
     // Renders a single context line (surrounding code) beneath a file row in search-results mode.
     // Context lines are dimmed relative to match lines and share the same click behaviour.
-    function renderContextLine(file, match, depth, ancestors) {
+    // dedent: number of leading characters to strip (computed per match group for relative indentation).
+    function renderContextLine(file, match, depth, ancestors, dedent) {
+      if (dedent === undefined) { dedent = 0; }
       const li = document.createElement('li');
       li.dataset.nodePath = 'context:' + file.path + ':' + match.line;
       const row = document.createElement('div');
@@ -528,9 +575,9 @@
       textEl.className = 'match-line-text';
       if (match.highlightedHtml) {
         textEl.innerHTML = match.highlightedHtml;
+        stripLeadingChars(textEl, dedent);
       } else {
-        const { lineText } = trimLeadingWhitespace(match.lineText || '', 0);
-        textEl.textContent = lineText;
+        textEl.textContent = (match.lineText || '').slice(dedent);
       }
       row.appendChild(textEl);
       li.appendChild(row);
@@ -794,6 +841,10 @@
           vChildren = vChildren.filter(c => dirMatchesSearch(c));
           vFiles = vFiles.filter(f => state.searchResults.has(f.path));
         }
+        if (state.fileFilterFn) {
+          vChildren = vChildren.filter(c => dirMatchesFileFilter(c));
+          vFiles = vFiles.filter(f => state.fileFilterFn(f.name));
+        }
         if (vChildren.length === 1 && vFiles.length === 0) {
           displayName += ' / ' + vChildren[0].name;
           compactSegments.push({ name: vChildren[0].name, path: vChildren[0].path });
@@ -819,8 +870,8 @@
       const sortedFiles = sortFiles(displayNode.files || []);
 
       // Apply language filter and search results filter
-      const visibleChildren = getVisibleChildren(sortedChildren, state.activeFilters, dirMatchesFilter, state.searchResults, c => dirMatchesSearch(c));
-      const visibleFiles = getVisibleFiles(sortedFiles, state.activeFilters, state.searchResults);
+      const visibleChildren = getVisibleChildren(sortedChildren, state.activeFilters, dirMatchesFilter, state.searchResults, c => dirMatchesSearch(c), state.fileFilterFn, c => dirMatchesFileFilter(c));
+      const visibleFiles = getVisibleFiles(sortedFiles, state.activeFilters, state.searchResults, state.fileFilterFn);
 
       const hasChildren = visibleChildren.length > 0 || visibleFiles.length > 0;
 
@@ -1137,6 +1188,21 @@
         while (g.contextAfter.length > 0 && g.contextAfter[g.contextAfter.length - 1].lineText.trim() === '') { g.contextAfter.pop(); }
       }
 
+      // ── Phase 1.5: Compute per-group minimum indentation for dedent ────────
+      // Strips the shared leading whitespace from all lines in a group so that
+      // relative indentation is preserved while the display is left-aligned.
+      for (const g of groups) {
+        const allLines = [...g.contextBefore, ...g.matchGroup, ...g.contextAfter];
+        let minIndent = Infinity;
+        for (const m of allLines) {
+          const text = m.lineText || '';
+          if (text.trim() === '') { continue; } // skip blank lines
+          const indent = text.length - text.trimStart().length;
+          if (indent < minIndent) { minIndent = indent; }
+        }
+        g.dedent = minIndent === Infinity ? 0 : minIndent;
+      }
+
       // ── Phase 2: Render groups ───────────────────────────────────────────────
 
       const threshold = state.truncateThreshold;
@@ -1176,7 +1242,7 @@
 
         // Append context-before divs (no data-action — clicks bubble to wrapper).
         for (const ctx of g.contextBefore) {
-          const ctxLi = renderContextLine(file, ctx, depth, ancestors);
+          const ctxLi = renderContextLine(file, ctx, depth, ancestors, g.dedent);
           const ctxDiv = ctxLi.firstElementChild;
           delete ctxDiv.dataset.action;
           delete ctxDiv.dataset.path;
@@ -1185,14 +1251,14 @@
         }
 
         // Append match div.
-        const matchLi = renderMatchLine(file, g.matchGroup, depth, ancestors);
+        const matchLi = renderMatchLine(file, g.matchGroup, depth, ancestors, g.dedent);
         const matchDiv = matchLi.firstElementChild;
         matchDiv.removeAttribute('data-vscode-context');
         wrapper.appendChild(matchDiv);
 
         // Append context-after divs.
         for (const ctx of g.contextAfter) {
-          const ctxLi = renderContextLine(file, ctx, depth, ancestors);
+          const ctxLi = renderContextLine(file, ctx, depth, ancestors, g.dedent);
           const ctxDiv = ctxLi.firstElementChild;
           delete ctxDiv.dataset.action;
           delete ctxDiv.dataset.path;
@@ -1213,8 +1279,8 @@
 
     return {
       // Called at the start of each full renderTree pass to flush stale node references.
-      beforeRender() { nodeMap.clear(); _searchMatchCache = new WeakMap(); },
-      dirMatchesFilter, dirMatchesSearch, renderIndentGuides, renderFileNode,
+      beforeRender() { nodeMap.clear(); _searchMatchCache = new WeakMap(); _fileFilterMatchCache = new WeakMap(); },
+      dirMatchesFilter, dirMatchesSearch, dirMatchesFileFilter, renderIndentGuides, renderFileNode,
       renderMatchLine, renderContextLine, renderMoreMatchesRow, renderFileMatches, renderTruncatedRow, renderEmptyGroupNode, renderDirNode,
     };
   }

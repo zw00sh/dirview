@@ -77,7 +77,7 @@ export class SearchService {
     const args: string[] = ['--json', '--max-filesize', '1M', '-e', pattern];
     if (!options.caseSensitive) { args.push('-i'); }
     if (!options.useRegex) { args.push('--fixed-strings'); }
-    if (options.include) { args.push('--glob', options.include); }
+    if (options.include) { args.push('--iglob', options.include); }
     if (options.contextLines && options.contextLines > 0) { args.push('-C', String(options.contextLines)); }
     args.push(...rootPaths);
 
@@ -241,7 +241,7 @@ export class SearchService {
     this.cancel();
     const generation = this.generation;
 
-    const args: string[] = ['--files', '--glob', glob, ...rootPaths];
+    const args: string[] = ['--files', '--iglob', glob, ...rootPaths];
     const proc = child_process.spawn(this.rgPath, args);
     this.currentProcess = proc;
 

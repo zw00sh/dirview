@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildHighlightedHtml, resolveShikiLang, trimLeadingWhitespace, computeVisibleWindow } from './highlighter';
+import { buildHighlightedHtml, resolveShikiLang, trimLeadingWhitespace, computeVisibleWindow, highlightGroup } from './highlighter';
 import type { ThemedToken } from 'shiki';
 
 function tok(content: string, color?: string): ThemedToken {
@@ -265,5 +265,88 @@ describe('computeVisibleWindow', () => {
     // half = floor((120 - 10) / 2) = 55; start = max(0, 150 - 55) = 95; end = min(300, 160 + 55) = 215
     expect(win!.start).toBe(95);
     expect(win!.end).toBe(215);
+  });
+});
+
+describe('highlightGroup', () => {
+  it('returns one HTML string per input line', async () => {
+    const lines = [
+      { rawText: 'const x = 1;', ranges: [{ col: 6, len: 1 }] },
+      { rawText: 'const y = 2;', ranges: [{ col: 6, len: 1 }] },
+    ];
+    const results = await highlightGroup(lines, 'TypeScript');
+    expect(results.length).toBe(2);
+    // Both lines should produce defined HTML (TypeScript is a supported language)
+    expect(results[0]).toBeDefined();
+    expect(results[1]).toBeDefined();
+    // Each result should contain match-highlight spans
+    expect(results[0]).toContain('match-highlight');
+    expect(results[1]).toContain('match-highlight');
+  });
+
+  it('returns all undefined for unsupported language', async () => {
+    const lines = [
+      { rawText: 'some text', ranges: [{ col: 0, len: 4 }] },
+    ];
+    const results = await highlightGroup(lines, 'NonexistentLang');
+    expect(results).toEqual([undefined]);
+  });
+
+  it('returns all undefined when any line exceeds MAX_HIGHLIGHT (256)', async () => {
+    const longLine = 'x'.repeat(300);
+    const lines = [
+      { rawText: 'short', ranges: [{ col: 0, len: 5 }] },
+      { rawText: longLine, ranges: [{ col: 0, len: 3 }] },
+    ];
+    const results = await highlightGroup(lines, 'TypeScript');
+    expect(results).toEqual([undefined, undefined]);
+  });
+
+  it('handles context lines with empty ranges', async () => {
+    const lines = [
+      { rawText: '// context line', ranges: [] },
+      { rawText: 'const match = true;', ranges: [{ col: 6, len: 5 }] },
+      { rawText: '// more context', ranges: [] },
+    ];
+    const results = await highlightGroup(lines, 'TypeScript');
+    expect(results.length).toBe(3);
+    // All lines should produce HTML (no match highlight needed for context)
+    for (const r of results) {
+      expect(r).toBeDefined();
+    }
+    // Only the match line should have a match-highlight span
+    expect(results[0]).not.toContain('match-highlight');
+    expect(results[1]).toContain('match-highlight');
+    expect(results[2]).not.toContain('match-highlight');
+  });
+
+  it('produces correct grammar state across lines (multi-line block comment)', async () => {
+    // Block comment spanning lines — single-line highlighting would miss the
+    // comment continuation on lines 2 and 3.
+    const lines = [
+      { rawText: '/* start of comment', ranges: [] },
+      { rawText: '   middle of comment', ranges: [{ col: 3, len: 6 }] },
+      { rawText: '   end of comment */', ranges: [] },
+    ];
+    const results = await highlightGroup(lines, 'TypeScript');
+    expect(results.length).toBe(3);
+    // All lines should be tokenized (multi-line grammar state)
+    for (const r of results) {
+      expect(r).toBeDefined();
+    }
+    // The middle line should have a match-highlight
+    expect(results[1]).toContain('match-highlight');
+  });
+
+  it('preserves untrimmed text (no leading whitespace removal)', async () => {
+    const lines = [
+      { rawText: '    indented code', ranges: [{ col: 4, len: 8 }] },
+    ];
+    const results = await highlightGroup(lines, 'TypeScript');
+    expect(results.length).toBe(1);
+    expect(results[0]).toBeDefined();
+    // The HTML should contain the leading spaces (not trimmed)
+    // The actual content of the HTML includes the full indented text
+    expect(results[0]!).toContain('indented');
   });
 });

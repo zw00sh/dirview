@@ -60,8 +60,8 @@
       }
       const sortedChildren = sortDirs(r.children, state.currentSortMode);
       const sortedFiles = sortFiles(r.files || []);
-      const visibleChildren = U.getVisibleChildren(sortedChildren, state.activeFilters, c => renderer.dirMatchesFilter(c), state.searchResults, c => renderer.dirMatchesSearch(c));
-      const visibleFiles = U.getVisibleFiles(sortedFiles, state.activeFilters, state.searchResults);
+      const visibleChildren = U.getVisibleChildren(sortedChildren, state.activeFilters, c => renderer.dirMatchesFilter(c), state.searchResults, c => renderer.dirMatchesSearch(c), state.fileFilterFn, c => renderer.dirMatchesFileFilter(c));
+      const visibleFiles = U.getVisibleFiles(sortedFiles, state.activeFilters, state.searchResults, state.fileFilterFn);
       if (state.activeFilters.size === 0 && !state.searchResults && visibleChildren.length > 0) {
         for (const group of groupEmptyDirs(visibleChildren)) {
           if (group.type === 'emptyGroup') {
@@ -429,8 +429,8 @@
     const mainInput = document.createElement('input');
     mainInput.type = 'text';
     mainInput.className = 'search-main-input';
-    mainInput.placeholder = 'Search';
-    mainInput.setAttribute('aria-label', 'Search');
+    mainInput.placeholder = 'Search Text';
+    mainInput.setAttribute('aria-label', 'Search Text');
     inputContainer.appendChild(mainInput);
 
     // Case-sensitive toggle — reuses the "Aa" sort icon (same codicon)
@@ -493,12 +493,12 @@
     includeSection.className = 'search-filter-section';
     const includeLabel = document.createElement('label');
     includeLabel.className = 'search-filter-label';
-    includeLabel.textContent = 'files to include';
+    includeLabel.textContent = 'find or filter files';
     const includeInput = document.createElement('input');
     includeInput.type = 'text';
     includeInput.className = 'search-input search-filter-input';
     includeInput.placeholder = '';
-    includeInput.setAttribute('aria-label', 'Files to include');
+    includeInput.setAttribute('aria-label', 'Find or filter files');
     // Language-filter pill — shown when legend filters are active, alerting the user that
     // search results are intersected with the language filter. Dismissable via × to clear all.
     const langPill = document.createElement('span');
@@ -554,9 +554,18 @@
     filterContainer.insertBefore(langPill, filterContainer.firstChild);
     filterContainer.appendChild(includeInput);
 
+    // Regex toggle for file filter — switches from ripgrep glob to client-side regex matching
+    const includeRegexBtn = document.createElement('button');
+    includeRegexBtn.className = 'search-toggle';
+    includeRegexBtn.title = 'Use Regular Expression';
+    includeRegexBtn.setAttribute('aria-label', 'Use Regular Expression');
+    includeRegexBtn.innerHTML = I.SVG_REGEX;
+    let includeUseRegex = false;
+
     const inputRow2 = document.createElement('div');
     inputRow2.className = 'search-filter-input-row';
     inputRow2.appendChild(filterContainer);
+    inputRow2.appendChild(includeRegexBtn);
     includeSection.appendChild(includeLabel);
     includeSection.appendChild(inputRow2);
     el.appendChild(includeSection);
@@ -663,35 +672,57 @@
 
     function triggerSearch() {
       const pattern = mainInput.value.trim();
-      const includeGlob = includeInput.value.trim();
+      const fileFilter = includeInput.value.trim();
 
-      clearBtn.style.display = (pattern || includeGlob) ? '' : 'none';
+      clearBtn.style.display = (pattern || fileFilter) ? '' : 'none';
 
-      if (!pattern && !includeGlob) {
+      if (!pattern && !fileFilter) {
+        state.fileFilterFn = null;
         vscode.postMessage({ command: 'clearSearch' });
         return;
       }
 
-      // Detection logic: glob chars or path separators in the main input → filename search.
-      const isGlobPattern = /[*?/]/.test(pattern);
       const contextLines = contextLinesEnabled ? (parseInt(contextInput.value, 10) || 0) : 0;
 
-      if (!pattern && includeGlob) {
-        // Include glob with no content query → filename-only search.
-        vscode.postMessage({ command: 'searchFiles', glob: includeGlob });
-      } else if (pattern && isGlobPattern) {
-        // Main input looks like a glob/path → filename-only search.
-        vscode.postMessage({ command: 'searchFiles', glob: pattern });
+      // File filter: regex mode uses client-side filtering; otherwise ripgrep glob.
+      if (includeUseRegex && fileFilter) {
+        // Client-side regex filtering — don't send to ripgrep.
+        try {
+          const re = new RegExp(fileFilter, 'i');
+          state.fileFilterFn = (name) => re.test(name);
+        } catch (_) {
+          // Invalid regex — clear filter, don't error.
+          state.fileFilterFn = null;
+        }
       } else {
-        // Content search.
+        state.fileFilterFn = null;
+      }
+
+      // Normalize file filter for ripgrep: plain text → *text* substring glob.
+      const normalizedGlob = (!includeUseRegex && fileFilter)
+        ? (/[*?{}]/.test(fileFilter) ? fileFilter : `*${fileFilter}*`)
+        : undefined;
+
+      if (!pattern) {
+        if (includeUseRegex) {
+          // Regex file filter with no content query — client-side only, rerender tree.
+          state.rerender();
+        } else if (fileFilter) {
+          // Glob/substring file filter with no content query → ripgrep filename search.
+          vscode.postMessage({ command: 'searchFiles', glob: normalizedGlob });
+        }
+      } else {
+        // Content search, optionally scoped by file filter glob.
         vscode.postMessage({
           command: 'search',
           pattern,
           caseSensitive,
           useRegex,
-          include: includeGlob || undefined,
+          include: normalizedGlob,
           contextLines: contextLines || undefined,
         });
+        // If regex file filter is also active, rerender will apply it client-side
+        // after search results arrive (via fileFilterFn in getVisibleFiles).
       }
     }
 
@@ -701,6 +732,7 @@
       includeInput.value = '';
       clearBtn.style.display = 'none';
       statusEl.style.display = 'none';
+      state.fileFilterFn = null;
       vscode.postMessage({ command: 'clearSearch' });
     }
 
@@ -720,6 +752,12 @@
 
     clearBtn.addEventListener('click', clearSearch);
 
+    includeRegexBtn.addEventListener('click', () => {
+      includeUseRegex = !includeUseRegex;
+      includeRegexBtn.classList.toggle('active', includeUseRegex);
+      if (mainInput.value.trim() || includeInput.value.trim()) { triggerSearch(); }
+    });
+
     contextBtn.addEventListener('click', () => {
       contextLinesEnabled = !contextLinesEnabled;
       contextBtn.classList.toggle('active', contextLinesEnabled);
@@ -736,6 +774,7 @@
       searchHistoryIdx = -1;
       clearBtn.style.display = mainInput.value ? '' : 'none';
       if (!mainInput.value && !includeInput.value) {
+        state.fileFilterFn = null;
         vscode.postMessage({ command: 'clearSearch' });
         return;
       }
@@ -792,17 +831,17 @@
     });
 
     // Dynamic placeholders — hint at history when focused
-    mainInput.addEventListener('focus', () => { mainInput.placeholder = 'Search (\u21C5 for history)'; });
+    mainInput.addEventListener('focus', () => { mainInput.placeholder = 'Search Text (\u21C5 for history)'; });
     mainInput.addEventListener('blur', () => {
       commitToHistory(searchHistory, mainInput.value);
       searchHistoryIdx = -1;
-      mainInput.placeholder = 'Search';
+      mainInput.placeholder = 'Search Text';
     });
-    includeInput.addEventListener('focus', () => { includeInput.placeholder = 'e.g. *.ts, src/**/exclude'; });
+    includeInput.addEventListener('focus', () => { includeInput.placeholder = 'e.g. api, *.ts (\u21C5 for history)'; });
     includeInput.addEventListener('blur', () => {
       commitToHistory(includeHistory, includeInput.value);
       includeHistoryIdx = -1;
-      includeInput.placeholder = '';
+      includeInput.placeholder = 'Search Files';
     });
 
     // Cmd+F / Ctrl+F — focus the search input from anywhere in the webview.

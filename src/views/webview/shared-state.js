@@ -34,6 +34,8 @@
       searchMatchCount: 0,
       /** @type {Function|null} Called by message handler to refresh search bar status text. */
       searchBar_updateStatus: null,
+      /** @type {Function|null} Client-side filename filter (regex mode). Takes filename string, returns boolean. */
+      fileFilterFn: null,
     };
     state.scanBar = null;           // Set by main.js / tab.js after creation
     state._rerenderPending = false; // Deduplication flag: collapse rapid calls into one render
@@ -60,15 +62,15 @@
 
   function walkExpand(state, nodes) {
     for (const n of nodes) {
-      state.expanded.set(n.path, true);
-      walkExpand(state, n.children || []);
+      state.expanded.set(compactedPath(n), true);
+      walkExpand(state, compactedNode(n).children || []);
     }
   }
 
   function walkCollapse(state, nodes) {
     for (const n of nodes) {
-      state.expanded.set(n.path, false);
-      walkCollapse(state, n.children || []);
+      state.expanded.set(compactedPath(n), false);
+      walkCollapse(state, compactedNode(n).children || []);
     }
   }
 

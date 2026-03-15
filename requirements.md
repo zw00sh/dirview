@@ -186,7 +186,11 @@ Search is available in the inline **Search section** in the editor tab.
 - Typing a query in the search input triggers a content search using ripgrep (`@vscode/ripgrep`).
 - Search is debounced at 300ms.
 - Options: case sensitivity toggle (Aa), regex mode toggle (.*).
-- A "files to include" field supports glob patterns to narrow the search scope (e.g. `src/**/*.ts`).
+- A "find or filter files" field filters displayed files by name. It supports three modes:
+  - Plain text (default): converted to a `*text*` substring glob, matched case-insensitively against filenames via ripgrep.
+  - Glob patterns (when `*`, `?`, or `{}` detected): passed as-is to ripgrep with `--iglob` (case-insensitive).
+  - Regex (when regex toggle is active): matched client-side against filenames using case-insensitive regex. Supports patterns like `api|auth`.
+- The file filter works both standalone (filtering the tree without a content search) and combined with a content search (scoping which results are displayed).
 - Results are delivered progressively (batched every 50 files or 200ms) and rendered incrementally.
 - Syntax highlighting is applied to match lines via Shiki, patched in after the initial plain-text render.
 - Match lines show: line number, trimmed line text with the match highlighted, and context-windowed truncation for long lines (max 120 visible characters, centered on the match).
@@ -199,7 +203,8 @@ Search is available in the inline **Search section** in the editor tab.
 
 ### Filename Search
 
-- If the main input contains glob characters (`*`, `?`, `/`) or the "files to include" field has a pattern with no content query, a filename-only search is performed.
+- When the file filter field has a value with no content query, a filename-only search is performed (via ripgrep for plain text/glob, or client-side for regex).
+- The main search input always performs content search regardless of its contents.
 - Filename search lists matching file paths without inline match lines.
 
 ### Search Limits
@@ -217,7 +222,7 @@ Search is available in the inline **Search section** in the editor tab.
 ### Search + Language Filter Interaction
 
 - When a language filter is active alongside a search, only files matching both the search and the language filter are shown.
-- A warning pill appears in the search bar's "files to include" row when a language filter is active.
+- A warning pill appears in the search bar's "find or filter files" row when a language filter is active.
 
 ### Tab Search
 

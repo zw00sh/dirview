@@ -10,13 +10,13 @@ vi.mock('vscode', () => ({
   commands: { executeCommand: vi.fn() },
 }));
 
-// highlightLine mock — returns a resolved promise with a fake HTML string by default.
+// highlightGroup mock — returns a resolved promise with fake HTML strings per line.
 // Tests can override via highlightDeferred to control async timing.
-let highlightDeferred: { resolve: (v: string | undefined) => void; promise: Promise<string | undefined> } | null = null;
+let highlightDeferred: { resolve: (v: (string | undefined)[]) => void; promise: Promise<(string | undefined)[]> } | null = null;
 vi.mock('../highlight/highlighter', () => ({
-  highlightLine: vi.fn((_text: string, _col: number, _len: number, _lang: string) => {
+  highlightGroup: vi.fn((lines: Array<{ rawText: string; ranges: Array<{ col: number; len: number }> }>, _lang: string) => {
     if (highlightDeferred) { return highlightDeferred.promise; }
-    return Promise.resolve('<span>highlighted</span>');
+    return Promise.resolve(lines.map(() => '<span>highlighted</span>'));
   }),
 }));
 
@@ -161,7 +161,7 @@ describe('handleSearchMessage — generation guard', () => {
     const service = createFakeSearchService();
 
     // Control highlight timing so we can interleave a second search before highlights finish.
-    let resolveHighlight!: (v: string | undefined) => void;
+    let resolveHighlight!: (v: (string | undefined)[]) => void;
     highlightDeferred = {
       promise: new Promise((r) => { resolveHighlight = r; }),
       resolve: null as any,
@@ -191,7 +191,7 @@ describe('handleSearchMessage — generation guard', () => {
     );
 
     // Now resolve the stale "ap" highlight — the generation guard should discard it.
-    staleResolve('<span>stale</span>');
+    staleResolve(['<span>stale</span>']);
     await new Promise((r) => setTimeout(r, 50));
 
     // No searchResultsHighlight should contain patches for the stale "ap" batch.
