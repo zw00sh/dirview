@@ -108,6 +108,9 @@ export interface WebviewState extends CoreWebviewState {
   searchFileCount: number;
   searchMatchCount: number;
   fileFilterFn: ((name: string) => boolean) | null;
+  /** Precomputed set of directory paths that are ancestors of search result files.
+   *  Enables O(1) dirMatchesSearch checks instead of recursive tree walks. */
+  searchAncestorPaths: Set<string> | null;
   searchBar_updateStatus: (() => void) | null;
   _searchRenderTimer: ReturnType<typeof setTimeout> | null;
 }

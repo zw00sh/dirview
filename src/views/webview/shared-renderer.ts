@@ -43,11 +43,13 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
   // each full re-render. Used by delegated event handlers to avoid per-element closures.
   const nodeMap: Map<string, NodeMapEntry> = new Map();
 
-  // WeakMap cache for search-result matching — reset by beforeRender() each render cycle.
-  // Prevents redundant recursive tree walks when the same node is checked multiple times.
-  // Wrapped in ref objects so reassignment in beforeRender is visible to all modules.
+  // WeakMap cache for search-result matching — preserved across renders when inputs
+  // haven't changed (e.g. expand/collapse with same search results). Only reset when
+  // searchResults or fileFilterFn identity changes.
   const searchMatchCache = { current: new WeakMap<DirNode, boolean>() };
   const fileFilterMatchCache = { current: new WeakMap<DirNode, boolean>() };
+  let lastSearchResults: Map<string, any> | null | undefined;
+  let lastFileFilterFn: ((name: string) => boolean) | null | undefined;
 
   // Build the shared context object that extracted modules access.
   const ctx: RendererContext = {
@@ -114,9 +116,16 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
   }
 
   // Returns true if any descendant file of node has a path in state.searchResults.
-  // Short-circuits as soon as a match is found; results are memoized in searchMatchCache.
+  // Uses the precomputed ancestor path index for O(1) lookups when no language filter
+  // is active. Falls back to recursive tree walk (memoized via WeakMap) when language
+  // filters require per-file language checks.
   function dirMatchesSearch(node: DirNode): boolean {
     if (!state.searchResults) { return true; }
+    // Fast path: ancestor index available and no language filter — O(1) lookup.
+    if (state.searchAncestorPaths && state.activeFilters.size === 0) {
+      return state.searchAncestorPaths.has(node.path);
+    }
+    // Slow path: language filter active — recursive walk with WeakMap memoization.
     const cached = searchMatchCache.current.get(node);
     if (cached !== undefined) { return cached; }
     for (const f of (node.files || [])) {
@@ -454,8 +463,8 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
 
     // Flex spacer pushes bar + count to the right
     const barSpacer = h('div', { className: 'bar-spacer' });
-    row.insertBefore(actionsEl, barSpacer);
     row.appendChild(barSpacer);
+    row.insertBefore(actionsEl, barSpacer);
 
     // Proportional bar — skip for root node when hideRootBar is set (tab breadcrumb row)
     if (displayNode.totalFiles > 0 && !(depth === 0 && opts.hideRootBar)) {
@@ -556,10 +565,18 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
 
   return {
     // Called at the start of each full renderTree pass to flush stale node references.
+    // Preserves search/filter caches across renders when inputs haven't changed
+    // (e.g. expand/collapse doesn't invalidate search match results).
     beforeRender() {
       nodeMap.clear();
-      searchMatchCache.current = new WeakMap();
-      fileFilterMatchCache.current = new WeakMap();
+      if (lastSearchResults !== state.searchResults) {
+        searchMatchCache.current = new WeakMap();
+        lastSearchResults = state.searchResults;
+      }
+      if (lastFileFilterFn !== state.fileFilterFn) {
+        fileFilterMatchCache.current = new WeakMap();
+        lastFileFilterFn = state.fileFilterFn;
+      }
     },
     dirMatchesFilter,
     dirMatchesSearch,

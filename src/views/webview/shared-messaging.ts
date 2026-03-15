@@ -2,7 +2,7 @@
 
 import { escHtml } from './shared-utils';
 import { tieredExpandAll, tieredCollapseAll } from './shared-state';
-import { expandMatchedDirs, updateSearchStatus, scheduleSearchRender, expandBatchFiles } from './shared-search';
+import { expandMatchedDirs, updateSearchStatus, scheduleSearchRender, expandBatchFiles, buildAncestorPaths } from './shared-search';
 
 import type { WebviewState, ScanBar, MessageHandlerDeps, BackendToWebviewMessage } from './types';
 
@@ -89,6 +89,10 @@ export function createMessageHandler(
       state.searchResults = message.matches
         ? new Map(Object.entries(message.matches))
         : null;
+      // Build ancestor path index for O(1) dirMatchesSearch lookups.
+      state.searchAncestorPaths = state.searchResults
+        ? buildAncestorPaths(state.searchResults.keys())
+        : null;
       state.searchActive = false;
       if (state.scanBar) { state.scanBar.show(false); }
       // Selectively expand only dirs that contain matches (avoids rendering entire tree).
@@ -139,8 +143,9 @@ export function createMessageHandler(
     },
     searchProgress() {
       state.searchActive = true;
-      // Clear stale results and expand state from a previous search.
+      // Clear stale results, ancestor index, and expand state from a previous search.
       state.searchResults = null;
+      state.searchAncestorPaths = null;
       state.searchFileCount = 0;
       state.searchMatchCount = 0;
       state.searchTruncated = false;

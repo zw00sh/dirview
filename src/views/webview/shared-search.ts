@@ -490,6 +490,25 @@ export function scheduleSearchRender(state: WebviewState): void {
   }
 }
 
+// Builds a Set of all ancestor directory paths for the given file paths.
+// E.g. '/ws/src/lib/foo.ts' → adds '/ws', '/ws/src', '/ws/src/lib'.
+// Enables O(1) "does this dir contain a search match?" checks.
+// Uses lastIndexOf chaining instead of split+join for performance.
+export function buildAncestorPaths(filePaths: Iterable<string>): Set<string> {
+  const ancestors = new Set<string>();
+  for (const filePath of filePaths) {
+    // Walk up from the last '/' to the root, adding each directory prefix.
+    let end = filePath.lastIndexOf('/');
+    while (end > 0) {
+      const dir = filePath.slice(0, end);
+      if (ancestors.has(dir)) break; // already added this and all its ancestors
+      ancestors.add(dir);
+      end = filePath.lastIndexOf('/', end - 1);
+    }
+  }
+  return ancestors;
+}
+
 // Walks the tree and expands any directory that contains a file matching matchFn.
 // If clearFirst is true, clears state.expanded before walking (full rebuild from scratch).
 // If false, only adds to the existing expanded map (incremental batch update).
@@ -509,20 +528,44 @@ export function walkMatchingDirs(state: WebviewState, roots: DirNode[], matchFn:
   for (const r of roots) { walk(r); }
 }
 
-// Incrementally expands dirs for a new batch of file paths, without clearing state.expanded.
-// Called on each searchResultsBatch; searchProgress must clear expanded first so this
-// only needs to add newly matched dirs rather than rebuilding from all results.
-// O(dir_nodes) per batch — far cheaper than expandMatchedDirs(O(file_nodes x batches)).
+// Expands ancestor dirs for a set of file paths.
+// When no language filter is active, uses the fast ancestor path index (no tree walk).
+// When language filters are active, falls back to tree walk to check per-file language.
 export function expandBatchFiles(state: WebviewState, roots: DirNode[], newFilePaths: Set<string>): void {
-  walkMatchingDirs(state, roots, (f: FileNode) =>
-    newFilePaths.has(f.path) && (state.activeFilters.size === 0 || state.activeFilters.has(f.langName)),
-    false);
+  // Merge into the cumulative ancestor index for dirMatchesSearch.
+  const ancestors = buildAncestorPaths(newFilePaths);
+  if (!state.searchAncestorPaths) { state.searchAncestorPaths = new Set(); }
+  for (const p of ancestors) { state.searchAncestorPaths.add(p); }
+
+  if (state.activeFilters.size > 0) {
+    // Language filter active — must check per-file language via tree walk.
+    walkMatchingDirs(state, roots, (f: FileNode) =>
+      newFilePaths.has(f.path) && state.activeFilters.has(f.langName),
+      false);
+  } else {
+    // No filter — expand all ancestor dirs directly.
+    for (const dirPath of ancestors) {
+      state.expanded.set(dirPath, true);
+    }
+  }
 }
 
 // Pre-populates state.expanded so only directories containing search matches are expanded.
 // Full rebuild from all results — used for non-streaming searchResults and clearSearch.
 export function expandMatchedDirs(state: WebviewState, roots: DirNode[], searchResults: Map<string, SearchMatch[]>, activeFilters: Set<string>): void {
-  walkMatchingDirs(state, roots, (f: FileNode) =>
-    searchResults.has(f.path) && (activeFilters.size === 0 || activeFilters.has(f.langName)),
-    true);
+  // When language filters are active, we can't use the pure path-based index —
+  // we need to check each file's language. Fall back to tree walk.
+  if (activeFilters.size > 0) {
+    walkMatchingDirs(state, roots, (f: FileNode) =>
+      searchResults.has(f.path) && activeFilters.has(f.langName),
+      true);
+    return;
+  }
+  // No language filter — use the fast ancestor path index.
+  state.expanded.clear();
+  const ancestors = buildAncestorPaths(searchResults.keys());
+  state.searchAncestorPaths = ancestors;
+  for (const dirPath of ancestors) {
+    state.expanded.set(dirPath, true);
+  }
 }

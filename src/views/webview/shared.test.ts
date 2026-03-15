@@ -2125,11 +2125,13 @@ describe('createMessageHandler search messages', () => {
     expect(state.searchActive).toBe(false);
   });
 
-  it('searchResults with matches clears expanded state', () => {
+  it('searchResults with matches clears prior expanded state and expands ancestors', () => {
     const { state, handler } = makeHandlerEnv();
     state.expanded.set('/some/dir', true);
     handler({ data: { type: 'searchResults', matches: { '/a/foo.ts': [] }, fileCount: 1, matchCount: 0, truncated: false } });
-    expect(state.expanded.size).toBe(0);
+    // Prior expansion (/some/dir) is cleared; ancestor of matched file (/a) is expanded.
+    expect(state.expanded.has('/some/dir')).toBe(false);
+    expect(state.expanded.has('/a')).toBe(true);
   });
 
   it('searchResultsBatch merges into existing searchResults', () => {
@@ -2548,7 +2550,7 @@ describe('searchResultsBatch — empty matches', () => {
 // --- expandBatchFiles — orphan path ---
 
 describe('expandBatchFiles — orphan paths', () => {
-  it('is a no-op for file paths that do not match any dir in the tree', () => {
+  it('does not throw for file paths that do not match any dir in the tree', () => {
     const state = createState();
     const roots = [
       makeDir('/ws', 'ws', {
@@ -2559,12 +2561,12 @@ describe('expandBatchFiles — orphan paths', () => {
         ],
       }),
     ];
-    // Path belongs to a completely different root
+    // Path belongs to a completely different root — should not throw.
+    // Ancestor paths are added to expanded (harmless — non-existent dirs
+    // are never rendered), and to searchAncestorPaths for O(1) lookups.
     expect(() => {
       expandBatchFiles(state, roots, new Set(['/other/project/file.ts']));
     }).not.toThrow();
-    // No dirs should have been expanded
-    expect(state.expanded.size).toBe(0);
   });
 });
 

@@ -26,6 +26,7 @@ export function createState(): WebviewState {
     searchFileCount: 0,
     searchMatchCount: 0,
     fileFilterFn: null,
+    searchAncestorPaths: null,
     searchBar_updateStatus: null,
     // Internal
     scanBar: null,
