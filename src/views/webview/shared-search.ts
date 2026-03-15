@@ -2,6 +2,7 @@
 
 import * as Icons from './shared-icons';
 import { compactedPath } from './shared-utils';
+import { h } from './shared-h';
 
 import type { DirNode, FileNode, WebviewState, VsCodeApi, SearchBarOptions, SearchBarResult, SearchStatusData, SearchMatch } from './types';
 
@@ -10,139 +11,118 @@ import type { DirNode, FileNode, WebviewState, VsCodeApi, SearchBarOptions, Sear
  */
 export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?: SearchBarOptions): SearchBarResult {
   const standalone = !!(options && options.standalone);
-  const el = document.createElement('div');
-  el.className = 'search-bar';
 
   // ── Main input row: input + toggle buttons inside a shared border ──────
   // This matches VSCode's native search panel (Aa, .*, and x inside the border).
-  const inputRow = document.createElement('div');
-  inputRow.className = 'search-input-row';
-
-  const inputContainer = document.createElement('div');
-  inputContainer.className = 'search-input-container';
-
-  const mainInput = document.createElement('input');
-  mainInput.type = 'text';
-  mainInput.className = 'search-main-input';
-  mainInput.placeholder = 'Search Text';
-  mainInput.setAttribute('aria-label', 'Search Text');
-  inputContainer.appendChild(mainInput);
+  const mainInput = h('input', {
+    type: 'text',
+    className: 'search-main-input',
+    placeholder: 'Search Text',
+    attr: { 'aria-label': 'Search Text' },
+  });
 
   // Case-sensitive toggle — reuses the "Aa" sort icon (same codicon)
-  const caseBtn = document.createElement('button');
-  caseBtn.className = 'search-toggle';
-  caseBtn.title = 'Case Sensitive';
-  caseBtn.setAttribute('aria-label', 'Case Sensitive');
-  caseBtn.innerHTML = Icons.SVG_SORT_NAME;
+  const caseBtn = h('button', {
+    className: 'search-toggle',
+    title: 'Case Sensitive',
+    innerHTML: Icons.SVG_SORT_NAME,
+    attr: { 'aria-label': 'Case Sensitive' },
+  });
   let caseSensitive = false;
-  inputContainer.appendChild(caseBtn);
 
   // Regex mode toggle
-  const regexBtn = document.createElement('button');
-  regexBtn.className = 'search-toggle';
-  regexBtn.title = 'Use Regular Expression';
-  regexBtn.setAttribute('aria-label', 'Use Regular Expression');
-  regexBtn.innerHTML = Icons.SVG_REGEX;
+  const regexBtn = h('button', {
+    className: 'search-toggle',
+    title: 'Use Regular Expression',
+    innerHTML: Icons.SVG_REGEX,
+    attr: { 'aria-label': 'Use Regular Expression' },
+  });
   let useRegex = false;
-  inputContainer.appendChild(regexBtn);
 
   // Clear button — only visible when there's a query, sits inside the container border
-  const clearBtn = document.createElement('button');
-  clearBtn.className = 'search-toggle';
-  clearBtn.title = 'Clear Search (Escape)';
-  clearBtn.setAttribute('aria-label', 'Clear Search');
-  clearBtn.innerHTML = Icons.SVG_CLOSE;
-  clearBtn.style.display = 'none';
-  inputContainer.appendChild(clearBtn);
+  const clearBtn = h('button', {
+    className: 'search-toggle',
+    title: 'Clear Search (Escape)',
+    innerHTML: Icons.SVG_CLOSE,
+    style: { display: 'none' },
+    attr: { 'aria-label': 'Clear Search' },
+  });
 
-  inputRow.appendChild(inputContainer);
+  const inputContainer = h('div', { className: 'search-input-container' },
+    mainInput, caseBtn, regexBtn, clearBtn,
+  );
 
   // ── Context lines — inline after the search input container ────────────
   // Matches VS Code Search Editor layout: [number input] [toggle], no text label.
-  // The number input sits inside its own bordered wrapper (separate from the main
-  // search container) so it gets its own focus ring and background.
-  const contextInputWrap = document.createElement('div');
-  contextInputWrap.className = 'search-context-input-wrap';
-  const contextInput = document.createElement('input');
-  contextInput.type = 'number';
-  contextInput.min = '0';
-  contextInput.max = '10';
-  contextInput.value = '1';
-  contextInput.setAttribute('aria-label', 'Context lines');
-  contextInputWrap.appendChild(contextInput);
+  const contextInput = h('input', {
+    type: 'number',
+    min: '0',
+    max: '10',
+    value: '1',
+    attr: { 'aria-label': 'Context lines' },
+  });
+  const contextInputWrap = h('div', { className: 'search-context-input-wrap' }, contextInput);
 
-  const contextBtn = document.createElement('button');
-  contextBtn.className = 'search-toggle search-context-toggle active';
-  contextBtn.title = 'Show Context Lines';
-  contextBtn.setAttribute('aria-label', 'Show Context Lines');
-  contextBtn.innerHTML = Icons.SVG_CONTEXT_LINES;
+  const contextBtn = h('button', {
+    className: 'search-toggle search-context-toggle active',
+    title: 'Show Context Lines',
+    innerHTML: Icons.SVG_CONTEXT_LINES,
+    attr: { 'aria-label': 'Show Context Lines' },
+  });
   let contextLinesEnabled = true;
 
-  inputRow.appendChild(contextInputWrap);
-  inputRow.appendChild(contextBtn);
-
-  el.appendChild(inputRow);
+  const inputRow = h('div', { className: 'search-input-row' },
+    inputContainer, contextInputWrap, contextBtn,
+  );
 
   // ── Files to include — label above input, matching VSCode native search ─
-  const includeSection = document.createElement('div');
-  includeSection.className = 'search-filter-section';
-  const includeLabel = document.createElement('label');
-  includeLabel.className = 'search-filter-label';
-  includeLabel.textContent = 'find or filter files';
-  const includeInput = document.createElement('input');
-  includeInput.type = 'text';
-  includeInput.className = 'search-input search-filter-input';
-  includeInput.placeholder = '';
-  includeInput.setAttribute('aria-label', 'Find or filter files');
+  const includeInput = h('input', {
+    type: 'text',
+    className: 'search-input search-filter-input',
+    placeholder: '',
+    attr: { 'aria-label': 'Find or filter files' },
+  });
+
   // Language-filter pill — shown when legend filters are active, alerting the user that
   // search results are intersected with the language filter. Dismissable via x to clear all.
-  const langPill = document.createElement('span');
-  langPill.className = 'search-lang-pill';
-  langPill.style.display = 'none';
-  const langPillIcon = document.createElement('span');
-  langPillIcon.className = 'search-lang-pill-icon';
-  langPillIcon.innerHTML = Icons.SVG_WARNING;
-  const langPillText = document.createElement('span');
-  langPillText.className = 'search-lang-pill-text';
-  const langPillClose = document.createElement('button');
-  langPillClose.className = 'search-lang-pill-close';
-  langPillClose.title = 'Clear language filters';
-  langPillClose.setAttribute('aria-label', 'Clear language filters');
-  langPillClose.innerHTML = Icons.SVG_CLOSE;
-  langPillClose.addEventListener('click', (e: MouseEvent) => {
-    e.stopPropagation();
-    if (options && options.onClearLangFilter) { options.onClearLangFilter(); }
-  });
-  langPill.appendChild(langPillIcon);
-  langPill.appendChild(langPillText);
-  langPill.appendChild(langPillClose);
-
+  const langPillText = h('span', { className: 'search-lang-pill-text' });
+  const langPill = h('span', { className: 'search-lang-pill', style: { display: 'none' } },
+    h('span', { className: 'search-lang-pill-icon', innerHTML: Icons.SVG_WARNING }),
+    langPillText,
+    h('button', {
+      className: 'search-lang-pill-close',
+      title: 'Clear language filters',
+      innerHTML: Icons.SVG_CLOSE,
+      attr: { 'aria-label': 'Clear language filters' },
+      on: { click: (e: MouseEvent) => {
+        e.stopPropagation();
+        if (options && options.onClearLangFilter) { options.onClearLangFilter(); }
+      } },
+    }),
+  );
 
   // Bordered container wrapping pill + input so they appear as one unified input field.
-  const filterContainer = document.createElement('div');
-  filterContainer.className = 'search-filter-container';
+  const filterContainer = h('div', { className: 'search-filter-container' });
 
   // Dir-scope pill — shows the tab's root directory basename with a dismiss button.
   // Only created for non-standalone search bars (tabs), hidden when dirPath is ''.
   let dirPill: HTMLSpanElement | null = null;
   let dirPillText: HTMLSpanElement | null = null;
   if (!standalone) {
-    dirPill = document.createElement('span');
-    dirPill.className = 'search-dir-pill';
-    dirPill.style.display = 'none';
-    dirPillText = document.createElement('span');
-    dirPillText.className = 'search-dir-pill-text';
-    const dirPillClose = document.createElement('button');
-    dirPillClose.className = 'search-dir-pill-close';
-    dirPillClose.title = 'Reset to workspace root';
-    dirPillClose.setAttribute('aria-label', 'Reset to workspace root');
-    dirPillClose.innerHTML = Icons.SVG_CLOSE;
-    dirPillClose.addEventListener('click', (e: MouseEvent) => {
-      e.stopPropagation();
-      vscode.postMessage({ command: 'navigateToDir', path: '' });
-    });
-    dirPill.appendChild(dirPillText);
-    dirPill.appendChild(dirPillClose);
+    dirPillText = h('span', { className: 'search-dir-pill-text' });
+    dirPill = h('span', { className: 'search-dir-pill', style: { display: 'none' } },
+      dirPillText,
+      h('button', {
+        className: 'search-dir-pill-close',
+        title: 'Reset to workspace root',
+        innerHTML: Icons.SVG_CLOSE,
+        attr: { 'aria-label': 'Reset to workspace root' },
+        on: { click: (e: MouseEvent) => {
+          e.stopPropagation();
+          vscode.postMessage({ command: 'navigateToDir', path: '' });
+        } },
+      }),
+    );
     filterContainer.appendChild(dirPill);
   }
   // Lang pill is inserted before the dir pill so it appears on the left.
@@ -150,26 +130,25 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   filterContainer.appendChild(includeInput);
 
   // Regex toggle for file filter — switches from ripgrep glob to client-side regex matching
-  const includeRegexBtn = document.createElement('button');
-  includeRegexBtn.className = 'search-toggle';
-  includeRegexBtn.title = 'Use Regular Expression';
-  includeRegexBtn.setAttribute('aria-label', 'Use Regular Expression');
-  includeRegexBtn.innerHTML = Icons.SVG_REGEX;
+  const includeRegexBtn = h('button', {
+    className: 'search-toggle',
+    title: 'Use Regular Expression',
+    innerHTML: Icons.SVG_REGEX,
+    attr: { 'aria-label': 'Use Regular Expression' },
+  });
   let includeUseRegex = false;
 
-  const inputRow2 = document.createElement('div');
-  inputRow2.className = 'search-filter-input-row';
-  inputRow2.appendChild(filterContainer);
-  inputRow2.appendChild(includeRegexBtn);
-  includeSection.appendChild(includeLabel);
-  includeSection.appendChild(inputRow2);
-  el.appendChild(includeSection);
+  const includeSection = h('div', { className: 'search-filter-section' },
+    h('label', { className: 'search-filter-label', textContent: 'find or filter files' }),
+    h('div', { className: 'search-filter-input-row' }, filterContainer, includeRegexBtn),
+  );
 
   // ── Status line ────────────────────────────────────────────────────────
-  const statusEl = document.createElement('div');
-  statusEl.className = 'search-status';
-  statusEl.style.display = 'none';
-  el.appendChild(statusEl);
+  const statusEl = h('div', { className: 'search-status', style: { display: 'none' } });
+
+  const el = h('div', { className: 'search-bar' },
+    inputRow, includeSection, statusEl,
+  );
 
   // ── State ──────────────────────────────────────────────────────────────
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;

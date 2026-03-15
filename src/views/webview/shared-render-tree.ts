@@ -3,6 +3,7 @@
 import * as Icons from './shared-icons';
 import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, getVisibleChildren, getVisibleFiles } from './shared-utils';
 import { patchTreeChildren } from './shared-dom-patch';
+import { h } from './shared-h';
 
 import type { DirNode, FileNode, WebviewState, SortMode, VsCodeApi, Renderer } from './types';
 
@@ -12,17 +13,14 @@ import type { DirNode, FileNode, WebviewState, SortMode, VsCodeApi, Renderer } f
  * Creates the "auto-rescan disabled" warning banner with a wired Refresh button.
  */
 export function createRescanWarning(vscode: VsCodeApi): HTMLElement {
-  const warn = document.createElement('div');
-  warn.className = 'rescan-warning';
-  warn.innerHTML = `
-    <span class="rescan-warning-icon">${Icons.SVG_WARNING}</span>
-    <span>Auto-rescan disabled (large repo)</span>
-    <button class="rescan-btn">Refresh</button>
-  `;
-  (warn.querySelector('.rescan-btn') as HTMLElement).addEventListener('click', () => {
-    vscode.postMessage({ command: 'refresh' });
-  });
-  return warn;
+  return h('div', { className: 'rescan-warning' },
+    h('span', { className: 'rescan-warning-icon', innerHTML: Icons.SVG_WARNING }),
+    h('span', 'Auto-rescan disabled (large repo)'),
+    h('button', {
+      className: 'rescan-btn',
+      on: { click: () => vscode.postMessage({ command: 'refresh' }) },
+    }, 'Refresh'),
+  );
 }
 
 // Renders the root-level tree rows into treeEl. Shared between sidebar and tab views.
@@ -52,10 +50,7 @@ export function renderRoots(
   for (const r of roots) {
     state.currentRootName = r.name;
     if (roots.length > 1) {
-      const header = document.createElement('li');
-      header.className = 'workspace-root-header';
-      header.textContent = r.name;
-      treeEl.appendChild(header);
+      treeEl.appendChild(h('li', { className: 'workspace-root-header', textContent: r.name }));
     }
     const sortedChildren = sortDirs(r.children, state.currentSortMode);
     const sortedFiles = sortFiles(r.files || []);
@@ -117,14 +112,12 @@ export function renderTree(
   if (existingTree) {
     // Incremental path: build the new tree off-screen, then reconcile with existing DOM.
     existingTree.className = treeClass;
-    const newTreeEl = document.createElement('ul');
-    newTreeEl.className = treeClass;
+    const newTreeEl = h('ul', { className: treeClass });
     renderRoots(renderer, state, newTreeEl, maxMetric, clientWidth, opts);
     patchTreeChildren(existingTree, newTreeEl);
   } else {
     // First render (or after loading/error cleared the container): full creation.
-    const treeEl = document.createElement('ul');
-    treeEl.className = treeClass;
+    const treeEl = h('ul', { className: treeClass });
     renderRoots(renderer, state, treeEl, maxMetric, clientWidth, opts);
     rootEl.appendChild(treeEl);
   }

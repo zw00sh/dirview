@@ -13,6 +13,7 @@ import {
   renderMoreMatchesRow as _renderMoreMatchesRow,
   renderFileMatches as _renderFileMatches,
 } from './shared-renderer-matches';
+import { h } from './shared-h';
 import type { DirNode, FileNode, FileTypeStats, WebviewState, SortMode, RendererDeps, RendererOptions, Renderer, IndentAncestor, SearchMatch, NodeMapEntry, RendererContext } from './types';
 
 // Creates render helpers bound to a mutable state object.
@@ -71,24 +72,19 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
   }
 
   function renderIndentGuides(depth: number, ancestors: IndentAncestor[]): HTMLSpanElement {
-    const container = document.createElement('span');
-    container.className = 'indent-guides';
+    const guides: HTMLSpanElement[] = [];
     for (let i = 0; i < depth; i++) {
-      const guide = document.createElement('span');
-      guide.className = 'indent-guide';
       const ancestor = ancestors[i];
-      if (ancestor) {
-        guide.dataset.guidePath = ancestor.path;
-        // data-action enables the delegated click handler in createRenderer.
-        guide.dataset.action = 'collapseGuide';
-        // File-match guides collapse the file's match group rather than a directory.
-        if (ancestor.isFileMatch) {
-          guide.dataset.guideIsFileMatch = '1';
-        }
-      }
-      container.appendChild(guide);
+      guides.push(h('span', {
+        className: 'indent-guide',
+        dataset: ancestor ? {
+          guidePath: ancestor.path,
+          action: 'collapseGuide',
+          ...(ancestor.isFileMatch ? { guideIsFileMatch: '1' } : {}),
+        } : undefined,
+      }));
     }
-    return container;
+    return h('span', { className: 'indent-guides' }, ...guides);
   }
 
   // Wire up renderIndentGuides on the context so extracted modules can use it.
@@ -141,88 +137,71 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
   }
 
   function renderFileNode(file: FileNode, depth: number, ancestors: IndentAncestor[]): HTMLLIElement {
-    const li = document.createElement('li');
     const hasMatches = !!(state.searchResults?.has(file.path) && state.searchResults.get(file.path)!.length > 0);
-    const row = document.createElement('div');
-    row.className = 'file-row clickable' + (hasMatches ? ' has-matches' : '');
-    // For files without matches: data-action opens the file via delegated click handler.
-    // For files with matches: click is handled below (toggle vs. open-file by target).
-    if (!hasMatches) {
-      row.dataset.action = 'openFile';
-    }
-    row.dataset.path = file.path;
-    row.setAttribute('data-vscode-context', JSON.stringify({
-      webviewSection: 'file',
-      path: file.path,
-      preventDefaultContextMenuItems: true
-    }));
-    row.appendChild(renderIndentGuides(depth, ancestors));
+    const row = h('div', {
+      className: 'file-row clickable' + (hasMatches ? ' has-matches' : ''),
+      // For files without matches: data-action opens the file via delegated click handler.
+      // For files with matches: click is handled below (toggle vs. open-file by target).
+      dataset: {
+        ...(!hasMatches ? { action: 'openFile' } : {}),
+        path: file.path,
+      },
+      attr: { 'data-vscode-context': JSON.stringify({
+        webviewSection: 'file',
+        path: file.path,
+        preventDefaultContextMenuItems: true,
+      }) },
+    }, renderIndentGuides(depth, ancestors));
 
     if (hasMatches) {
       // Chevron for collapsible matches — sits in the chevron slot before the dot.
-      const matchChevron = document.createElement('span');
       const isCollapsed = state.matchesCollapsed.has(file.path);
-      matchChevron.className = 'chevron' + (isCollapsed ? '' : ' open');
-      matchChevron.innerHTML = SVG_CHEVRON;
-      row.appendChild(matchChevron);
+      row.appendChild(h('span', {
+        className: 'chevron' + (isCollapsed ? '' : ' open'),
+        innerHTML: SVG_CHEVRON,
+      }));
     }
 
-    const dotSlot = document.createElement('span');
-    dotSlot.className = 'chevron';
-    const leftDot = document.createElement('span');
-    leftDot.className = 'file-dot';
-    leftDot.style.backgroundColor = file.langColor;
-    leftDot.title = file.langName;
-    dotSlot.appendChild(leftDot);
+    const dotSlot = h('span', { className: 'chevron' },
+      h('span', { className: 'file-dot', style: { backgroundColor: file.langColor }, title: file.langName }),
+    );
     row.appendChild(dotSlot);
 
-    const nameEl = document.createElement('span');
-    nameEl.className = 'file-name';
-    nameEl.textContent = file.name;
-    nameEl.title = file.path;
-    if (hasMatches) {
-      // Clicking the filename opens the file; clicking elsewhere on the row toggles matches.
-      nameEl.dataset.action = 'openFile';
-      nameEl.dataset.path = file.path;
-    }
+    const nameEl = h('span', {
+      className: 'file-name',
+      textContent: file.name,
+      title: file.path,
+      dataset: hasMatches ? { action: 'openFile', path: file.path } : undefined,
+    });
     row.appendChild(nameEl);
 
-    const spacer = document.createElement('div');
-    spacer.className = 'bar-spacer';
-    row.appendChild(spacer);
+    row.appendChild(h('div', { className: 'bar-spacer' }));
 
-    const rightDot = document.createElement('span');
-    rightDot.className = 'file-dot';
-    rightDot.style.backgroundColor = file.langColor;
-    rightDot.title = file.langName;
-    row.appendChild(rightDot);
+    row.appendChild(h('span', {
+      className: 'file-dot',
+      style: { backgroundColor: file.langColor },
+      title: file.langName,
+    }));
 
     if (!opts.hideCounts) {
-      const sizeEl = document.createElement('span');
-      sizeEl.className = 'file-count';
-      sizeEl.textContent = file.sizeBytes > 0 ? formatBytes(file.sizeBytes) : '';
-      row.appendChild(sizeEl);
+      row.appendChild(h('span', {
+        className: 'file-count',
+        textContent: file.sizeBytes > 0 ? formatBytes(file.sizeBytes) : '',
+      }));
     }
 
-    li.appendChild(row);
-    return li;
+    return h('li', row);
   }
 
   function renderTruncatedRow(hiddenFiles: FileNode[], depth: number, ancestors: IndentAncestor[], dirPath: string, maxMetric: number, clientWidth: number): HTMLLIElement {
-    const li = document.createElement('li');
-    const row = document.createElement('div');
-    row.className = 'dir-row truncated-row';
-    row.dataset.action = 'expandTruncated';
-    row.dataset.dirPath = dirPath;
     // Use a synthetic path so the delegated tooltip handler can look up this row's stats.
     const truncKey = dirPath + '\0truncated';
-    row.dataset.path = truncKey;
-    row.appendChild(renderIndentGuides(depth, ancestors));
+    const row = h('div', {
+      className: 'dir-row truncated-row',
+      dataset: { action: 'expandTruncated', dirPath, path: truncKey },
+    }, renderIndentGuides(depth, ancestors));
 
-    const slot = document.createElement('span');
-    slot.className = 'chevron';
-    slot.innerHTML = SVG_PLUS;
-    row.appendChild(slot);
+    row.appendChild(h('span', { className: 'chevron', innerHTML: SVG_PLUS }));
 
     // Colored dots for unique language types among hidden files
     const langMap = new Map<string, { color: string; count: number; sizeBytes: number }>();
@@ -247,25 +226,14 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
       hasChildren: false as const,
     });
 
-    const dotsEl = document.createElement('span');
-    dotsEl.className = 'truncated-dots';
-    for (const [langName, { color }] of langs.slice(0, 5)) {
-      const dot = document.createElement('span');
-      dot.className = 'file-dot';
-      dot.style.backgroundColor = color;
-      dot.title = langName;
-      dotsEl.appendChild(dot);
-    }
-    row.appendChild(dotsEl);
+    row.appendChild(h('span', { className: 'truncated-dots' },
+      ...langs.slice(0, 5).map(([langName, { color }]) =>
+        h('span', { className: 'file-dot', style: { backgroundColor: color }, title: langName })
+      ),
+    ));
 
-    const label = document.createElement('span');
-    label.className = 'dir-name';
-    label.textContent = `${hiddenFiles.length} more file${hiddenFiles.length !== 1 ? 's' : ''}`;
-    row.appendChild(label);
-
-    const spacer = document.createElement('div');
-    spacer.className = 'bar-spacer';
-    row.appendChild(spacer);
+    row.appendChild(h('span', { className: 'dir-name', textContent: `${hiddenFiles.length} more file${hiddenFiles.length !== 1 ? 's' : ''}` }));
+    row.appendChild(h('div', { className: 'bar-spacer' }));
 
     // Proportional bar showing language makeup of hidden files
     if (langs.length > 0 && maxMetric > 0) {
@@ -275,33 +243,21 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
       const pct = metric / maxMetric;
       const barWrapWidth = computeBarWidth(pct, clientWidth, root, opts);
 
-      const barWrap = document.createElement('div');
-      barWrap.className = 'bar-wrap';
-      barWrap.style.width = barWrapWidth + 'px';
-
-      const bar = document.createElement('div');
-      bar.className = 'bar';
-
-      for (const [, { color, count, sizeBytes }] of langs) {
-        const segMetric = isSizeSort ? sizeBytes : count;
-        const segTotal = isSizeSort ? totalBytes : totalCount;
-        const segPct = (segMetric / segTotal) * 100;
-        const seg = document.createElement('div');
-        seg.className = 'bar-segment';
-        seg.style.width = segPct + '%';
-        seg.style.backgroundColor = color;
-        bar.appendChild(seg);
-      }
-
-      barWrap.appendChild(bar);
-      row.appendChild(barWrap);
+      row.appendChild(h('div', { className: 'bar-wrap', style: { width: barWrapWidth + 'px' } },
+        h('div', { className: 'bar' },
+          ...langs.map(([, { color, count, sizeBytes }]) => {
+            const segMetric = isSizeSort ? sizeBytes : count;
+            const segTotal = isSizeSort ? totalBytes : totalCount;
+            return h('div', { className: 'bar-segment', style: { width: (segMetric / segTotal) * 100 + '%', backgroundColor: color } });
+          }),
+        ),
+      ));
     }
 
     // Right column: file count or size depending on sort mode
     if (!opts.hideCounts) {
       const totalBytes = hiddenFiles.reduce((s, f) => s + (f.sizeBytes || 0), 0);
-      const metaEl = document.createElement('span');
-      metaEl.className = 'file-count';
+      const metaEl = h('span', { className: 'file-count' });
       if (state.currentSortMode === 'size') {
         metaEl.textContent = totalBytes > 0 ? formatBytes(totalBytes) : '';
         metaEl.title = hiddenFiles.length + ' files';
@@ -312,49 +268,28 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
       row.appendChild(metaEl);
     }
 
-    li.appendChild(row);
-    return li;
+    return h('li', row);
   }
 
   function renderEmptyGroupNode(nodes: DirNode[], depth: number, maxMetric: number, ancestors: IndentAncestor[]): HTMLLIElement {
-    const li = document.createElement('li');
     const groupKey = nodes[0].path;
 
-    const row = document.createElement('div');
-    row.className = 'dir-row empty-group-row';
-    row.dataset.action = 'expandEmptyGroup';
-    row.dataset.groupKey = groupKey;
-    row.appendChild(renderIndentGuides(depth, ancestors));
+    const row = h('div', {
+      className: 'dir-row empty-group-row',
+      dataset: { action: 'expandEmptyGroup', groupKey },
+    },
+      renderIndentGuides(depth, ancestors),
+      h('span', { className: 'chevron', innerHTML: SVG_PLUS }),
+      h('span', { className: 'dir-name', textContent: `${nodes.length} empty director${nodes.length !== 1 ? 'ies' : 'y'}` }),
+      h('div', { className: 'bar-spacer' }),
+      // Always show "—" for empty group rows (visual alignment with other rows)
+      h('span', { className: 'file-count', textContent: '\u2014', style: { opacity: '0.5' } }),
+    );
 
-    const chevron = document.createElement('span');
-    chevron.className = 'chevron';
-    chevron.innerHTML = SVG_PLUS;
-    row.appendChild(chevron);
-
-    const label = document.createElement('span');
-    label.className = 'dir-name';
-    label.textContent = `${nodes.length} empty director${nodes.length !== 1 ? 'ies' : 'y'}`;
-    row.appendChild(label);
-
-    const spacer = document.createElement('div');
-    spacer.className = 'bar-spacer';
-    row.appendChild(spacer);
-
-    // Always show "—" for empty group rows (visual alignment with other rows)
-    const metaEl = document.createElement('span');
-    metaEl.className = 'file-count';
-    metaEl.textContent = '\u2014';
-    metaEl.style.opacity = '0.5';
-    row.appendChild(metaEl);
-
-    li.appendChild(row);
-
-    return li;
+    return h('li', row);
   }
 
   function renderDirNode(node: DirNode, depth: number, maxMetric: number, ancestors: IndentAncestor[], clientWidth: number): HTMLLIElement {
-    const li = document.createElement('li');
-
     // Compact folders: collapse chain of dirs with exactly 1 child dir and 0 files.
     // Skip sortDirs inside the loop — single-child arrays don't need sorting.
     let displayNode: DirNode = node;
@@ -387,10 +322,7 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
       }
     }
 
-    // data-node-path enables incremental DOM patching in renderTree.
-    // Must use displayNode.path (post-compaction) so it matches the key
-    // used by nodeMap, state.expanded, and the dir-row's data-path attribute.
-    li.dataset.nodePath = displayNode.path;
+    const li = h('li', { dataset: { nodePath: displayNode.path } });
 
     const isExpanded = state.expanded.get(displayNode.path) ?? (state.activeFilters.size > 0 || depth === 0);
     // Record implicit depth-0 expansion so button state reflects reality after initial render.
@@ -409,8 +341,18 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     const hasChildren = visibleChildren.length > 0 || visibleFiles.length > 0;
 
     // Dir row
-    const row = document.createElement('div');
-    row.className = 'dir-row' + (displayNode.totalFiles === 0 ? ' empty-dir' : '');
+    const row = h('div', {
+      className: 'dir-row' + (displayNode.totalFiles === 0 ? ' empty-dir' : ''),
+      attr: {
+        'data-path': displayNode.path,
+        'data-vscode-context': JSON.stringify({
+          webviewSection: 'directory',
+          path: displayNode.path,
+          rootName: state.workspaceFolderName || state.currentRootName,
+          preventDefaultContextMenuItems: true,
+        }),
+      },
+    });
 
     // Sticky positioning: dirs with children stick at a depth-based top offset so
     // ancestors remain visible while scrolling through long child lists.
@@ -418,13 +360,6 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
       row.classList.add('sticky-dir');
       row.style.setProperty('--depth', String(depth));
     }
-    row.setAttribute('data-path', displayNode.path);
-    row.setAttribute('data-vscode-context', JSON.stringify({
-      webviewSection: 'directory',
-      path: displayNode.path,
-      rootName: state.workspaceFolderName || state.currentRootName,
-      preventDefaultContextMenuItems: true
-    }));
 
     // skipDepthZeroGuides=true (sidebar): omit the empty indent-guides container at depth 0
     if (!opts.skipDepthZeroGuides || depth > 0) {
@@ -432,16 +367,14 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     }
 
     // Chevron
-    const chevron = document.createElement('span');
-    chevron.className = 'chevron' + (hasChildren ? (isExpanded ? ' open' : '') : ' leaf');
-    chevron.innerHTML = SVG_CHEVRON;
-    row.appendChild(chevron);
+    row.appendChild(h('span', {
+      className: 'chevron' + (hasChildren ? (isExpanded ? ' open' : '') : ' leaf'),
+      innerHTML: SVG_CHEVRON,
+    }));
 
     // Name — for compacted paths, render each segment separately with dimmed separators
     // and per-segment data-vscode-context for RMB "copy path" etc on individual segments.
-    const nameEl = document.createElement('span');
-    nameEl.className = 'dir-name';
-    nameEl.title = displayNode.path || displayName;
+    const nameEl = h('span', { className: 'dir-name', title: displayNode.path || displayName });
 
     // In tab mode (onNavigate set), render ancestor breadcrumb for the root node of a subdir tab.
     // For workspace root tabs (state.dirPath falsy), the root name renders normally below.
@@ -451,98 +384,33 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
       const allNames = hasRootName ? [state.workspaceFolderName, ...segments] : segments;
       for (let i = 0; i < allNames.length; i++) {
         if (i > 0) {
-          const sep = document.createElement('span');
-          sep.className = 'path-sep';
-          sep.textContent = ' / ';
-          nameEl.appendChild(sep);
+          nameEl.appendChild(h('span', { className: 'path-sep', textContent: ' / ' }));
         }
         const offset = hasRootName ? i - 1 : i;
         const segPath = offset < 0 ? '' : segments.slice(0, offset + 1).join('/');
-        const seg = document.createElement('span');
-        seg.className = 'path-segment';
-        seg.dataset.navigatePath = segPath;
-        seg.textContent = allNames[i];
-        nameEl.appendChild(seg);
+        nameEl.appendChild(h('span', { className: 'path-segment', textContent: allNames[i], dataset: { navigatePath: segPath } }));
       }
     } else if (compactSegments.length === 1) {
       nameEl.textContent = compactSegments[0].name;
     } else {
       for (let i = 0; i < compactSegments.length; i++) {
         if (i > 0) {
-          const sep = document.createElement('span');
-          sep.className = 'path-sep';
-          sep.textContent = ' / ';
-          nameEl.appendChild(sep);
+          nameEl.appendChild(h('span', { className: 'path-sep', textContent: ' / ' }));
         }
-        const seg = document.createElement('span');
-        seg.className = 'path-segment';
-        seg.textContent = compactSegments[i].name;
-        seg.setAttribute('data-vscode-context', JSON.stringify({
-          webviewSection: 'directory',
-          path: compactSegments[i].path,
-          rootName: state.workspaceFolderName || state.currentRootName,
-          preventDefaultContextMenuItems: true,
+        nameEl.appendChild(h('span', {
+          className: 'path-segment',
+          textContent: compactSegments[i].name,
+          attr: { 'data-vscode-context': JSON.stringify({
+            webviewSection: 'directory',
+            path: compactSegments[i].path,
+            rootName: state.workspaceFolderName || state.currentRootName,
+            preventDefaultContextMenuItems: true,
+          }) },
         }));
-        nameEl.appendChild(seg);
       }
     }
 
     row.appendChild(nameEl);
-
-    // Flex spacer pushes bar + count to the right
-    const barSpacer = document.createElement('div');
-    barSpacer.className = 'bar-spacer';
-    row.appendChild(barSpacer);
-
-    // Proportional bar — skip for root node when hideRootBar is set (tab breadcrumb row)
-    if (displayNode.totalFiles > 0 && !(depth === 0 && opts.hideRootBar)) {
-      const metric = state.currentSortMode === 'size' ? displayNode.sizeBytes : displayNode.totalFiles;
-      const pct = metric / maxMetric;
-      const barWrapWidth = computeBarWidth(pct, clientWidth, root, opts);
-
-      const barWrap = document.createElement('div');
-      barWrap.className = 'bar-wrap';
-      barWrap.style.width = barWrapWidth + 'px';
-
-      const bar = document.createElement('div');
-      bar.className = 'bar';
-
-      const total = displayNode.totalFiles;
-      for (const s of displayNode.stats) {
-        const segPct = (s.count / total) * 100;
-        const seg = document.createElement('div');
-        seg.className = 'bar-segment';
-        seg.style.width = segPct + '%';
-        seg.style.backgroundColor = s.color;
-        bar.appendChild(seg);
-      }
-
-      // Tooltip is now handled by the delegated mouseover/mouseout handler in createRenderer,
-      // which looks up node data from nodeMap. No per-element listeners needed.
-
-      barWrap.appendChild(bar);
-      row.appendChild(barWrap);
-    }
-
-    // Right column: file count or size depending on sort mode.
-    // Empty dirs always show "—" for visual alignment, even when hideCounts is set.
-    if (!opts.hideCounts || displayNode.totalFiles === 0) {
-      const metaEl = document.createElement('span');
-      metaEl.className = 'file-count';
-      if (displayNode.totalFiles > 0) {
-        if (state.currentSortMode === 'size') {
-          metaEl.textContent = formatBytes(displayNode.sizeBytes);
-          metaEl.title = displayNode.totalFiles + ' files';
-        } else {
-          metaEl.textContent = String(displayNode.totalFiles);
-          metaEl.title = formatBytes(displayNode.sizeBytes);
-        }
-      } else {
-        metaEl.textContent = '\u2014';
-        metaEl.style.opacity = '0.5';
-      }
-      row.appendChild(metaEl);
-    }
 
     // Hover action buttons — overlay on the right (sidebar) or inline after name (tab)
     //
@@ -561,33 +429,67 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     // and incrementally retreat with repeated collapse clicks, without jarring jumps.
     // Action buttons use data-action + data-path so the delegated click handler
     // in createRenderer can process them without per-element listener closures.
-    const actionsEl = document.createElement('div');
-    actionsEl.className = 'dir-actions';
-    if (displayNode.children.length > 0) {
-      const expandBtn = document.createElement('button');
-      expandBtn.className = 'dir-action-btn';
-      expandBtn.innerHTML = SVG_EXPAND_ALL;
-      expandBtn.title = 'Expand children';
-      expandBtn.dataset.action = 'expandDir';
-      expandBtn.dataset.path = displayNode.path;
-      actionsEl.appendChild(expandBtn);
+    const actionsEl = h('div', { className: 'dir-actions' },
+      ...(displayNode.children.length > 0 ? [
+        h('button', {
+          className: 'dir-action-btn',
+          innerHTML: SVG_EXPAND_ALL,
+          title: 'Expand children',
+          dataset: { action: 'expandDir', path: displayNode.path },
+        }),
+        h('button', {
+          className: 'dir-action-btn',
+          innerHTML: SVG_COLLAPSE_ALL,
+          title: 'Collapse children',
+          dataset: { action: 'collapseDir', path: displayNode.path },
+        }),
+      ] : []),
+      h('button', {
+        className: 'dir-action-btn',
+        innerHTML: SVG_OPEN_IN_TAB,
+        title: 'Open in new tab',
+        dataset: { action: 'openInTab', path: displayNode.path },
+      }),
+    );
 
-      const collapseBtn = document.createElement('button');
-      collapseBtn.className = 'dir-action-btn';
-      collapseBtn.innerHTML = SVG_COLLAPSE_ALL;
-      collapseBtn.title = 'Collapse children';
-      collapseBtn.dataset.action = 'collapseDir';
-      collapseBtn.dataset.path = displayNode.path;
-      actionsEl.appendChild(collapseBtn);
-    }
-    const focusBtn = document.createElement('button');
-    focusBtn.className = 'dir-action-btn';
-    focusBtn.innerHTML = SVG_OPEN_IN_TAB;
-    focusBtn.title = 'Open in new tab';
-    focusBtn.dataset.action = 'openInTab';
-    focusBtn.dataset.path = displayNode.path;
-    actionsEl.appendChild(focusBtn);
+    // Flex spacer pushes bar + count to the right
+    const barSpacer = h('div', { className: 'bar-spacer' });
     row.insertBefore(actionsEl, barSpacer);
+    row.appendChild(barSpacer);
+
+    // Proportional bar — skip for root node when hideRootBar is set (tab breadcrumb row)
+    if (displayNode.totalFiles > 0 && !(depth === 0 && opts.hideRootBar)) {
+      const metric = state.currentSortMode === 'size' ? displayNode.sizeBytes : displayNode.totalFiles;
+      const pct = metric / maxMetric;
+      const barWrapWidth = computeBarWidth(pct, clientWidth, root, opts);
+
+      row.appendChild(h('div', { className: 'bar-wrap', style: { width: barWrapWidth + 'px' } },
+        h('div', { className: 'bar' },
+          ...displayNode.stats.map(s =>
+            h('div', { className: 'bar-segment', style: { width: (s.count / displayNode.totalFiles) * 100 + '%', backgroundColor: s.color } })
+          ),
+        ),
+      ));
+    }
+
+    // Right column: file count or size depending on sort mode.
+    // Empty dirs always show "—" for visual alignment, even when hideCounts is set.
+    if (!opts.hideCounts || displayNode.totalFiles === 0) {
+      const metaEl = h('span', { className: 'file-count' });
+      if (displayNode.totalFiles > 0) {
+        if (state.currentSortMode === 'size') {
+          metaEl.textContent = formatBytes(displayNode.sizeBytes);
+          metaEl.title = displayNode.totalFiles + ' files';
+        } else {
+          metaEl.textContent = String(displayNode.totalFiles);
+          metaEl.title = formatBytes(displayNode.sizeBytes);
+        }
+      } else {
+        metaEl.textContent = '\u2014';
+        metaEl.style.opacity = '0.5';
+      }
+      row.appendChild(metaEl);
+    }
 
     // Register this node in nodeMap so the delegated handlers can look it up by path.
     nodeMap.set(displayNode.path, { node: displayNode, hasChildren });
@@ -597,8 +499,7 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     // Children container — lazy: only populate when expanded to avoid building
     // collapsed subtrees during off-screen tree construction for patching.
     if (hasChildren) {
-      const childrenEl = document.createElement('ul');
-      childrenEl.className = 'children' + (isExpanded ? ' open' : '');
+      const childrenEl = h('ul', { className: 'children' + (isExpanded ? ' open' : '') });
 
       if (isExpanded) {
         const nextAncestors: IndentAncestor[] = [...ancestors, { path: displayNode.path }];

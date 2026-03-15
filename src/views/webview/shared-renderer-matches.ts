@@ -3,6 +3,7 @@
 // "more matches" rows, and the full renderFileMatches orchestrator.
 
 import { SVG_CHEVRON, SVG_PLUS, SVG_WARNING } from './shared-icons';
+import { h } from './shared-h';
 import type { FileNode, SearchMatch, IndentAncestor, RendererContext } from './types';
 
 export const MAX_MATCH_LINES = 5;
@@ -47,29 +48,24 @@ export function computeVisibleWindow(lineLength: number, col: number, matchLen: 
 // dedent: number of leading characters to strip (computed per match group for relative indentation).
 export function renderMatchLine(ctx: RendererContext, file: FileNode, matchGroup: SearchMatch[], depth: number, ancestors: IndentAncestor[], dedent: number = 0): HTMLLIElement {
   const first = matchGroup[0];
-  const li = document.createElement('li');
-  // Stable key: one row per line (column dropped since same-line matches are merged).
-  li.dataset.nodePath = 'match:' + file.path + ':' + first.line;
-  const row = document.createElement('div');
-  row.className = 'match-line-row';
-  row.dataset.action = 'openFileAtLine';
-  row.dataset.path = file.path;
-  row.dataset.line = String(first.line);
-  row.setAttribute('data-vscode-context', JSON.stringify({
-    webviewSection: 'matchLine',
-    path: file.path,
-    lineText: first.lineText || '',
-    preventDefaultContextMenuItems: true
-  }));
-  row.appendChild(ctx.renderIndentGuides(depth, ancestors));
+  const row = h('div', {
+    className: 'match-line-row',
+    dataset: {
+      action: 'openFileAtLine',
+      path: file.path,
+      line: String(first.line),
+    },
+    attr: { 'data-vscode-context': JSON.stringify({
+      webviewSection: 'matchLine',
+      path: file.path,
+      lineText: first.lineText || '',
+      preventDefaultContextMenuItems: true,
+    }) },
+  }, ctx.renderIndentGuides(depth, ancestors));
 
-  const lineNumEl = document.createElement('span');
-  lineNumEl.className = 'match-line-number';
-  lineNumEl.textContent = String(first.line);
-  row.appendChild(lineNumEl);
+  row.appendChild(h('span', { className: 'match-line-number', textContent: String(first.line) }));
 
-  const textEl = document.createElement('span');
-  textEl.className = 'match-line-text';
+  const textEl = h('span', { className: 'match-line-text' });
 
   let clippedCount = 0;
 
@@ -113,10 +109,7 @@ export function renderMatchLine(ctx: RendererContext, file: FileNode, matchGroup
       for (const r of ranges) {
         if (r.len > 0 && r.col + r.len <= lineText.length) {
           textEl.appendChild(document.createTextNode(lineText.slice(pos, r.col)));
-          const hl = document.createElement('span');
-          hl.className = 'match-highlight';
-          hl.textContent = lineText.slice(r.col, r.col + r.len);
-          textEl.appendChild(hl);
+          textEl.appendChild(h('span', { className: 'match-highlight', textContent: lineText.slice(r.col, r.col + r.len) }));
           pos = r.col + r.len;
         }
       }
@@ -133,10 +126,7 @@ export function renderMatchLine(ctx: RendererContext, file: FileNode, matchGroup
         }
         if (r.len > 0) {
           textEl.appendChild(document.createTextNode(lineText.slice(pos, r.col)));
-          const hl = document.createElement('span');
-          hl.className = 'match-highlight';
-          hl.textContent = lineText.slice(r.col, rEnd);
-          textEl.appendChild(hl);
+          textEl.appendChild(h('span', { className: 'match-highlight', textContent: lineText.slice(r.col, rEnd) }));
           pos = rEnd;
         }
       }
@@ -149,69 +139,57 @@ export function renderMatchLine(ctx: RendererContext, file: FileNode, matchGroup
 
   // Append warning badge when some matches were clipped by the visible window
   if (clippedCount > 0) {
-    const badge = document.createElement('span');
-    badge.className = 'match-clipped-badge';
-    badge.innerHTML = SVG_WARNING + ' +' + clippedCount;
-    badge.title = clippedCount + ' more match' + (clippedCount !== 1 ? 'es' : '') + ' on this line (not visible)';
-    row.appendChild(badge);
+    row.appendChild(h('span', {
+      className: 'match-clipped-badge',
+      innerHTML: SVG_WARNING + ' +' + clippedCount,
+      title: clippedCount + ' more match' + (clippedCount !== 1 ? 'es' : '') + ' on this line (not visible)',
+    }));
   }
 
-  li.appendChild(row);
-  return li;
+  return h('li', { dataset: { nodePath: 'match:' + file.path + ':' + first.line } }, row);
 }
 
 // Renders a single context line (surrounding code) beneath a file row in search-results mode.
 // Context lines are dimmed relative to match lines and share the same click behaviour.
 // dedent: number of leading characters to strip (computed per match group for relative indentation).
 export function renderContextLine(ctx: RendererContext, file: FileNode, match: SearchMatch, depth: number, ancestors: IndentAncestor[], dedent: number = 0): HTMLLIElement {
-  const li = document.createElement('li');
-  li.dataset.nodePath = 'context:' + file.path + ':' + match.line;
-  const row = document.createElement('div');
-  row.className = 'match-context-row';
-  row.dataset.action = 'openFileAtLine';
-  row.dataset.path = file.path;
-  row.dataset.line = String(match.line);
-  row.appendChild(ctx.renderIndentGuides(depth, ancestors));
-
-  const lineNumEl = document.createElement('span');
-  lineNumEl.className = 'match-line-number';
-  lineNumEl.textContent = String(match.line);
-  row.appendChild(lineNumEl);
-
-  const textEl = document.createElement('span');
-  textEl.className = 'match-line-text';
+  const textEl = h('span', { className: 'match-line-text' });
   if (match.highlightedHtml) {
     textEl.innerHTML = match.highlightedHtml;
     stripLeadingChars(textEl, dedent);
   } else {
     textEl.textContent = (match.lineText || '').slice(dedent);
   }
-  row.appendChild(textEl);
-  li.appendChild(row);
-  return li;
+
+  const row = h('div', {
+    className: 'match-context-row',
+    dataset: {
+      action: 'openFileAtLine',
+      path: file.path,
+      line: String(match.line),
+    },
+  },
+    ctx.renderIndentGuides(depth, ancestors),
+    h('span', { className: 'match-line-number', textContent: String(match.line) }),
+    textEl,
+  );
+
+  return h('li', { dataset: { nodePath: 'context:' + file.path + ':' + match.line } }, row);
 }
 
 // Renders a clickable "N more matches" summary row when match lines exceed the truncation threshold.
 // Uses the same dir-row truncated-row structure as file truncation rows for visual consistency.
 export function renderMoreMatchesRow(ctx: RendererContext, count: number, depth: number, ancestors: IndentAncestor[], filePath: string): HTMLLIElement {
-  const li = document.createElement('li');
-  if (filePath) { li.dataset.nodePath = 'more:' + filePath; }
-  const row = document.createElement('div');
-  row.className = 'dir-row truncated-row match-more-row';
-  // data-action + data-dir-path reuse the expandTruncated handler to expand match lines.
-  row.dataset.action = 'expandTruncated';
-  row.dataset.dirPath = filePath;
-  row.appendChild(ctx.renderIndentGuides(depth, ancestors));
-  const plusSlot = document.createElement('span');
-  plusSlot.className = 'chevron';
-  plusSlot.innerHTML = SVG_PLUS;
-  row.appendChild(plusSlot);
-  const label = document.createElement('span');
-  label.className = 'dir-name';
-  label.textContent = `${count} more match${count !== 1 ? 'es' : ''}`;
-  row.appendChild(label);
-  li.appendChild(row);
-  return li;
+  const row = h('div', {
+    className: 'dir-row truncated-row match-more-row',
+    dataset: { action: 'expandTruncated', dirPath: filePath },
+  },
+    ctx.renderIndentGuides(depth, ancestors),
+    h('span', { className: 'chevron', innerHTML: SVG_PLUS }),
+    h('span', { className: 'dir-name', textContent: `${count} more match${count !== 1 ? 'es' : ''}` }),
+  );
+
+  return h('li', { dataset: filePath ? { nodePath: 'more:' + filePath } : undefined }, row);
 }
 
 // Renders inline match lines (and optional context lines) beneath a file row when content
@@ -322,25 +300,25 @@ export function renderFileMatches(ctx: RendererContext, container: HTMLElement, 
     // Create wrapper <li> that carries click/context-menu for the match line.
     // Add gap-before class when there's a line discontinuity from the previous group.
     const hasGap = prevLastLine !== null && firstLineInGroup > prevLastLine + 1;
-    const wrapper = document.createElement('li');
-    wrapper.className = 'match-group' + (hasGap ? ' gap-before' : '');
-    wrapper.dataset.nodePath = 'match:' + file.path + ':' + g.matchGroup[0].line;
-    wrapper.dataset.action = 'openFileAtLine';
-    wrapper.dataset.path = file.path;
-    wrapper.dataset.line = String(g.matchGroup[0].line);
-    wrapper.setAttribute('data-vscode-context', JSON.stringify({
-      webviewSection: 'matchLine',
-      path: file.path,
-      lineText: g.matchGroup[0].lineText || '',
-      preventDefaultContextMenuItems: true
-    }));
+    const wrapper = h('li', {
+      className: 'match-group' + (hasGap ? ' gap-before' : ''),
+      dataset: {
+        nodePath: 'match:' + file.path + ':' + g.matchGroup[0].line,
+        action: 'openFileAtLine',
+        path: file.path,
+        line: String(g.matchGroup[0].line),
+      },
+      attr: { 'data-vscode-context': JSON.stringify({
+        webviewSection: 'matchLine',
+        path: file.path,
+        lineText: g.matchGroup[0].lineText || '',
+        preventDefaultContextMenuItems: true,
+      }) },
+    });
 
     // Insert a spacer div with indent guides to bridge the gap between groups.
     if (hasGap) {
-      const spacer = document.createElement('div');
-      spacer.className = 'match-group-spacer';
-      spacer.appendChild(ctx.renderIndentGuides(depth, ancestors));
-      wrapper.appendChild(spacer);
+      wrapper.appendChild(h('div', { className: 'match-group-spacer' }, ctx.renderIndentGuides(depth, ancestors)));
     }
 
     // Append context-before divs (no data-action — clicks bubble to wrapper).

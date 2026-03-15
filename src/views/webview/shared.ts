@@ -1,4 +1,6 @@
 // Pure barrel module — re-exports from all sub-modules.
+export { h } from './shared-h';
+export type { HProps } from './shared-h';
 export * from './shared-icons';
 export * from './shared-utils';
 export * from './shared-state';

@@ -1,4 +1,5 @@
 import {
+  h,
   createScanBar,
   createTooltip,
   createState,
@@ -260,10 +261,7 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   if (!roots || roots.length === 0) {
     root.querySelector('ul.tree')?.remove();
     if (!root.querySelector('.empty')) {
-      const empty = document.createElement('div');
-      empty.className = 'empty';
-      empty.textContent = 'No workspace folder open.';
-      root.appendChild(empty);
+      root.appendChild(h('div', { className: 'empty', textContent: 'No workspace folder open.' }));
     }
     return;
   }
