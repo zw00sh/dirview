@@ -2746,6 +2746,173 @@ describe('renderFileMatches', () => {
   });
 });
 
+// --- renderFileMatches: context grouping ---
+
+describe('renderFileMatches — context grouping', () => {
+  function makeFile(path) {
+    return { path, name: path.split('/').pop(), langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+  }
+
+  function makeMatch(line, col = 0, len = 3) {
+    return { line, column: col, matchLength: len, lineText: 'abc def ghi' };
+  }
+
+  function makeContext(line) {
+    return { line, column: 0, matchLength: 0, lineText: 'context line', isContext: true };
+  }
+
+  it('wraps match + context in a match-group wrapper', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    state.searchResults = new Map([['/ws/a.ts', [
+      makeContext(4), makeMatch(5), makeContext(6),
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const groups = container.querySelectorAll('.match-group');
+    expect(groups.length).toBe(1);
+
+    const group = groups[0];
+    // Wrapper carries match click attributes
+    expect(group.dataset.action).toBe('openFileAtLine');
+    expect(group.dataset.path).toBe('/ws/a.ts');
+    expect(group.dataset.line).toBe('5');
+    expect(group.getAttribute('data-vscode-context')).toContain('matchLine');
+
+    // Contains context-before, match, context-after
+    const children = group.children;
+    expect(children.length).toBe(3);
+    expect(children[0].classList.contains('match-context-row')).toBe(true);
+    expect(children[1].classList.contains('match-line-row')).toBe(true);
+    expect(children[2].classList.contains('match-context-row')).toBe(true);
+  });
+
+  it('context divs inside group have no data-action (clicks bubble to wrapper)', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    state.searchResults = new Map([['/ws/a.ts', [
+      makeContext(4), makeMatch(5), makeContext(6),
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const group = container.querySelector('.match-group');
+    const contextDivs = group.querySelectorAll('.match-context-row');
+    for (const div of contextDivs) {
+      expect(div.dataset.action).toBeUndefined();
+      expect(div.dataset.path).toBeUndefined();
+      expect(div.dataset.line).toBeUndefined();
+    }
+  });
+
+  it('splits shared context between two matches at midpoint', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    // Match at line 3, context lines 4-7, match at line 8
+    state.searchResults = new Map([['/ws/a.ts', [
+      makeMatch(3),
+      makeContext(4), makeContext(5), makeContext(6), makeContext(7),
+      makeMatch(8),
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const groups = container.querySelectorAll('.match-group');
+    expect(groups.length).toBe(2);
+
+    // First group: match(3) + contextAfter(4, 5) — midpoint ceil(4/2) = 2
+    const g1 = groups[0];
+    expect(g1.dataset.line).toBe('3');
+    const g1ctx = g1.querySelectorAll('.match-context-row');
+    expect(g1ctx.length).toBe(2);
+
+    // Second group: contextBefore(6, 7) + match(8)
+    const g2 = groups[1];
+    expect(g2.dataset.line).toBe('8');
+    const g2ctx = g2.querySelectorAll('.match-context-row');
+    expect(g2ctx.length).toBe(2);
+  });
+
+  it('inserts separator between non-contiguous groups', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    // Match at line 3, gap, match at line 10
+    state.searchResults = new Map([['/ws/a.ts', [
+      makeMatch(3), makeMatch(10),
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    // separator + 2 groups
+    const seps = container.querySelectorAll('.match-group-separator');
+    expect(seps.length).toBe(1);
+  });
+
+  it('no separator between contiguous groups', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    // Match at 3, context at 4, match at 5 — contiguous
+    state.searchResults = new Map([['/ws/a.ts', [
+      makeMatch(3), makeContext(4), makeMatch(5),
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const seps = container.querySelectorAll('.match-group-separator');
+    expect(seps.length).toBe(0);
+  });
+
+  it('truncation counts match groups, not context lines', () => {
+    const state = S.createState();
+    state.truncateThreshold = 2;
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    state.searchResults = new Map([['/ws/a.ts', [
+      makeContext(1), makeMatch(2), makeContext(3),
+      makeContext(4), makeMatch(5), makeContext(6),
+      makeContext(7), makeMatch(8), makeContext(9),
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    // 2 groups rendered (threshold=2), 3rd group truncated
+    const groups = container.querySelectorAll('.match-group');
+    expect(groups.length).toBe(2);
+
+    // "1 more match" row
+    const moreRow = container.querySelector('.truncated-row');
+    expect(moreRow).not.toBeNull();
+    expect(moreRow.textContent).toContain('1 more match');
+  });
+
+  it('match without context produces a group with only the match div', () => {
+    const state = S.createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    state.searchResults = new Map([['/ws/a.ts', [makeMatch(5)]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const groups = container.querySelectorAll('.match-group');
+    expect(groups.length).toBe(1);
+    expect(groups[0].children.length).toBe(1);
+    expect(groups[0].querySelector('.match-line-row')).not.toBeNull();
+  });
+});
+
 // --- setupDebugEval ---
 describe('setupDebugEval', () => {
   it('is exported on DirviewShared', () => {

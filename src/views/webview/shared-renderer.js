@@ -1084,49 +1084,68 @@
       // defensive against any reordering during streaming patches.
       const sorted = fileMatches.slice().sort((a, b) => a.line - b.line);
 
-      // Count total match lines (not context) for truncation and "more matches" label.
-      let totalMatchLines = 0;
-      for (const m of sorted) { if (!m.isContext) { totalMatchLines++; } }
+      // ── Phase 1: Build match groups ──────────────────────────────────────────
+      // Each group: { matchGroup: Match[], matchLine: number, contextBefore: Context[], contextAfter: Context[] }
+      // Context lines between two matches are split at the midpoint (nearest-match rule).
 
-      const threshold = state.truncateThreshold;
-      const shouldTruncateMatches = threshold > 0 && totalMatchLines > threshold && !state.truncationExpanded.has(file.path);
-
-      let renderedMatchCount = 0;
-      let prevLine = null;
+      const groups = [];
+      let contextBuffer = [];
 
       for (let i = 0; i < sorted.length; ) {
         const m = sorted[i];
 
         if (m.isContext) {
-          if (shouldTruncateMatches && renderedMatchCount >= threshold) { i++; continue; }
-          // Insert separator between non-contiguous line groups.
-          if (prevLine !== null && m.line > prevLine + 1) {
-            const sepLi = document.createElement('li');
-            const sepDiv = document.createElement('div');
-            sepDiv.className = 'match-group-separator';
-            sepDiv.appendChild(renderIndentGuides(depth, ancestors));
-            sepLi.appendChild(sepDiv);
-            container.appendChild(sepLi);
-          }
-          prevLine = m.line;
-          container.appendChild(renderContextLine(file, m, depth, ancestors));
+          contextBuffer.push(m);
           i++;
           continue;
         }
 
-        // Group consecutive same-line non-context matches into a single row.
-        const group = [m];
+        // Group consecutive same-line non-context matches.
+        const sameLineGroup = [m];
         let j = i + 1;
         while (j < sorted.length && !sorted[j].isContext && sorted[j].line === m.line) {
-          group.push(sorted[j]);
+          sameLineGroup.push(sorted[j]);
           j++;
         }
 
-        renderedMatchCount++;
-        if (shouldTruncateMatches && renderedMatchCount > threshold) { break; }
+        // Split buffered context between previous group's contextAfter and this group's contextBefore.
+        if (contextBuffer.length > 0) {
+          if (groups.length === 0) {
+            // All buffered context belongs to this group as contextBefore.
+            groups.push({ matchGroup: sameLineGroup, matchLine: m.line, contextBefore: contextBuffer, contextAfter: [] });
+          } else {
+            const mid = Math.ceil(contextBuffer.length / 2);
+            groups[groups.length - 1].contextAfter = contextBuffer.slice(0, mid);
+            groups.push({ matchGroup: sameLineGroup, matchLine: m.line, contextBefore: contextBuffer.slice(mid), contextAfter: [] });
+          }
+          contextBuffer = [];
+        } else {
+          groups.push({ matchGroup: sameLineGroup, matchLine: m.line, contextBefore: [], contextAfter: [] });
+        }
 
-        // Insert separator between non-contiguous line groups.
-        if (prevLine !== null && m.line > prevLine + 1) {
+        i = j;
+      }
+
+      // Trailing context goes to last group's contextAfter.
+      if (contextBuffer.length > 0 && groups.length > 0) {
+        groups[groups.length - 1].contextAfter = contextBuffer;
+      }
+
+      // ── Phase 2: Render groups ───────────────────────────────────────────────
+
+      const threshold = state.truncateThreshold;
+      const shouldTruncateMatches = threshold > 0 && groups.length > threshold && !state.truncationExpanded.has(file.path);
+
+      let prevLastLine = null; // last line number of previous group (for separator detection)
+
+      for (let gi = 0; gi < groups.length; gi++) {
+        if (shouldTruncateMatches && gi >= threshold) { break; }
+
+        const g = groups[gi];
+        const firstLineInGroup = g.contextBefore.length > 0 ? g.contextBefore[0].line : g.matchLine;
+
+        // Insert separator between non-contiguous groups.
+        if (prevLastLine !== null && firstLineInGroup > prevLastLine + 1) {
           const sepLi = document.createElement('li');
           const sepDiv = document.createElement('div');
           sepDiv.className = 'match-group-separator';
@@ -1134,14 +1153,55 @@
           sepLi.appendChild(sepDiv);
           container.appendChild(sepLi);
         }
-        prevLine = m.line;
 
-        container.appendChild(renderMatchLine(file, group, depth, ancestors));
-        i = j;
+        // Create wrapper <li> that carries click/context-menu for the match line.
+        const wrapper = document.createElement('li');
+        wrapper.className = 'match-group';
+        wrapper.dataset.nodePath = 'match:' + file.path + ':' + g.matchGroup[0].line;
+        wrapper.dataset.action = 'openFileAtLine';
+        wrapper.dataset.path = file.path;
+        wrapper.dataset.line = String(g.matchGroup[0].line);
+        wrapper.setAttribute('data-vscode-context', JSON.stringify({
+          webviewSection: 'matchLine',
+          path: file.path,
+          lineText: g.matchGroup[0].lineText || '',
+          preventDefaultContextMenuItems: true
+        }));
+
+        // Append context-before divs (no data-action — clicks bubble to wrapper).
+        for (const ctx of g.contextBefore) {
+          const ctxLi = renderContextLine(file, ctx, depth, ancestors);
+          const ctxDiv = ctxLi.firstElementChild;
+          delete ctxDiv.dataset.action;
+          delete ctxDiv.dataset.path;
+          delete ctxDiv.dataset.line;
+          wrapper.appendChild(ctxDiv);
+        }
+
+        // Append match div.
+        const matchLi = renderMatchLine(file, g.matchGroup, depth, ancestors);
+        const matchDiv = matchLi.firstElementChild;
+        matchDiv.removeAttribute('data-vscode-context');
+        wrapper.appendChild(matchDiv);
+
+        // Append context-after divs.
+        for (const ctx of g.contextAfter) {
+          const ctxLi = renderContextLine(file, ctx, depth, ancestors);
+          const ctxDiv = ctxLi.firstElementChild;
+          delete ctxDiv.dataset.action;
+          delete ctxDiv.dataset.path;
+          delete ctxDiv.dataset.line;
+          wrapper.appendChild(ctxDiv);
+        }
+
+        container.appendChild(wrapper);
+
+        const lastCtxAfter = g.contextAfter.length > 0 ? g.contextAfter[g.contextAfter.length - 1].line : g.matchLine;
+        prevLastLine = lastCtxAfter;
       }
 
       if (shouldTruncateMatches) {
-        container.appendChild(renderMoreMatchesRow(totalMatchLines - threshold, depth, ancestors, file.path));
+        container.appendChild(renderMoreMatchesRow(groups.length - threshold, depth, ancestors, file.path));
       }
     }
 

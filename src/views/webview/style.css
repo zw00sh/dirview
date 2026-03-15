@@ -688,7 +688,21 @@ body {
   overflow: hidden;
 }
 
-.match-line-row:hover {
+/* Match group wrapper — bundles a match line with its adjacent context lines.
+   Clicks/right-clicks anywhere in the group target the match line. */
+.match-group {
+  list-style: none;
+  cursor: pointer;
+}
+
+/* When inside a match-group wrapper, hover highlights the entire group */
+.match-group:hover > .match-line-row,
+.match-group:hover > .match-context-row {
+  background: var(--vscode-list-hoverBackground);
+}
+
+/* Standalone match-line-row (no context lines) still gets hover */
+li:not(.match-group) > .match-line-row:hover {
   background: var(--vscode-list-hoverBackground);
 }
 
@@ -724,7 +738,8 @@ body {
   overflow: hidden;
 }
 
-.match-context-row:hover {
+/* Standalone context rows (outside match-group) retain hover — should not normally occur */
+li:not(.match-group) > .match-context-row:hover {
   background: var(--vscode-list-hoverBackground);
 }
 
@@ -798,6 +813,7 @@ body {
   background: var(--vscode-sideBar-background);
 }
 .sticky-dir.is-stuck-bottom {
+  border-bottom: 1px solid var(--vscode-sideBar-border, rgba(128,128,128,0.2));
   box-shadow: 0 6px 6px -6px rgba(0, 0, 0, 0.4);
 }
 
