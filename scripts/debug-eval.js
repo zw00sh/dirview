@@ -1,27 +1,36 @@
 #!/usr/bin/env node
-// Unified webview debug eval script. Reads /tmp/dirview-debug.js and evaluates it in the
-// specified frame via the extension host Node inspector (port 9223).
+// Webview debug eval script. Reads /tmp/dirview-debug.js and evaluates it
+// directly in the target webview frame via CDP (Chrome DevTools Protocol).
 //
 // Usage: node scripts/debug-eval.js [target]
-//   target: sidebar | tab | languages | search | host | all (default: all)
+//   target: sidebar | tab | languages | host (default: tab)
 //
 // Recommended: npm run debug-eval [-- target]
-//   The 'npm run:*' permission covers all variants — no per-invocation prompts needed.
 //
 // Workflow:
-//   1. Write your script to /tmp/dirview-debug.js (use the Write tool)
-//   2. Run: npm run debug-eval -- sidebar
-//   3. The script runs inside the target webview frame and prints the result.
+//   1. Launch VSCode with CDP: ./scripts/launch-cdp.sh
+//   2. Write your script to /tmp/dirview-debug.js
+//   3. Run: npm run debug-eval -- tab
+//   4. The script runs inside the target webview frame and prints the result.
 //
-// 'host' target evals directly in the extension host's Node context (no webview bridge).
-// All other targets route through globalThis.__dirviewDebugEval(script, target).
-// The extension host must be running with --inspect-extensions=9223 (launch-cdp.sh).
+// How it works:
+//   - Connects to CDP on port 9222 and finds webview iframe targets
+//   - Identifies the inner content frame (where the extension's JS runs)
+//   - Evaluates the script directly via Runtime.evaluate with awaitPromise
+//   - No 3-second timeout limitation; async scripts work natively
+//
+// 'host' target evals in the extension host's Node context via port 9223.
 
 const fs = require('fs');
 const SCRIPT_PATH = '/tmp/dirview-debug.js';
-const VALID_TARGETS = new Set(['sidebar', 'tab', 'languages', 'search', 'host', 'all']);
+const CDP_PORT = 9222;
+const HOST_PORT = 9223;
+const VALID_TARGETS = new Set(['sidebar', 'tab', 'languages', 'host']);
 
-const target = process.argv[2] || 'all';
+// Extension IDs used to identify webview targets in CDP
+const EXTENSION_ID = 'zwoosh.dirview';
+
+const target = process.argv[2] || 'tab';
 if (!VALID_TARGETS.has(target)) {
   console.error(`Unknown target: ${target}`);
   console.error(`Valid targets: ${[...VALID_TARGETS].join(' | ')}`);
@@ -37,69 +46,194 @@ try {
   process.exit(1);
 }
 
-// For 'host' target: eval the script directly in the extension host Node context.
-// For all other targets: call __dirviewDebugEval(script, target) to route through the
-// webview postMessage bridge. The webview eval result is returned as a string.
-const expr = target === 'host'
-  ? scriptContent
-  : `globalThis.__dirviewDebugEval(${JSON.stringify(scriptContent)}, ${JSON.stringify(target)})`;
-
-async function main() {
+async function evalInHost() {
   let resp;
   try {
-    resp = await fetch('http://localhost:9223/json');
+    resp = await fetch(`http://localhost:${HOST_PORT}/json`);
   } catch {
-    console.error('Could not reach Node inspector on port 9223.');
+    console.error(`Could not reach Node inspector on port ${HOST_PORT}.`);
     console.error('Is the extension host running? Launch with: ./scripts/launch-cdp.sh');
     process.exit(1);
   }
-
   const targets = await resp.json();
   const url = targets[0]?.webSocketDebuggerUrl;
   if (!url) {
-    console.error('No extension host inspector target found on port 9223.');
+    console.error('No extension host inspector target found.');
+    process.exit(1);
+  }
+  return evalViaWebSocket(url, scriptContent);
+}
+
+async function evalInWebview() {
+  // 1. Find the webview iframe target
+  let resp;
+  try {
+    resp = await fetch(`http://localhost:${CDP_PORT}/json`);
+  } catch {
+    console.error(`Could not reach CDP on port ${CDP_PORT}.`);
+    console.error('Is VSCode running with CDP? Launch with: ./scripts/launch-cdp.sh');
+    process.exit(1);
+  }
+  const targets = await resp.json();
+  const iframeTarget = targets.find(t =>
+    t.type === 'iframe' && t.url?.includes(EXTENSION_ID)
+  );
+  if (!iframeTarget) {
+    console.error(`No dirview webview iframe found. Is the ${target} view open?`);
+    console.error('Available targets:', targets.map(t => `${t.type}: ${t.url?.slice(0, 60)}`).join('\n  '));
     process.exit(1);
   }
 
-  const ws = new WebSocket(url);
-  let msgId = 0;
-  let evalId;
+  // 2. Connect to the iframe target and find the inner content frame
+  const wsUrl = iframeTarget.webSocketDebuggerUrl;
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(wsUrl);
+    let msgId = 0;
+    let innerContextId = null;
+    let frameTreeId = null;
+    let evalId = null;
 
-  ws.addEventListener('open', () => {
-    ws.send(JSON.stringify({ id: ++msgId, method: 'Runtime.enable' }));
-    evalId = ++msgId;
-    ws.send(JSON.stringify({
-      id: evalId,
-      method: 'Runtime.evaluate',
-      params: { expression: expr, returnByValue: true, awaitPromise: true },
-    }));
-  });
+    ws.addEventListener('open', () => {
+      ws.send(JSON.stringify({ id: ++msgId, method: 'Runtime.enable' }));
+      ws.send(JSON.stringify({ id: ++msgId, method: 'Page.enable' }));
+      frameTreeId = ++msgId;
+      ws.send(JSON.stringify({ id: frameTreeId, method: 'Page.getFrameTree' }));
+    });
 
-  ws.addEventListener('message', (event) => {
-    const msg = JSON.parse(event.data);
-    if (msg.id !== evalId) { return; }
-    const r = msg.result?.result;
-    if (r?.type === 'string') {
-      console.log(r.value);
-    } else if (r) {
-      console.log(JSON.stringify(r, null, 2));
+    ws.addEventListener('message', (event) => {
+      const msg = JSON.parse(event.data);
+
+      // Get the inner frame ID from the frame tree
+      if (msg.id === frameTreeId && msg.result?.frameTree?.childFrames) {
+        const innerFrame = msg.result.frameTree.childFrames.find(
+          f => f.frame.name === 'active-frame'
+        );
+        if (!innerFrame) {
+          console.error('No active-frame found in webview frame tree.');
+          ws.close();
+          process.exit(1);
+        }
+        // The inner context may already have been reported via executionContextCreated
+        // If not, we wait for it
+        const innerFrameId = innerFrame.frame.id;
+
+        // Check if we already captured the context
+        if (innerContextId) {
+          doEval(ws, msgId, innerContextId);
+        } else {
+          // Store the frame ID and wait for context
+          ws._innerFrameId = innerFrameId;
+        }
+      }
+
+      // Capture execution contexts — match by inner frame ID
+      if (msg.method === 'Runtime.executionContextCreated') {
+        const ctx = msg.params.context;
+        if (ctx.auxData?.frameId === ws._innerFrameId ||
+            (ctx.auxData?.isDefault && !innerContextId && ctx.origin?.includes('vscode-webview'))) {
+          innerContextId = ctx.id;
+          // If frame tree already returned, eval now
+          if (ws._innerFrameId) {
+            doEval(ws, msgId, innerContextId);
+          }
+        }
+      }
+
+      // Handle eval result
+      if (evalId && msg.id === evalId) {
+        const r = msg.result?.result;
+        if (msg.result?.exceptionDetails) {
+          console.error('ERROR:', msg.result.exceptionDetails.exception?.description ||
+            msg.result.exceptionDetails.text);
+        } else if (r?.type === 'string') {
+          console.log(r.value);
+        } else if (r?.value !== undefined) {
+          console.log(JSON.stringify(r.value, null, 2));
+        } else if (r) {
+          console.log(JSON.stringify(r, null, 2));
+        }
+        ws.close();
+        resolve();
+      }
+    });
+
+    function doEval(ws, currentId, contextId) {
+      if (evalId) return; // already sent
+      evalId = currentId + 1;
+      ws.send(JSON.stringify({
+        id: evalId,
+        method: 'Runtime.evaluate',
+        params: {
+          expression: scriptContent,
+          contextId,
+          returnByValue: true,
+          awaitPromise: true,
+        },
+      }));
     }
-    if (msg.result?.exceptionDetails) {
-      console.error('Exception:', msg.result.exceptionDetails.exception?.description || msg.result.exceptionDetails.text);
-    }
-    ws.close();
-    process.exit(0);
-  });
 
-  ws.addEventListener('error', (err) => {
-    console.error('WebSocket error:', err.message || err);
-    process.exit(1);
-  });
+    ws.addEventListener('error', (err) => {
+      console.error('WebSocket error:', err.message || err);
+      process.exit(1);
+    });
 
-  setTimeout(() => {
-    console.error('Timeout waiting for result (10s).');
-    process.exit(1);
-  }, 10000);
+    setTimeout(() => {
+      console.error('Timeout waiting for result (30s).');
+      ws.close();
+      process.exit(1);
+    }, 30000);
+  });
 }
 
-main();
+async function evalViaWebSocket(url, expression) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url);
+    let msgId = 0;
+    let evalId;
+
+    ws.addEventListener('open', () => {
+      ws.send(JSON.stringify({ id: ++msgId, method: 'Runtime.enable' }));
+      evalId = ++msgId;
+      ws.send(JSON.stringify({
+        id: evalId,
+        method: 'Runtime.evaluate',
+        params: { expression, returnByValue: true, awaitPromise: true },
+      }));
+    });
+
+    ws.addEventListener('message', (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.id !== evalId) return;
+      const r = msg.result?.result;
+      if (msg.result?.exceptionDetails) {
+        console.error('ERROR:', msg.result.exceptionDetails.exception?.description ||
+          msg.result.exceptionDetails.text);
+      } else if (r?.type === 'string') {
+        console.log(r.value);
+      } else if (r?.value !== undefined) {
+        console.log(JSON.stringify(r.value, null, 2));
+      } else if (r) {
+        console.log(JSON.stringify(r, null, 2));
+      }
+      ws.close();
+      resolve();
+    });
+
+    ws.addEventListener('error', (err) => {
+      console.error('WebSocket error:', err.message || err);
+      process.exit(1);
+    });
+
+    setTimeout(() => {
+      console.error('Timeout waiting for result (30s).');
+      ws.close();
+      process.exit(1);
+    }, 30000);
+  });
+}
+
+if (target === 'host') {
+  evalInHost();
+} else {
+  evalInWebview();
+}
