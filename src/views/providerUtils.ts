@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { SearchService, SearchMatch } from '../search/searchService';
 import { getLangInfo } from '../language/languageMap';
-import { highlightLine } from '../highlight/highlighter';
+import { highlightLine, highlightLineMulti } from '../highlight/highlighter';
 
 /** Handles messages that are common to both SidebarProvider and TabProvider.
  *  Returns true if the message was handled, false if the caller should continue processing. */
@@ -58,11 +58,29 @@ export function handleSearchMessage(
       for (const [filePath, matches] of batch) {
         const task = (async () => {
           const langName = getLangInfo(path.basename(filePath)).name;
-          for (let i = 0; i < matches.length; i++) {
+          for (let i = 0; i < matches.length; ) {
             const m = matches[i];
-            if (m.lineText === undefined) { continue; }
-            const html = await highlightLine(m.lineText, m.column, m.matchLength, langName);
-            if (html !== undefined) { patches.push({ path: filePath, idx: i, html }); }
+            if (m.lineText === undefined) { i++; continue; }
+            // Group consecutive same-line non-context matches
+            const groupIndices = [i];
+            let j = i + 1;
+            while (j < matches.length && !matches[j].isContext && matches[j].line === m.line) {
+              groupIndices.push(j);
+              j++;
+            }
+            if (groupIndices.length > 1) {
+              // Multi-match line: highlight all ranges together
+              const ranges = groupIndices.map(idx => ({ col: matches[idx].column, len: matches[idx].matchLength }));
+              const html = await highlightLineMulti(m.lineText, ranges, langName);
+              if (html !== undefined) {
+                for (const idx of groupIndices) { patches.push({ path: filePath, idx, html }); }
+              }
+            } else {
+              // Single match: use the standard path
+              const html = await highlightLine(m.lineText, m.column, m.matchLength, langName);
+              if (html !== undefined) { patches.push({ path: filePath, idx: i, html }); }
+            }
+            i = j;
           }
         })();
         const p = task.then(() => { executing.delete(p); });

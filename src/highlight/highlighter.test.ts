@@ -138,6 +138,48 @@ describe('buildHighlightedHtml', () => {
     expect(html).toContain(' line');
     expect(html).not.toContain('\u2026');
   });
+  it('highlights two non-overlapping ranges on the same line', () => {
+    // "foo bar foo" — highlight both "foo" (col=0,len=3 and col=8,len=3)
+    const tokens = [tok('foo bar foo', '#569cd6')];
+    const ranges = [{ col: 0, len: 3 }, { col: 8, len: 3 }];
+    const html = buildHighlightedHtml(tokens, 0, 0, undefined, undefined, ranges);
+    // Both "foo" should be wrapped in match-highlight
+    const highlights = html.match(/<span class="match-highlight">/g);
+    expect(highlights).not.toBeNull();
+    expect(highlights!.length).toBe(2);
+    // " bar " should be between the two highlights (not inside either)
+    expect(html).toContain(' bar ');
+  });
+
+  it('highlights ranges spanning multiple tokens', () => {
+    // Tokens: "ab" + "cd" + "ef", ranges at col=1..3 ("bc") and col=4..6 ("ef")
+    const tokens = [tok('ab', '#569cd6'), tok('cd', '#ce9178'), tok('ef')];
+    const ranges = [{ col: 1, len: 2 }, { col: 4, len: 2 }];
+    const html = buildHighlightedHtml(tokens, 0, 0, undefined, undefined, ranges);
+    const highlights = html.match(/<span class="match-highlight">/g);
+    expect(highlights).not.toBeNull();
+    expect(highlights!.length).toBe(2);
+  });
+
+  it('multi-range with visible window clips ranges outside window', () => {
+    // Long line, two ranges far apart. Window should only show the first.
+    const text = 'a'.repeat(50) + 'MATCH1' + 'b'.repeat(100) + 'MATCH2' + 'c'.repeat(50);
+    const tokens = [tok(text)];
+    // First match at col 50, second at col 156
+    const ranges = [{ col: 50, len: 6 }, { col: 156, len: 6 }];
+    const html = buildHighlightedHtml(tokens, 50, 6, 0, 120, ranges);
+    // First match should be highlighted
+    expect(html).toContain('MATCH1');
+    // Second match is beyond window end (120), should not appear
+    expect(html).not.toContain('MATCH2');
+  });
+
+  it('empty ranges array produces no highlights', () => {
+    const tokens = [tok('hello world')];
+    const html = buildHighlightedHtml(tokens, 0, 0, undefined, undefined, []);
+    expect(html).not.toContain('match-highlight');
+    expect(html).toContain('hello world');
+  });
 });
 
 describe('resolveShikiLang', () => {

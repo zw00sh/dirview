@@ -658,6 +658,26 @@ body {
   border-radius: 2px;
 }
 
+.match-clipped-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+  border-radius: 3px;
+  background: var(--vscode-inputValidation-warningBackground, rgba(200, 150, 0, 0.15));
+  color: var(--vscode-inputValidation-warningForeground, #cca700);
+  border: 1px solid var(--vscode-inputValidation-warningBorder, rgba(200, 150, 0, 0.4));
+}
+.match-clipped-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* "N more matches" rows reuse .dir-row.truncated-row for visual consistency
    with "N more files" rows. Override padding to match match-line-row alignment
    and shift the '+' icon to align with the line-number column. */
