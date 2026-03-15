@@ -75,13 +75,33 @@ async function evalInWebview() {
     process.exit(1);
   }
   const targets = await resp.json();
-  const iframeTarget = targets.find(t =>
+  const dirviewIframes = targets.filter(t =>
     t.type === 'iframe' && t.url?.includes(EXTENSION_ID)
   );
-  if (!iframeTarget) {
+  if (dirviewIframes.length === 0) {
     console.error(`No dirview webview iframe found. Is the ${target} view open?`);
     console.error('Available targets:', targets.map(t => `${t.type}: ${t.url?.slice(0, 60)}`).join('\n  '));
     process.exit(1);
+  }
+  // Tab panels (WebviewPanel) lack purpose=webviewView in the URL;
+  // sidebar/languages views (WebviewViewProvider) include it.
+  let iframeTarget;
+  if (target === 'tab') {
+    iframeTarget = dirviewIframes.find(t => !t.url.includes('purpose=webviewView'));
+    if (!iframeTarget) {
+      console.error('No tab iframe found. Is the Breakdown tab open?');
+      process.exit(1);
+    }
+  } else {
+    // sidebar and languages are both webviewView — pick by index:
+    // they appear in registration order (sidebar first, languages second).
+    const viewIframes = dirviewIframes.filter(t => t.url.includes('purpose=webviewView'));
+    const idx = target === 'languages' ? 1 : 0;
+    iframeTarget = viewIframes[idx];
+    if (!iframeTarget) {
+      console.error(`No ${target} iframe found. Is the ${target} view visible?`);
+      process.exit(1);
+    }
   }
 
   // 2. Connect to the iframe target and find the inner content frame

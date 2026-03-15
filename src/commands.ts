@@ -11,6 +11,12 @@ interface Providers {
   languages: LanguagesProvider;
 }
 
+/** Context object passed by VSCode when a webview context menu command fires. */
+type WebviewContext =
+  | { webviewSection: 'file'; path: string }
+  | { webviewSection: 'matchLine'; path: string; lineText?: string }
+  | { webviewSection: 'dir'; path: string; rootName: string };
+
 function resolveDirPath(relativePath: string, rootName: string): string | undefined {
   const folder = vscode.workspace.workspaceFolders?.find(f => f.name === rootName);
   if (!folder) { return undefined; }
@@ -115,31 +121,33 @@ export function registerCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('dirview.contextCopyPath', (ctx) => {
+    vscode.commands.registerCommand('dirview.contextCopyPath', (ctx: WebviewContext) => {
       const absPath = (ctx.webviewSection === 'file' || ctx.webviewSection === 'matchLine')
         ? ctx.path
         : resolveDirPath(ctx.path, ctx.rootName);
       if (absPath) { vscode.env.clipboard.writeText(absPath); }
     }),
 
-    vscode.commands.registerCommand('dirview.contextRevealInExplorer', (ctx) => {
+    vscode.commands.registerCommand('dirview.contextRevealInExplorer', (ctx: WebviewContext) => {
       const absPath = (ctx.webviewSection === 'file' || ctx.webviewSection === 'matchLine')
         ? ctx.path
         : resolveDirPath(ctx.path, ctx.rootName);
       if (absPath) { vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(absPath)); }
     }),
 
-    vscode.commands.registerCommand('dirview.contextOpenFile', (ctx) => {
-      if (ctx.path) { vscode.commands.executeCommand('vscode.open', vscode.Uri.file(ctx.path)); }
+    vscode.commands.registerCommand('dirview.contextOpenFile', (ctx: WebviewContext) => {
+      vscode.commands.executeCommand('vscode.open', vscode.Uri.file(ctx.path));
     }),
 
-    vscode.commands.registerCommand('dirview.contextOpenInTerminal', (ctx) => {
-      const absPath = resolveDirPath(ctx.path, ctx.rootName);
-      if (absPath) { vscode.commands.executeCommand('openInTerminal', vscode.Uri.file(absPath)); }
+    vscode.commands.registerCommand('dirview.contextOpenInTerminal', (ctx: WebviewContext) => {
+      if (ctx.webviewSection === 'dir') {
+        const absPath = resolveDirPath(ctx.path, ctx.rootName);
+        if (absPath) { vscode.commands.executeCommand('openInTerminal', vscode.Uri.file(absPath)); }
+      }
     }),
 
-    vscode.commands.registerCommand('dirview.contextCopyLineText', (ctx) => {
-      if (ctx.lineText) { vscode.env.clipboard.writeText(ctx.lineText); }
+    vscode.commands.registerCommand('dirview.contextCopyLineText', (ctx: WebviewContext) => {
+      if (ctx.webviewSection === 'matchLine' && ctx.lineText) { vscode.env.clipboard.writeText(ctx.lineText); }
     })
   );
 }

@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { ScanUpdatePayload } from '../scanner/types';
 import { buildWebviewHtml } from './buildWebviewHtml';
-import { setupVisibilityReplay } from './providerUtils';
+import { post } from './providerUtils';
+import type { WebviewToBackendMessage } from './webview/types';
 
 export class LanguagesProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
@@ -28,31 +29,43 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this.getHtml(webviewView.webview);
 
-    webviewView.webview.onDidReceiveMessage((message: { command: string; langs?: string[] }) => {
+    webviewView.webview.onDidReceiveMessage((message: WebviewToBackendMessage) => {
       if (message.command === 'filter') {
-        this.activeFilters = message.langs ?? [];
+        this.activeFilters = message.langs;
         this.onFilterChange?.(this.activeFilters);
       }
     });
 
-    setupVisibilityReplay(webviewView, () =>
-      this.lastPayload ? { type: 'update', roots: this.stripRoots(this.lastPayload.roots), activeFilters: this.activeFilters, showPct: this.showPct } : undefined
-    );
+    // Languages panel sends stripped roots (stats + totalFiles only), which doesn't
+    // conform to the shared BackendToWebviewMessage update shape — use raw postMessage.
+    webviewView.onDidChangeVisibility(() => {
+      if (webviewView.visible && this.lastPayload) {
+        webviewView.webview.postMessage({ type: 'update', roots: this.stripRoots(this.lastPayload.roots), activeFilters: this.activeFilters, showPct: this.showPct });
+      }
+    });
+    if (this.lastPayload) {
+      setTimeout(() => {
+        if (this.lastPayload) {
+          webviewView.webview.postMessage({ type: 'update', roots: this.stripRoots(this.lastPayload.roots), activeFilters: this.activeFilters, showPct: this.showPct });
+        }
+      }, 100);
+    }
   }
 
   showScanning(): void {
-    this.view?.webview.postMessage({ type: 'scanning' });
+    if (this.view) { post(this.view.webview, { type: 'scanning' }); }
   }
 
   update(payload: ScanUpdatePayload): void {
     this.lastPayload = payload;
+    // Languages panel sends stripped roots (stats + totalFiles only) — use raw postMessage.
     this.view?.webview.postMessage({ type: 'update', roots: this.stripRoots(payload.roots), activeFilters: this.activeFilters, showPct: this.showPct });
   }
 
   toggleDisplayMode(): void {
     this.showPct = !this.showPct;
     vscode.commands.executeCommand('setContext', 'dirview.languagesShowPct', this.showPct);
-    this.view?.webview.postMessage({ type: 'setDisplayMode', showPct: this.showPct });
+    if (this.view) { post(this.view.webview, { type: 'setDisplayMode', showPct: this.showPct }); }
   }
 
   /** Send only stats and totalFiles — the languages panel never reads children/files/paths. */
@@ -62,11 +75,11 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
 
   setFilter(langs: string[]): void {
     this.activeFilters = langs;
-    this.view?.webview.postMessage({ type: 'filter', langs });
+    if (this.view) { post(this.view.webview, { type: 'filter', langs }); }
   }
 
   showError(message: string): void {
-    this.view?.webview.postMessage({ type: 'error', message });
+    if (this.view) { post(this.view.webview, { type: 'error', message }); }
   }
 
   private getHtml(webview: vscode.Webview): string {

@@ -3,8 +3,9 @@ import * as path from 'path';
 import { Config } from '../config';
 import { DirNode, ScanUpdatePayload } from '../scanner/types';
 import { buildWebviewHtml } from './buildWebviewHtml';
-import { handleCommonMessage, handleSearchMessage } from './providerUtils';
+import { handleCommonMessage, handleSearchMessage, post } from './providerUtils';
 import { SearchService } from '../search/searchService';
+import type { WebviewToBackendMessage } from './webview/types';
 
 export class TabProvider {
   // Map from numeric panel ID → { panel, dirPath }.  Keyed by ID (not dirPath) so
@@ -140,13 +141,13 @@ export class TabProvider {
     };
     panel.webview.html = this.getHtml(panel.webview);
 
-    panel.webview.onDidReceiveMessage((message: { command: string; path?: string; line?: number; show?: boolean; enabled?: boolean; pattern?: string; caseSensitive?: boolean; useRegex?: boolean; include?: string; glob?: string }) => {
+    panel.webview.onDidReceiveMessage((message: WebviewToBackendMessage) => {
       // Search messages — scoped to this panel's dirPath for subtree-only results.
       const panelId = this.findPanelId(panel);
       const currentPath = panelId !== undefined ? this.panels.get(panelId)!.dirPath : undefined;
       const rootPaths = this.getRootPaths(currentPath ?? '');
       const svc = panelId !== undefined ? (this.searchServices.get(panelId) ?? searchService) : searchService;
-      if (handleSearchMessage(message, svc, (msg) => panel.webview.postMessage(msg), rootPaths)) { return; }
+      if (handleSearchMessage(message, svc, (msg) => post(panel.webview, msg), rootPaths)) { return; }
 
       if (handleCommonMessage(message, {
         onRefresh: this.onRefresh,
@@ -159,12 +160,11 @@ export class TabProvider {
       } else if (message.command === 'toggleIgnored') {
         vscode.commands.executeCommand(message.show ? 'dirview.toggleIgnored' : 'dirview.toggleIgnoredOff');
       } else if (message.command === 'toggleTruncation') {
-        const enabled: boolean = message.enabled ?? true;
         // Tab truncation is view-local — only update tab panels, not the sidebar.
         // (Unlike toggleIgnored which triggers a rescan affecting all views.)
-        const threshold = enabled ? (this.lastPayload?.truncateThreshold ?? 4) : 0;
-        this.updateTruncation(threshold, enabled);
-      } else if (message.command === 'navigateToDir' && typeof message.path === 'string') {
+        const threshold = message.enabled ? (this.lastPayload?.truncateThreshold ?? 4) : 0;
+        this.updateTruncation(threshold, message.enabled);
+      } else if (message.command === 'navigateToDir') {
         const navId = this.findPanelId(panel);
         const navEntry = navId !== undefined ? this.panels.get(navId) : undefined;
         if (!navEntry || message.path === navEntry.dirPath) { return; }
@@ -177,10 +177,12 @@ export class TabProvider {
         panel.title = targetPath === '' ? 'Breakdown' : path.basename(targetPath);
         const roots = this.getRootsForDir(targetPath);
         if (roots !== undefined) {
-          panel.webview.postMessage({
+          post(panel.webview, {
             type: 'update', roots, dirPath: targetPath,
             workspaceFolderName: this.getWorkspaceFolderName(targetPath),
             autoRescanEnabled: this.lastPayload?.autoRescanEnabled ?? true,
+            sortMode: this.lastPayload?.sortMode ?? 'files',
+            truncateThreshold: this.lastPayload?.truncateThreshold ?? 4,
             showIgnored: this.lastPayload?.showIgnored ?? false,
             stickyHeadersEnabled: this.config.tabStickyHeadersEnabled,
           });
@@ -198,10 +200,12 @@ export class TabProvider {
       const currentPath = visEntry.dirPath;
       const roots = this.getRootsForDir(currentPath);
       if (roots !== undefined) {
-        panel.webview.postMessage({
+        post(panel.webview, {
           type: 'update', roots, dirPath: currentPath,
           workspaceFolderName: this.getWorkspaceFolderName(currentPath),
           autoRescanEnabled: this.lastPayload?.autoRescanEnabled ?? true,
+          sortMode: this.lastPayload?.sortMode ?? 'files',
+          truncateThreshold: this.lastPayload?.truncateThreshold ?? 4,
           showIgnored: this.lastPayload?.showIgnored ?? false,
           stickyHeadersEnabled: this.config.tabStickyHeadersEnabled,
         });
@@ -223,10 +227,12 @@ export class TabProvider {
     const roots = this.getRootsForDir(dirPath);
     if (roots !== undefined) {
       setTimeout(() => {
-        panel.webview.postMessage({
+        post(panel.webview, {
           type: 'update', roots, dirPath,
           workspaceFolderName: this.getWorkspaceFolderName(dirPath),
           autoRescanEnabled: this.lastPayload?.autoRescanEnabled ?? true,
+          sortMode: this.lastPayload?.sortMode ?? 'files',
+          truncateThreshold: this.lastPayload?.truncateThreshold ?? 4,
           showIgnored: this.lastPayload?.showIgnored ?? false,
           stickyHeadersEnabled: this.config.tabStickyHeadersEnabled,
         });
@@ -240,54 +246,54 @@ export class TabProvider {
 
   showScanning(): void {
     for (const { panel } of this.panels.values()) {
-      panel.webview.postMessage({ type: 'scanning' });
+      post(panel.webview, { type: 'scanning' });
     }
   }
 
   update(payload: ScanUpdatePayload): void {
     this.lastPayload = payload;
-    const { autoRescanEnabled, showIgnored, tabStickyHeadersEnabled: stickyHeadersEnabled } = payload;
+    const { autoRescanEnabled, sortMode, truncateThreshold, showIgnored, tabStickyHeadersEnabled: stickyHeadersEnabled } = payload;
     for (const { panel, dirPath } of this.panels.values()) {
       // Skip hidden panels — onDidChangeViewState will replay when they become visible.
       if (!panel.visible) { continue; }
       const panelRoots = this.getRootsForDir(dirPath);
       // Send empty array if the directory was deleted — the tab will show an empty state.
       const effectiveRoots = panelRoots ?? [];
-      panel.webview.postMessage({
+      post(panel.webview, {
         type: 'update', roots: effectiveRoots, dirPath,
         workspaceFolderName: this.getWorkspaceFolderName(dirPath),
-        autoRescanEnabled, showIgnored, stickyHeadersEnabled,
+        autoRescanEnabled, sortMode, truncateThreshold, showIgnored, stickyHeadersEnabled,
       });
     }
   }
 
   updateTruncation(truncateThreshold: number, truncationEnabled: boolean = truncateThreshold > 0): void {
     for (const { panel } of this.panels.values()) {
-      panel.webview.postMessage({ type: 'updateTruncation', truncateThreshold, truncationEnabled });
+      post(panel.webview, { type: 'updateTruncation', truncateThreshold, truncationEnabled });
     }
   }
 
   updateStickyHeaders(enabled: boolean): void {
     for (const { panel } of this.panels.values()) {
-      panel.webview.postMessage({ type: 'updateStickyHeaders', enabled });
+      post(panel.webview, { type: 'updateStickyHeaders', enabled });
     }
   }
 
   expandAll(): void {
     for (const { panel } of this.panels.values()) {
-      panel.webview.postMessage({ type: 'expandAll' });
+      post(panel.webview, { type: 'expandAll' });
     }
   }
 
   collapseAll(): void {
     for (const { panel } of this.panels.values()) {
-      panel.webview.postMessage({ type: 'collapseAll' });
+      post(panel.webview, { type: 'collapseAll' });
     }
   }
 
   showError(message: string): void {
     for (const { panel } of this.panels.values()) {
-      panel.webview.postMessage({ type: 'error', message });
+      post(panel.webview, { type: 'error', message });
     }
   }
 

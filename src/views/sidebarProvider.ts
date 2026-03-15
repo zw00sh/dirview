@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
-import { DirNode, ScanUpdatePayload } from '../scanner/types';
+import { ScanUpdatePayload } from '../scanner/types';
 import { SortMode } from '../config';
 import { buildWebviewHtml } from './buildWebviewHtml';
-import { handleCommonMessage, setupVisibilityReplay } from './providerUtils';
+import { handleCommonMessage, setupVisibilityReplay, post } from './providerUtils';
+import type { WebviewToBackendMessage } from './webview/types';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
@@ -33,20 +34,22 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this.getHtml(webviewView.webview);
 
-    webviewView.webview.onDidReceiveMessage((message: { command: string; path?: string; line?: number }) => {
+    webviewView.webview.onDidReceiveMessage((message: WebviewToBackendMessage) => {
       handleCommonMessage(message, {
         onRefresh: this.onRefresh,
         onOpenDirInTab: this.onOpenDirInTab,
       });
     });
 
-    setupVisibilityReplay(webviewView, () =>
-      this.lastUpdate ? { type: 'update', ...this.lastUpdate } : undefined
-    );
+    setupVisibilityReplay(webviewView, () => {
+      if (!this.lastUpdate) { return undefined; }
+      const { roots, autoRescanEnabled, sortMode, truncateThreshold, sidebarStickyHeadersEnabled: stickyHeadersEnabled } = this.lastUpdate;
+      return { type: 'update', roots, autoRescanEnabled, sortMode, truncateThreshold, stickyHeadersEnabled };
+    });
   }
 
   showScanning(): void {
-    this.view?.webview.postMessage({ type: 'scanning' });
+    if (this.view) { post(this.view.webview, { type: 'scanning' }); }
   }
 
   update(payload: ScanUpdatePayload): void {
@@ -56,7 +59,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       this.view.title = roots.length === 1 ? roots[0].name : 'Files';
     }
     const stickyHeadersEnabled = payload.sidebarStickyHeadersEnabled;
-    this.view?.webview.postMessage({ type: 'update', roots, autoRescanEnabled, sortMode, truncateThreshold, stickyHeadersEnabled });
+    if (this.view) { post(this.view.webview, { type: 'update', roots, autoRescanEnabled, sortMode, truncateThreshold, stickyHeadersEnabled }); }
   }
 
   updateTruncateThreshold(truncateThreshold: number): void {
@@ -64,7 +67,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this.lastUpdate = { ...this.lastUpdate, truncateThreshold };
     // Lightweight message: no need to re-serialize the full tree when only the
     // truncation threshold changed. The webview re-renders from cached roots.
-    this.view?.webview.postMessage({ type: 'updateTruncation', truncateThreshold });
+    if (this.view) { post(this.view.webview, { type: 'updateTruncation', truncateThreshold }); }
   }
 
   updateSortMode(sortMode: SortMode): void {
@@ -72,28 +75,27 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this.lastUpdate = { ...this.lastUpdate, sortMode };
     // Lightweight message: no need to re-serialize the full tree when only the
     // sort mode changed. The webview re-renders from cached roots.
-    this.view?.webview.postMessage({ type: 'updateSortMode', sortMode });
+    if (this.view) { post(this.view.webview, { type: 'updateSortMode', sortMode }); }
   }
 
-
   updateStickyHeaders(enabled: boolean): void {
-    this.view?.webview.postMessage({ type: 'updateStickyHeaders', enabled });
+    if (this.view) { post(this.view.webview, { type: 'updateStickyHeaders', enabled }); }
   }
 
   setFilter(langs: string[]): void {
-    this.view?.webview.postMessage({ type: 'filter', langs });
+    if (this.view) { post(this.view.webview, { type: 'filter', langs }); }
   }
 
   expandAll(): void {
-    this.view?.webview.postMessage({ type: 'expandAll' });
+    if (this.view) { post(this.view.webview, { type: 'expandAll' }); }
   }
 
   collapseAll(): void {
-    this.view?.webview.postMessage({ type: 'collapseAll' });
+    if (this.view) { post(this.view.webview, { type: 'collapseAll' }); }
   }
 
   showError(message: string): void {
-    this.view?.webview.postMessage({ type: 'error', message });
+    if (this.view) { post(this.view.webview, { type: 'error', message }); }
   }
 
   private getHtml(webview: vscode.Webview): string {

@@ -3,7 +3,12 @@ import * as vscode from 'vscode';
 import { SearchService, SearchMatch } from '../search/searchService';
 import { getLangInfo } from '../language/languageMap';
 import { highlightLine, highlightLineMulti } from '../highlight/highlighter';
-import type { WebviewToBackendMessage } from './webview/types';
+import type { WebviewToBackendMessage, BackendToWebviewMessage } from './webview/types';
+
+/** Type-safe wrapper around webview.postMessage for outgoing backend→webview messages. */
+export function post(webview: vscode.Webview, msg: BackendToWebviewMessage): void {
+  webview.postMessage(msg);
+}
 
 /** Handles messages that are common to both SidebarProvider and TabProvider.
  *  Returns true if the message was handled, false if the caller should continue processing. */
@@ -42,7 +47,7 @@ export function handleCommonMessage(
 export function handleSearchMessage(
   message: WebviewToBackendMessage,
   searchService: SearchService,
-  postMessage: (msg: object) => void,
+  postMessage: (msg: BackendToWebviewMessage) => void,
   rootPaths: string[]
 ): boolean {
   if (message.command === 'search' && message.pattern !== undefined) {
@@ -159,7 +164,7 @@ export function handleSearchMessage(
  *  getCachedMessage() is called each time; if it returns undefined the replay is skipped. */
 export function setupVisibilityReplay(
   webviewView: vscode.WebviewView,
-  getCachedMessage: () => object | undefined
+  getCachedMessage: () => BackendToWebviewMessage | undefined
 ): void {
   webviewView.onDidChangeVisibility(() => {
     if (webviewView.visible) {

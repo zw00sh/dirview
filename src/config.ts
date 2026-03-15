@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
+import type { SortMode } from './views/webview/types';
 
-export type SortMode = 'files' | 'name' | 'size';
-const SORT_CYCLE: SortMode[] = ['files', 'name', 'size'];
+export type { SortMode };
+const SORT_CYCLE: readonly SortMode[] = ['files', 'name', 'size'] as const;
 
 export class Config {
   private context: vscode.ExtensionContext;
