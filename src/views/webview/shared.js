@@ -579,6 +579,14 @@
     let includeSavedInput = '';
     const MAX_HISTORY = 50;
 
+    function commitToHistory(history, value) {
+      const v = value.trim();
+      if (v && (history.length === 0 || history[history.length - 1] !== v)) {
+        history.push(v);
+        if (history.length > MAX_HISTORY) { history.shift(); }
+      }
+    }
+
     function navigateHistory(history, index, saved, input, direction) {
       if (history.length === 0) { return { index, saved }; }
       if (direction === 'up') {
@@ -588,7 +596,7 @@
       } else {
         if (index === -1) { return { index, saved }; }
         if (index < history.length - 1) { index++; input.value = history[index]; }
-        else { index = -1; input.value = saved; }
+        else { index = -1; input.value = ''; }
       }
       return { index, saved };
     }
@@ -725,6 +733,7 @@
 
     mainInput.addEventListener('input', () => {
       clearTimeout(debounceTimer);
+      searchHistoryIdx = -1;
       clearBtn.style.display = mainInput.value ? '' : 'none';
       if (!mainInput.value && !includeInput.value) {
         vscode.postMessage({ command: 'clearSearch' });
@@ -735,16 +744,65 @@
 
     includeInput.addEventListener('input', () => {
       clearTimeout(debounceTimer);
+      includeHistoryIdx = -1;
       debounceTimer = setTimeout(triggerSearch, 300);
     });
 
-    // Escape: clear search
+    // Escape, Enter, and history navigation
     mainInput.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         clearSearch();
         mainInput.blur();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        commitToHistory(searchHistory, mainInput.value);
+        searchHistoryIdx = -1;
+        clearTimeout(debounceTimer);
+        triggerSearch();
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        const r = navigateHistory(searchHistory, searchHistoryIdx, searchSavedInput, mainInput, e.key === 'ArrowUp' ? 'up' : 'down');
+        searchHistoryIdx = r.index;
+        searchSavedInput = r.saved;
+        clearTimeout(debounceTimer);
+        clearBtn.style.display = mainInput.value ? '' : 'none';
+        debounceTimer = setTimeout(triggerSearch, 300);
       }
+    });
+
+    includeInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        includeInput.blur();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        commitToHistory(includeHistory, includeInput.value);
+        includeHistoryIdx = -1;
+        clearTimeout(debounceTimer);
+        triggerSearch();
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        const r = navigateHistory(includeHistory, includeHistoryIdx, includeSavedInput, includeInput, e.key === 'ArrowUp' ? 'up' : 'down');
+        includeHistoryIdx = r.index;
+        includeSavedInput = r.saved;
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(triggerSearch, 300);
+      }
+    });
+
+    // Dynamic placeholders — hint at history when focused
+    mainInput.addEventListener('focus', () => { mainInput.placeholder = 'Search (\u21C5 for history)'; });
+    mainInput.addEventListener('blur', () => {
+      commitToHistory(searchHistory, mainInput.value);
+      searchHistoryIdx = -1;
+      mainInput.placeholder = 'Search';
+    });
+    includeInput.addEventListener('focus', () => { includeInput.placeholder = 'e.g. *.ts, src/**/exclude'; });
+    includeInput.addEventListener('blur', () => {
+      commitToHistory(includeHistory, includeInput.value);
+      includeHistoryIdx = -1;
+      includeInput.placeholder = '';
     });
 
     // Cmd+F / Ctrl+F — focus the search input from anywhere in the webview.
