@@ -11,9 +11,6 @@ await esbuild.build({
   platform: 'node',
   sourcemap: false,
   minify: true,
-  // DEV_MODE is a compile-time constant. When false (production), esbuild's
-  // dead-code elimination strips all `if (DEV_MODE) { ... }` blocks entirely.
-  define: { DEV_MODE: String(devMode) },
 });
 
 console.log(`esbuild: extension bundled → out/extension.js (${devMode ? 'dev' : 'production'})`);
@@ -30,7 +27,6 @@ for (const entry of webviewEntries) {
     platform: 'browser',
     sourcemap: false,
     minify: !devMode,
-    define: { DEV_MODE: String(devMode) },
   });
   console.log(`esbuild: webview ${entry} bundled → out/webview/${entry}.js`);
 }

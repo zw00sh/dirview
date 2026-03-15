@@ -1,17 +1,13 @@
 import * as vscode from 'vscode';
 import { getNonce } from './getNonce';
 
-// With esbuild bundling, each view gets a single bundled JS file.
-// SHARED_SCRIPTS is no longer needed — kept as empty for backwards compat with any references.
-
 export interface BuildWebviewHtmlOptions {
-  scripts: string[];   // filenames relative to out/webview/, e.g. ['shared.js', 'main.js']
+  scripts: string[];   // filenames relative to out/webview/, e.g. ['main.js']
   styles: string[];    // filenames relative to out/webview/, e.g. ['style.css']
   title: string;
   bodyClass?: string;
   bodyAttrs?: string;
   bodyHtml?: string;   // inserted before <div id="root">
-  debug?: boolean;     // when true, adds 'unsafe-eval' to CSP for cross-frame debug bridge
 }
 
 export function buildWebviewHtml(
@@ -37,20 +33,18 @@ export function buildWebviewHtml(
 
   const bodyClassAttr = options.bodyClass ? ` class="${options.bodyClass}"` : '';
   const bodyExtraAttrs = options.bodyAttrs ? ` ${options.bodyAttrs}` : '';
-  const debugAttr = options.debug ? ' data-debug' : '';
   const bodyHtml = options.bodyHtml ? `\n${options.bodyHtml}` : '';
-  const scriptSrc = options.debug ? `'nonce-${nonce}' 'unsafe-eval'` : `'nonce-${nonce}'`;
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${scriptSrc};">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 ${styleLinks}
   <title>${options.title}</title>
 </head>
-<body${bodyClassAttr}${bodyExtraAttrs}${debugAttr}>${bodyHtml}
+<body${bodyClassAttr}${bodyExtraAttrs}>${bodyHtml}
   <div id="root"></div>
 ${scriptTags}
 </body>

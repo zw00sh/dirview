@@ -7,14 +7,10 @@ import {
   renderTree,
   createMessageHandler,
   setupStickyTracking,
-  setupDebugEval,
 } from './index';
 import type { DirNode, SortMode, BackendToWebviewMessage } from './types';
 
 const vscode = acquireVsCodeApi();
-if (DEV_MODE) {
-  setupDebugEval(vscode);
-}
 const root = document.getElementById('root')!;
 
 const scanBar = createScanBar();

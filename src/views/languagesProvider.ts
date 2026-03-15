@@ -9,10 +9,8 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
   private lastPayload: ScanUpdatePayload | undefined;
   private activeFilters: string[] = [];
   private showPct: boolean = false;
-  debug = false;
 
   onFilterChange: ((langs: string[]) => void) | undefined;
-  onDebugResult: ((msg: { id?: number; result?: string; error?: string }) => void) | undefined;
 
   constructor(extensionUri: vscode.Uri) {
     this.extensionUri = extensionUri;
@@ -30,12 +28,10 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this.getHtml(webviewView.webview);
 
-    webviewView.webview.onDidReceiveMessage((message: { command: string; langs?: string[]; id?: number; result?: string; error?: string }) => {
+    webviewView.webview.onDidReceiveMessage((message: { command: string; langs?: string[] }) => {
       if (message.command === 'filter') {
         this.activeFilters = message.langs ?? [];
         this.onFilterChange?.(this.activeFilters);
-      } else if (message.command === 'debugEvalResult') {
-        this.onDebugResult?.(message);
       }
     });
 
@@ -73,18 +69,11 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
     this.view?.webview.postMessage({ type: 'error', message });
   }
 
-  /** Send a debugEval message to the webview (only works when debug=true). */
-  debugEval(script: string, id: number): void {
-    this.view?.webview.postMessage({ type: 'debugEval', script, id });
-  }
-
   private getHtml(webview: vscode.Webview): string {
     return buildWebviewHtml(webview, this.extensionUri, {
       scripts: ['languages.js'],
       styles: ['languages.css'],
       title: 'Languages',
-      debug: this.debug,
     });
   }
 }
-

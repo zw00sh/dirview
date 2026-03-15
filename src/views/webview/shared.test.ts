@@ -9,7 +9,7 @@ import {
   setupStickyTracking, walkMatchingDirs, expandMatchedDirs,
   patchTreeChildren, patchDirLi,
   getVisibleChildren, getVisibleFiles,
-  createSearchBar, setupDebugEval,
+  createSearchBar,
   scheduleSearchRender, updateSearchStatus, expandBatchFiles,
   SVG_CHEVRON, SVG_EYE, SVG_FOLD, SVG_UNFOLD, SVG_SORT_FILES, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL,
 } from './index';
@@ -21,8 +21,6 @@ import type { DirNode, FileNode, WebviewState, Renderer, LangStat } from './type
   getState: () => null,
   setState: () => {},
 });
-(globalThis as any).DEV_MODE = false;
-
 
 // --- escHtml ---
 describe('escHtml', () => {
@@ -2911,89 +2909,6 @@ describe('renderFileMatches — context grouping', () => {
     expect(groups.length).toBe(1);
     expect(groups[0].children.length).toBe(1);
     expect(groups[0].querySelector('.match-line-row')).not.toBeNull();
-  });
-});
-
-// --- setupDebugEval ---
-describe('setupDebugEval', () => {
-  it('is exported on DirviewShared', () => {
-    expect(typeof setupDebugEval).toBe('function');
-  });
-
-  it('posts debugEvalResult back to vscode when data-debug is set', async () => {
-    document.body.setAttribute('data-debug', '');
-    const postMessage = vi.fn();
-    const mockVscode = { postMessage };
-
-    setupDebugEval(mockVscode);
-
-    // Dispatch a debugEval message — the handler should eval the script and postMessage the result.
-    window.dispatchEvent(new MessageEvent('message', {
-      data: { type: 'debugEval', id: 99, script: '1 + 2' },
-    }));
-
-    // Allow the synchronous handler to run.
-    await Promise.resolve();
-
-    expect(postMessage).toHaveBeenCalledWith({
-      command: 'debugEvalResult',
-      id: 99,
-      result: '3',
-    });
-
-    document.body.removeAttribute('data-debug');
-  });
-
-  it('posts error result when the script throws', async () => {
-    document.body.setAttribute('data-debug', '');
-    const postMessage = vi.fn();
-    const mockVscode = { postMessage };
-
-    setupDebugEval(mockVscode);
-
-    window.dispatchEvent(new MessageEvent('message', {
-      data: { type: 'debugEval', id: 100, script: 'throw new Error("boom")' },
-    }));
-
-    await Promise.resolve();
-
-    expect(postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ command: 'debugEvalResult', id: 100, error: expect.stringContaining('boom') })
-    );
-
-    document.body.removeAttribute('data-debug');
-  });
-
-  it('does nothing when data-debug attribute is absent', async () => {
-    document.body.removeAttribute('data-debug');
-    const postMessage = vi.fn();
-    const mockVscode = { postMessage };
-
-    setupDebugEval(mockVscode);
-
-    window.dispatchEvent(new MessageEvent('message', {
-      data: { type: 'debugEval', id: 101, script: '42' },
-    }));
-
-    await Promise.resolve();
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  it('ignores non-debugEval message types', async () => {
-    document.body.setAttribute('data-debug', '');
-    const postMessage = vi.fn();
-    const mockVscode = { postMessage };
-
-    setupDebugEval(mockVscode);
-
-    window.dispatchEvent(new MessageEvent('message', {
-      data: { type: 'update', roots: [] },
-    }));
-
-    await Promise.resolve();
-    expect(postMessage).not.toHaveBeenCalled();
-
-    document.body.removeAttribute('data-debug');
   });
 });
 

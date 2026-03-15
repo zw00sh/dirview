@@ -8,11 +8,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private extensionUri: vscode.Uri;
   private lastUpdate: ScanUpdatePayload | undefined;
-  debug = false;
-
   onRefresh?: () => void;
   onOpenDirInTab?: (dirPath: string) => void;
-  onDebugResult?: (msg: { id?: number; result?: string; error?: string }) => void;
 
   constructor(extensionUri: vscode.Uri) {
     this.extensionUri = extensionUri;
@@ -36,11 +33,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this.getHtml(webviewView.webview);
 
-    webviewView.webview.onDidReceiveMessage((message: { command: string; path?: string; line?: number; id?: number; result?: string; error?: string }) => {
-      if (message.command === 'debugEvalResult') {
-        this.onDebugResult?.(message);
-        return;
-      }
+    webviewView.webview.onDidReceiveMessage((message: { command: string; path?: string; line?: number }) => {
       handleCommonMessage(message, {
         onRefresh: this.onRefresh,
         onOpenDirInTab: this.onOpenDirInTab,
@@ -103,18 +96,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this.view?.webview.postMessage({ type: 'error', message });
   }
 
-  /** Send a debugEval message to the webview (only works when debug=true). */
-  debugEval(script: string, id: number): void {
-    this.view?.webview.postMessage({ type: 'debugEval', script, id });
-  }
-
   private getHtml(webview: vscode.Webview): string {
     return buildWebviewHtml(webview, this.extensionUri, {
       scripts: ['main.js'],
       styles: ['style.css'],
       title: 'Directory Breakdown',
       bodyAttrs: `data-vscode-context='{"preventDefaultContextMenuItems": true}'`,
-      debug: this.debug,
     });
   }
 }

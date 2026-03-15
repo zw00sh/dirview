@@ -13,7 +13,6 @@ import {
   tieredExpandAll,
   tieredCollapseAll,
   setupStickyTracking,
-  setupDebugEval,
   SVG_EYE,
   SVG_EYE_CLOSED,
   SVG_FOLD,
@@ -27,9 +26,6 @@ import {
 import type { DirNode, SortMode, LangStat, BackendToWebviewMessage } from './types';
 
 const vscode = acquireVsCodeApi();
-if (DEV_MODE) {
-  setupDebugEval(vscode);
-}
 const legendSection = document.getElementById('legend-section')!;
 const legendHeader = document.getElementById('legend-header')!;
 const legendChevron = document.getElementById('legend-chevron')!;

@@ -1,37 +1,6 @@
-// Debug eval bridge and sticky header tracking setup.
-// Self-contained — only needs types.
+// Sticky header tracking setup.
 
-import type { VsCodeApi, StickyTracking } from './types';
-
-// Sets up the cross-frame debug eval bridge for a webview.
-// Call once per webview entry point (main.ts, tab.ts, languages.ts) after
-// acquireVsCodeApi(). Registers an independent message listener so the bridge works in
-// all webviews regardless of whether they use createMessageHandler.
-//
-// Security: triple-gated in dev mode only —
-//   (1) call sites guard with if (DEV_MODE) — esbuild strips in production
-//   (2) requires data-debug body attribute (set by buildWebviewHtml only when debug=true)
-//   (3) requires 'unsafe-eval' in CSP (set by buildWebviewHtml only when debug=true)
-export function setupDebugEval(vscode: VsCodeApi): void {
-  if (!document.body.hasAttribute('data-debug')) { return; }
-  window.addEventListener('message', function (event: MessageEvent) {
-    const message = event.data;
-    if (message.type !== 'debugEval') { return; }
-    const id = message.id;
-    try {
-      // eslint-disable-next-line no-eval
-      const result = eval(message.script);
-      const serialized = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
-      vscode.postMessage({ command: 'debugEvalResult', id, result: serialized });
-      // Also post to parent frame so CDP renderer tools can read results.
-      window.parent.postMessage({ type: 'dirview-debug-result', id, result: serialized }, '*');
-    } catch (err) {
-      const errStr = String(err);
-      vscode.postMessage({ command: 'debugEvalResult', id, error: errStr });
-      window.parent.postMessage({ type: 'dirview-debug-result', id, error: errStr }, '*');
-    }
-  });
-}
+import type { StickyTracking } from './types';
 
 /**
  * Sets up sticky directory header tracking for a scrollable container.

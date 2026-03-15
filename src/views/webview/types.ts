@@ -40,8 +40,7 @@ export type BackendToWebviewMessage =
   | { type: 'searchResultsDone'; fileCount: number; matchCount: number; truncated: boolean }
   | { type: 'searchResults'; matches: Record<string, SearchMatch[]> | null; fileCount?: number; matchCount?: number; truncated?: boolean; error?: string }
   | { type: 'themeChanged' }
-  | { type: 'setDisplayMode'; showPct: boolean }
-  | { type: 'debugEval'; script: string; id: string };
+  | { type: 'setDisplayMode'; showPct: boolean };
 
 // ── Messages: webview → backend ───────────────────────────────────────────────
 
@@ -56,8 +55,7 @@ export type WebviewToBackendMessage =
   | { command: 'toggleStickyHeaders'; enabled: boolean }
   | { command: 'search'; pattern: string; caseSensitive?: boolean; useRegex?: boolean; include?: string; contextLines?: number }
   | { command: 'searchFiles'; glob: string }
-  | { command: 'clearSearch' }
-  | { command: 'debugEvalResult'; id: string; result?: string; error?: string };
+  | { command: 'clearSearch' };
 
 // ── VsCode API ────────────────────────────────────────────────────────────────
 
@@ -69,7 +67,6 @@ export interface VsCodeApi {
 
 declare global {
   function acquireVsCodeApi(): VsCodeApi;
-  // DEV_MODE is declared in src/globals.d.ts
 }
 
 // ── Scan bar ──────────────────────────────────────────────────────────────────

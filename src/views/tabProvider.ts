@@ -16,11 +16,8 @@ export class TabProvider {
   private extensionUri: vscode.Uri;
   // Raw scan data, stored once and used to derive per-panel subtrees on demand.
   private lastPayload: ScanUpdatePayload | undefined;
-  debug = false;
-
   onRefresh: (() => void) | undefined;
   onOpenDirInTab: ((dirPath: string) => void) | undefined;
-  onDebugResult?: (msg: { id?: number; result?: string; error?: string }) => void;
 
   private config: Config;
 
@@ -143,11 +140,7 @@ export class TabProvider {
     };
     panel.webview.html = this.getHtml(panel.webview);
 
-    panel.webview.onDidReceiveMessage((message: { command: string; path?: string; line?: number; show?: boolean; enabled?: boolean; pattern?: string; caseSensitive?: boolean; useRegex?: boolean; include?: string; glob?: string; id?: number; result?: string; error?: string }) => {
-      if (message.command === 'debugEvalResult') {
-        this.onDebugResult?.(message);
-        return;
-      }
+    panel.webview.onDidReceiveMessage((message: { command: string; path?: string; line?: number; show?: boolean; enabled?: boolean; pattern?: string; caseSensitive?: boolean; useRegex?: boolean; include?: string; glob?: string }) => {
       // Search messages — scoped to this panel's dirPath for subtree-only results.
       const panelId = this.findPanelId(panel);
       const currentPath = panelId !== undefined ? this.panels.get(panelId)!.dirPath : undefined;
@@ -298,13 +291,6 @@ export class TabProvider {
     }
   }
 
-  /** Send a debugEval message to all open tab webviews (only works when debug=true). */
-  debugEval(script: string, id: number): void {
-    for (const { panel } of this.panels.values()) {
-      panel.webview.postMessage({ type: 'debugEval', script, id });
-    }
-  }
-
   private getHtml(webview: vscode.Webview): string {
     return buildWebviewHtml(webview, this.extensionUri, {
       scripts: ['tab.js'],
@@ -312,7 +298,6 @@ export class TabProvider {
       title: 'Breakdown',
       bodyClass: 'tab-view',
       bodyAttrs: `data-vscode-context='{"preventDefaultContextMenuItems": true}'`,
-      debug: this.debug,
       bodyHtml: `  <div id="legend-section" class="tab-legend-section" style="display:none">
     <div id="legend-header" class="tab-legend-header">
       <span id="legend-chevron" class="tab-legend-header-chevron"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M6.146 3.146a.5.5 0 0 0 0 .707l4.146 4.146-4.146 4.146a.5.5 0 0 0 .707.707l4.5-4.5a.5.5 0 0 0 0-.707l-4.5-4.5a.5.5 0 0 0-.707 0Z"/></svg></span>

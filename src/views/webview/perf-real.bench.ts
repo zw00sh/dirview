@@ -17,7 +17,6 @@ import type { DirNode, FileNode } from './types';
   getState: () => null,
   setState: () => {},
 });
-(globalThis as any).DEV_MODE = false;
 
 // ── Build DirNode tree from real filesystem ──────────────────────────────
 
