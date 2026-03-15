@@ -1,52 +1,50 @@
 // @vitest-environment jsdom
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import {
+  escHtml, formatBytes, sortDirs, sortFiles, computeMaxMetric, groupEmptyDirs,
+  computeStats, renderLegend, compactedNode, compactedPath,
+  createState, createRenderer, tieredExpandAll, tieredCollapseAll,
+  walkExpand, walkCollapse, hasExpandedDescendant,
+  renderTree, createMessageHandler, createRescanWarning,
+  setupStickyTracking, walkMatchingDirs, expandMatchedDirs,
+  patchTreeChildren, patchDirLi,
+  getVisibleChildren, getVisibleFiles,
+  createSearchBar, setupDebugEval,
+  scheduleSearchRender, updateSearchStatus, expandBatchFiles,
+  SVG_CHEVRON, SVG_EYE, SVG_FOLD, SVG_UNFOLD, SVG_SORT_FILES, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL,
+} from './shared';
+import type { DirNode, FileNode, WebviewState, Renderer, LangStat } from './types';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-let S; // DirviewShared
-
-beforeAll(() => {
-  // Load all shared modules in dependency order — each IIFE writes to its own
-  // window._Dirview* namespace, and shared.js assembles window.DirviewShared.
-  const files = [
-    'shared-icons.js',
-    'shared-utils.js',
-    'shared-state.js',
-    'shared-renderer.js',
-    'shared.js',
-  ];
-  for (const file of files) {
-    const code = readFileSync(join(__dirname, file), 'utf-8');
-    // eslint-disable-next-line no-new-func
-    Function(code)();
-  }
-  S = window.DirviewShared;
+// Mock acquireVsCodeApi for webview tests
+(globalThis as any).acquireVsCodeApi = () => ({
+  postMessage: () => {},
+  getState: () => null,
+  setState: () => {},
 });
+(globalThis as any).DEV_MODE = false;
+
 
 // --- escHtml ---
 describe('escHtml', () => {
-  it('escapes &', () => expect(S.escHtml('a&b')).toBe('a&amp;b'));
-  it('escapes <', () => expect(S.escHtml('a<b')).toBe('a&lt;b'));
-  it('escapes >', () => expect(S.escHtml('a>b')).toBe('a&gt;b'));
-  it('escapes "', () => expect(S.escHtml('a"b')).toBe('a&quot;b'));
-  it('leaves plain strings unchanged', () => expect(S.escHtml('hello')).toBe('hello'));
+  it('escapes &', () => expect(escHtml('a&b')).toBe('a&amp;b'));
+  it('escapes <', () => expect(escHtml('a<b')).toBe('a&lt;b'));
+  it('escapes >', () => expect(escHtml('a>b')).toBe('a&gt;b'));
+  it('escapes "', () => expect(escHtml('a"b')).toBe('a&quot;b'));
+  it('leaves plain strings unchanged', () => expect(escHtml('hello')).toBe('hello'));
   it('escapes all entities in one string', () => {
-    expect(S.escHtml('<script src="x.js">alert(1)&done</script>'))
+    expect(escHtml('<script src="x.js">alert(1)&done</script>'))
       .toBe('&lt;script src=&quot;x.js&quot;&gt;alert(1)&amp;done&lt;/script&gt;');
   });
 });
 
 // --- formatBytes ---
 describe('formatBytes', () => {
-  it('returns "0 B" for 0', () => expect(S.formatBytes(0)).toBe('0 B'));
-  it('returns bytes for < 1024', () => expect(S.formatBytes(512)).toBe('512 B'));
-  it('returns KB for 1024', () => expect(S.formatBytes(1024)).toBe('1 KB'));
-  it('returns KB for values in KB range', () => expect(S.formatBytes(1536)).toBe('2 KB'));
-  it('returns MB for 1024*1024', () => expect(S.formatBytes(1024 * 1024)).toBe('1 MB'));
-  it('returns MB for values in MB range', () => expect(S.formatBytes(2 * 1024 * 1024)).toBe('2 MB'));
+  it('returns "0 B" for 0', () => expect(formatBytes(0)).toBe('0 B'));
+  it('returns bytes for < 1024', () => expect(formatBytes(512)).toBe('512 B'));
+  it('returns KB for 1024', () => expect(formatBytes(1024)).toBe('1 KB'));
+  it('returns KB for values in KB range', () => expect(formatBytes(1536)).toBe('2 KB'));
+  it('returns MB for 1024*1024', () => expect(formatBytes(1024 * 1024)).toBe('1 MB'));
+  it('returns MB for values in MB range', () => expect(formatBytes(2 * 1024 * 1024)).toBe('2 MB'));
 });
 
 // --- sortDirs ---
@@ -58,23 +56,23 @@ describe('sortDirs', () => {
   ];
 
   it('sorts by file count desc in "files" mode', () => {
-    const result = S.sortDirs(dirs, 'files');
+    const result = sortDirs(dirs, 'files');
     expect(result.map(d => d.name)).toEqual(['a', 'b', 'c']);
   });
 
   it('sorts alphabetically in "name" mode', () => {
-    const result = S.sortDirs(dirs, 'name');
+    const result = sortDirs(dirs, 'name');
     expect(result.map(d => d.name)).toEqual(['a', 'b', 'c']);
   });
 
   it('sorts by size desc in "size" mode', () => {
-    const result = S.sortDirs(dirs, 'size');
+    const result = sortDirs(dirs, 'size');
     expect(result.map(d => d.name)).toEqual(['c', 'b', 'a']);
   });
 
   it('does not mutate input', () => {
     const original = [...dirs];
-    S.sortDirs(dirs, 'files');
+    sortDirs(dirs, 'files');
     expect(dirs).toEqual(original);
   });
 });
@@ -88,20 +86,20 @@ describe('sortFiles', () => {
   ];
 
   it('sorts alphabetically', () => {
-    const result = S.sortFiles(files);
+    const result = sortFiles(files);
     expect(result.map(f => f.name)).toEqual(['alpha.ts', 'Middle.ts', 'zebra.ts']);
   });
 
   it('does not mutate input', () => {
     const original = [...files];
-    S.sortFiles(files);
+    sortFiles(files);
     expect(files).toEqual(original);
   });
 });
 
 // --- computeMaxMetric ---
 describe('computeMaxMetric', () => {
-  function makeNode(totalFiles, sizeBytes, children = []) {
+  function makeNode(totalFiles: number, sizeBytes: number, children: any[] = []) {
     return { totalFiles, sizeBytes, children };
   }
 
@@ -112,7 +110,7 @@ describe('computeMaxMetric', () => {
         makeNode(40, 400, []),
       ]),
     ];
-    expect(S.computeMaxMetric(roots, 'files')).toBe(60);
+    expect(computeMaxMetric(roots, 'files', false)).toBe(60);
   });
 
   it('returns max sizeBytes in size mode', () => {
@@ -122,7 +120,7 @@ describe('computeMaxMetric', () => {
         makeNode(40, 900, []),
       ]),
     ];
-    expect(S.computeMaxMetric(roots, 'size')).toBe(900);
+    expect(computeMaxMetric(roots, 'size', false)).toBe(900);
   });
 
   it('walks nested children', () => {
@@ -134,36 +132,36 @@ describe('computeMaxMetric', () => {
         ]),
       ]),
     ];
-    expect(S.computeMaxMetric(roots, 'files')).toBe(50);
+    expect(computeMaxMetric(roots, 'files', false)).toBe(50);
   });
 
   it('returns 1 when all children have 0 files', () => {
     const roots = [makeNode(0, 0, [makeNode(0, 0, [])])];
-    expect(S.computeMaxMetric(roots, 'files')).toBe(1);
+    expect(computeMaxMetric(roots, 'files', false)).toBe(1);
   });
 
   it('skips root nodes (they are always 100%)', () => {
     const roots = [makeNode(999, 99999, [makeNode(10, 100, [])])];
-    expect(S.computeMaxMetric(roots, 'files')).toBe(10);
+    expect(computeMaxMetric(roots, 'files', false)).toBe(10);
   });
 
   it('returns cached value for same roots/sortMode reference', () => {
     const roots = [makeNode(50, 500, [makeNode(20, 200, [])])];
-    const first = S.computeMaxMetric(roots, 'files');
+    const first = computeMaxMetric(roots, 'files', false);
     // Mutate a child — if caching works, result won't change
     roots[0].children[0].totalFiles = 999;
-    const second = S.computeMaxMetric(roots, 'files');
+    const second = computeMaxMetric(roots, 'files', false);
     expect(second).toBe(first);
   });
 });
 
 // --- groupEmptyDirs ---
 describe('groupEmptyDirs', () => {
-  function dir(name, totalFiles) { return { name, totalFiles, children: [] }; }
+  function dir(name: string, totalFiles: number) { return { name, totalFiles, children: [] }; }
 
   it('passes through non-empty dirs unchanged', () => {
     const input = [dir('a', 5), dir('b', 3)];
-    const result = S.groupEmptyDirs(input);
+    const result = groupEmptyDirs(input);
     expect(result).toEqual([
       { type: 'dir', node: input[0] },
       { type: 'dir', node: input[1] },
@@ -172,7 +170,7 @@ describe('groupEmptyDirs', () => {
 
   it('groups 2+ consecutive empty dirs', () => {
     const input = [dir('a', 0), dir('b', 0), dir('c', 5)];
-    const result = S.groupEmptyDirs(input);
+    const result = groupEmptyDirs(input);
     expect(result[0].type).toBe('emptyGroup');
     expect(result[0].nodes).toHaveLength(2);
     expect(result[1]).toEqual({ type: 'dir', node: input[2] });
@@ -180,34 +178,34 @@ describe('groupEmptyDirs', () => {
 
   it('does not group a single empty dir', () => {
     const input = [dir('a', 0), dir('b', 5)];
-    const result = S.groupEmptyDirs(input);
+    const result = groupEmptyDirs(input);
     expect(result[0]).toEqual({ type: 'dir', node: input[0] });
     expect(result[1]).toEqual({ type: 'dir', node: input[1] });
   });
 
   it('handles all empty dirs', () => {
     const input = [dir('a', 0), dir('b', 0), dir('c', 0)];
-    const result = S.groupEmptyDirs(input);
+    const result = groupEmptyDirs(input);
     expect(result).toHaveLength(1);
     expect(result[0].type).toBe('emptyGroup');
     expect(result[0].nodes).toHaveLength(3);
   });
 
   it('handles empty input', () => {
-    expect(S.groupEmptyDirs([])).toEqual([]);
+    expect(groupEmptyDirs([])).toEqual([]);
   });
 });
 
 // --- computeStats ---
 describe('computeStats', () => {
-  function makeRoot(stats, totalFiles) { return { stats, totalFiles }; }
+  function makeRoot(stats: any[], totalFiles: number) { return { stats, totalFiles }; }
 
   it('aggregates counts across roots', () => {
     const roots = [
       makeRoot([{ name: 'TypeScript', color: '#3178c6', count: 10 }], 10),
       makeRoot([{ name: 'TypeScript', color: '#3178c6', count: 5 }, { name: 'CSS', color: '#563d7c', count: 3 }], 8),
     ];
-    const result = S.computeStats(roots);
+    const result = computeStats(roots);
     const ts = result.find(r => r.name === 'TypeScript');
     expect(ts.count).toBe(15);
     const css = result.find(r => r.name === 'CSS');
@@ -221,19 +219,19 @@ describe('computeStats', () => {
         { name: 'B', color: '#bbb', count: 10 },
       ], 13),
     ];
-    const result = S.computeStats(roots);
+    const result = computeStats(roots);
     expect(result[0].name).toBe('B');
     expect(result[1].name).toBe('A');
   });
 
   it('computes percentage strings', () => {
     const roots = [makeRoot([{ name: 'JS', color: '#f1e05a', count: 1 }], 2)];
-    const result = S.computeStats(roots);
+    const result = computeStats(roots);
     expect(result[0].pct).toBe('50.0');
   });
 
   it('handles empty roots', () => {
-    expect(S.computeStats([])).toEqual([]);
+    expect(computeStats([])).toEqual([]);
   });
 });
 
@@ -248,7 +246,7 @@ describe('renderLegend', () => {
 
   it('shows raw counts by default', () => {
     const el = document.createElement('div');
-    S.renderLegend(el, makeStats(), new Set(), () => {});
+    renderLegend(el, makeStats(), new Set(), () => {}, false);
     const counts = el.querySelectorAll('.legend-count');
     expect(counts[0].textContent).toBe('3');
     expect(counts[1].textContent).toBe('1');
@@ -256,7 +254,7 @@ describe('renderLegend', () => {
 
   it('shows percentages when showPct is true', () => {
     const el = document.createElement('div');
-    S.renderLegend(el, makeStats(), new Set(), () => {}, true);
+    renderLegend(el, makeStats(), new Set(), () => {}, true);
     const counts = el.querySelectorAll('.legend-count');
     expect(counts[0].textContent).toBe('75.0%');
     expect(counts[1].textContent).toBe('25.0%');
@@ -264,7 +262,7 @@ describe('renderLegend', () => {
 
   it('shows raw counts when showPct is false', () => {
     const el = document.createElement('div');
-    S.renderLegend(el, makeStats(), new Set(), () => {}, false);
+    renderLegend(el, makeStats(), new Set(), () => {}, false);
     const counts = el.querySelectorAll('.legend-count');
     expect(counts[0].textContent).toBe('3');
     expect(counts[1].textContent).toBe('1');
@@ -273,11 +271,11 @@ describe('renderLegend', () => {
 
 // --- dir hover action buttons ---
 
-function makeDir(path, name, { children = [], files = [], totalFiles = 0, sizeBytes = 0, stats = [] } = {}) {
+function makeDir(path: string, name: string, { children = [], files = [], totalFiles = 0, sizeBytes = 0, stats = [] }: { children?: any[]; files?: any[]; totalFiles?: number; sizeBytes?: number; stats?: any[] } = {}) {
   return { path, name, children, files, totalFiles, sizeBytes, stats };
 }
 
-function makeRenderer(state, { onExpandChanged, onNavigate } = {}) {
+function makeRenderer(state: any, { onExpandChanged, onNavigate }: { onExpandChanged?: any; onNavigate?: any } = {}) {
   const vscode = { postMessage: vi.fn() };
   const rootEl = document.createElement('div');
   document.body.appendChild(rootEl);
@@ -285,14 +283,14 @@ function makeRenderer(state, { onExpandChanged, onNavigate } = {}) {
   tooltipEl.className = 'bar-tooltip';
   tooltipEl.style.display = 'none';
   document.body.appendChild(tooltipEl);
-  const renderer = S.createRenderer(state, {
+  const renderer = createRenderer(state, {
     vscode,
     root: rootEl,
     tooltip: tooltipEl,
     options: { skipDepthZeroGuides: false, barFactor: 0.4, barMaxWidth: 200, barFallbackWidth: 300 },
     onExpandChanged,
     onNavigate,
-  });
+  }) as any;
   // Expose rootEl and vscode so tests can append rendered elements and verify messages.
   renderer._rootEl = rootEl;
   renderer._vscode = vscode;
@@ -307,7 +305,7 @@ async function awaitRerender() {
 
 describe('dir hover action buttons', () => {
   it('expand button expands the dir itself and direct children when not all children are expanded', async () => {
-    const state = S.createState();
+    const state = createState();
     state.render = vi.fn();
     state.lastRoots = [];
 
@@ -339,7 +337,7 @@ describe('dir hover action buttons', () => {
   });
 
   it('expand button triggers recursive expand even when some children are leaves (no sub-dirs)', () => {
-    const state = S.createState();
+    const state = createState();
     state.render = vi.fn();
     state.lastRoots = [];
 
@@ -366,7 +364,7 @@ describe('dir hover action buttons', () => {
   });
 
   it('expand button recursively expands all descendants when all direct children are already expanded', async () => {
-    const state = S.createState();
+    const state = createState();
     state.render = vi.fn();
     state.lastRoots = [];
 
@@ -393,7 +391,7 @@ describe('dir hover action buttons', () => {
   });
 
   it('collapse button sets each direct child path to collapsed and calls render', async () => {
-    const state = S.createState();
+    const state = createState();
     state.render = vi.fn();
     state.lastRoots = [];
     state.expanded.set('/r', true);
@@ -420,7 +418,7 @@ describe('dir hover action buttons', () => {
   });
 
   it('collapse button does not collapse the dir itself when some children are expanded', () => {
-    const state = S.createState();
+    const state = createState();
     state.render = vi.fn();
     state.lastRoots = [];
     state.expanded.set('/r', true);
@@ -443,7 +441,7 @@ describe('dir hover action buttons', () => {
   });
 
   it('collapse button also collapses the dir itself when all children are already collapsed', () => {
-    const state = S.createState();
+    const state = createState();
     state.render = vi.fn();
     state.lastRoots = [];
     state.expanded.set('/r', true);
@@ -462,7 +460,7 @@ describe('dir hover action buttons', () => {
   });
 
   it('open-in-tab button posts openDirInTab message with directory path', () => {
-    const state = S.createState();
+    const state = createState();
     state.render = vi.fn();
     state.lastRoots = [];
 
@@ -477,7 +475,7 @@ describe('dir hover action buttons', () => {
     const tooltipEl = document.createElement('div');
     tooltipEl.style.display = 'none';
     document.body.appendChild(tooltipEl);
-    const renderer = S.createRenderer(state, {
+    const renderer = createRenderer(state, {
       vscode: { postMessage },
       root: rootEl,
       tooltip: tooltipEl,
@@ -496,7 +494,7 @@ describe('dir hover action buttons', () => {
   });
 
   it('shows all three buttons when dir has child dirs', () => {
-    const state = S.createState();
+    const state = createState();
     state.render = () => {};
     state.lastRoots = [];
 
@@ -518,7 +516,7 @@ describe('dir hover action buttons', () => {
   });
 
   it('shows only open-in-tab button when dir has no child dirs', () => {
-    const state = S.createState();
+    const state = createState();
     state.render = () => {};
     state.lastRoots = [];
 
@@ -540,7 +538,7 @@ describe('dir hover action buttons', () => {
   it('expand button does not trigger row click (stopPropagation)', () => {
     // The row's own click handler toggles the current dir's expansion.
     // Clicking the expand-children button should NOT toggle the current dir.
-    const state = S.createState();
+    const state = createState();
     state.render = vi.fn();
     state.lastRoots = [];
     // Pre-mark parent as expanded
@@ -565,7 +563,7 @@ describe('dir hover action buttons', () => {
   it('expand children on a dir whose child compacts sets the compacted path', () => {
     // P has child A; A has one child B and no files → A compacts to B.
     // Expanding P's children should expand A/B (the compacted displayNode), not just A.
-    const state = S.createState();
+    const state = createState();
     state.render = vi.fn();
     state.lastRoots = [];
 
@@ -613,8 +611,8 @@ describe('tieredExpandAll', () => {
 
   it('tier 1: expands top-level items when none are expanded', () => {
     const { ws } = makeWorkspace();
-    const state = S.createState();
-    S.tieredExpandAll(state, [ws]);
+    const state = createState();
+    tieredExpandAll(state, [ws]);
     expect(state.expanded.get('/ws/a')).toBe(true);
     expect(state.expanded.get('/ws/b')).toBe(true);
     // 2nd-level should NOT be expanded
@@ -624,9 +622,9 @@ describe('tieredExpandAll', () => {
 
   it('tier 1: expands all top-level items even when only some are expanded', () => {
     const { ws } = makeWorkspace();
-    const state = S.createState();
+    const state = createState();
     state.expanded.set('/ws/a', true); // a expanded, b not
-    S.tieredExpandAll(state, [ws]);
+    tieredExpandAll(state, [ws]);
     expect(state.expanded.get('/ws/a')).toBe(true);
     expect(state.expanded.get('/ws/b')).toBe(true);
     // 2nd-level should NOT be expanded (still tier 1)
@@ -641,9 +639,9 @@ describe('tieredExpandAll', () => {
     const a2 = makeDir('/ws/a/a2', 'a2', { totalFiles: 1 }); // leaf
     const a = makeDir('/ws/a', 'a', { children: [a1, a2], totalFiles: 3 });
     const ws = makeDir('/ws', 'ws', { children: [a], totalFiles: 3 });
-    const state = S.createState();
+    const state = createState();
     state.expanded.set('/ws/a', true); // top-level expanded → tier 2
-    S.tieredExpandAll(state, [ws]);
+    tieredExpandAll(state, [ws]);
     // Tier 2: walkExpand — all descendants should now be expanded
     expect(state.expanded.get('/ws/a/a1')).toBe(true);
     expect(state.expanded.get('/ws/a/a1/x')).toBe(true);
@@ -663,10 +661,10 @@ describe('tieredExpandAll', () => {
     const a = makeDir('/ws/a', 'a', { children: [a1, a2], totalFiles: 4 });
     const b = makeDir('/ws/b', 'b', { totalFiles: 1 }); // leaf
     const ws = makeDir('/ws', 'ws', { children: [a, b], totalFiles: 5 });
-    const state = S.createState();
+    const state = createState();
     state.expanded.set('/ws/a', true); // a expanded (2 children → path stays '/ws/a')
     // b is leaf → counts as expanded → allTopExpanded = true → tier 2 fires
-    S.tieredExpandAll(state, [ws]);
+    tieredExpandAll(state, [ws]);
     // Tier 2: walkExpand — all descendants recursively expanded
     expect(state.expanded.get('/ws/a/a1')).toBe(true);
     expect(state.expanded.get('/ws/a/a2')).toBe(true);
@@ -680,8 +678,8 @@ describe('tieredExpandAll', () => {
     const ws1 = makeDir('/ws1', 'ws1', { children: [a1, a2], totalFiles: 2 });
     const b1 = makeDir('/ws2/c', 'c', { totalFiles: 1 });
     const ws2 = makeDir('/ws2', 'ws2', { children: [b1], totalFiles: 1 });
-    const state = S.createState();
-    S.tieredExpandAll(state, [ws1, ws2]);
+    const state = createState();
+    tieredExpandAll(state, [ws1, ws2]);
     // Leaves — none have children — tier 1 has nothing to expand since all are leaves
     // (leaves count as already expanded in tier checks, so tier 2 fires but is a no-op)
     // No errors thrown
@@ -708,30 +706,30 @@ describe('tieredCollapseAll', () => {
 
   it('tier 3 (no-op): does nothing when no top-level items are expanded', () => {
     const { ws } = makeWorkspace();
-    const state = S.createState();
-    S.tieredCollapseAll(state, [ws]);
+    const state = createState();
+    tieredCollapseAll(state, [ws]);
     expect(state.expanded.get('/ws/a/ax')).toBeFalsy();
     expect(state.expanded.get('/ws/b')).toBeFalsy();
   });
 
   it('tier 2: collapses all top-level items when none have expanded descendants', () => {
     const { ws } = makeWorkspace();
-    const state = S.createState();
+    const state = createState();
     // a compacts to ax → compacted path = '/ws/a/ax'
     // b has 2 children → NOT compacted, path = '/ws/b'
     state.expanded.set('/ws/a/ax', true);
     state.expanded.set('/ws/b', true);
-    S.tieredCollapseAll(state, [ws]);
+    tieredCollapseAll(state, [ws]);
     expect(state.expanded.get('/ws/a/ax')).toBe(false);
     expect(state.expanded.get('/ws/b')).toBe(false);
   });
 
   it('tier 1: collapses deeper descendants only, keeping top-level items open', () => {
     const { ws } = makeWorkspace();
-    const state = S.createState();
+    const state = createState();
     state.expanded.set('/ws/a/ax', true);       // top-level (a compacted to ax)
     state.expanded.set('/ws/a/ax/deep', true);  // deeper descendant (child of ax)
-    S.tieredCollapseAll(state, [ws]);
+    tieredCollapseAll(state, [ws]);
     // Top-level (/ws/a/ax) should stay open
     expect(state.expanded.get('/ws/a/ax')).toBe(true);
     // Deeper node should be collapsed
@@ -740,11 +738,11 @@ describe('tieredCollapseAll', () => {
 
   it('tier 1 applies when any top-level item has a deeper descendant', () => {
     const { ws } = makeWorkspace();
-    const state = S.createState();
+    const state = createState();
     state.expanded.set('/ws/a/ax', true);       // a → ax (compacted)
     state.expanded.set('/ws/b', true);          // b expanded, no deeper descendants
     state.expanded.set('/ws/a/ax/deep', true);  // deeper under a
-    S.tieredCollapseAll(state, [ws]);
+    tieredCollapseAll(state, [ws]);
     // Both top-level items stay open (tier 1 preserves them)
     expect(state.expanded.get('/ws/a/ax')).toBe(true);
     expect(state.expanded.get('/ws/b')).toBe(true);
@@ -757,10 +755,10 @@ describe('tieredCollapseAll', () => {
     const ws1 = makeDir('/ws1', 'ws1', { children: [a], totalFiles: 1 });
     const b = makeDir('/ws2/b', 'b', { totalFiles: 1 });
     const ws2 = makeDir('/ws2', 'ws2', { children: [b], totalFiles: 1 });
-    const state = S.createState();
+    const state = createState();
     state.expanded.set('/ws1/a', true);
     state.expanded.set('/ws2/b', true);
-    S.tieredCollapseAll(state, [ws1, ws2]);
+    tieredCollapseAll(state, [ws1, ws2]);
     expect(state.expanded.get('/ws1/a')).toBe(false);
     expect(state.expanded.get('/ws2/b')).toBe(false);
   });
@@ -768,7 +766,7 @@ describe('tieredCollapseAll', () => {
 
 // ── patchTreeChildren / patchDirLi ───────────────────────────────────────────
 
-function makeLi(path, barWidth, countText, childPaths = []) {
+function makeLi(path: string, barWidth: number, countText: string, childPaths: string[] = []) {
   const li = document.createElement('li');
   li.dataset.nodePath = path;
 
@@ -802,7 +800,7 @@ function makeLi(path, barWidth, countText, childPaths = []) {
   return li;
 }
 
-function makeTree(items) {
+function makeTree(items: [string, number, number, string[]?][]) {
   const ul = document.createElement('ul');
   ul.className = 'tree';
   for (const [path, barWidth, count, children] of items) {
@@ -838,7 +836,7 @@ describe('patchTreeChildren', () => {
     newTree.appendChild(newFile1);
     newTree.appendChild(newFile2);
 
-    S.patchTreeChildren(oldTree, newTree);
+    patchTreeChildren(oldTree, newTree);
 
     // Must have exactly 3 children, not 5 (which would indicate duplication)
     expect(oldTree.children.length).toBe(3);
@@ -852,7 +850,7 @@ describe('patchTreeChildren', () => {
     container.appendChild(oldTree);
 
     const newTree = makeTree([['/a', 80, '8']]);
-    S.patchTreeChildren(oldTree, newTree);
+    patchTreeChildren(oldTree, newTree);
 
     const li = oldTree.querySelector('[data-node-path="/a"]');
     expect(li).toBeTruthy();
@@ -866,7 +864,7 @@ describe('patchTreeChildren', () => {
     container.appendChild(oldTree);
 
     const newTree = makeTree([['/a', 50, '5'], ['/b', 30, '3']]);
-    S.patchTreeChildren(oldTree, newTree);
+    patchTreeChildren(oldTree, newTree);
 
     expect(oldTree.querySelectorAll('[data-node-path]')).toHaveLength(2);
     expect(oldTree.querySelector('[data-node-path="/b"]')).toBeTruthy();
@@ -878,7 +876,7 @@ describe('patchTreeChildren', () => {
     container.appendChild(oldTree);
 
     const newTree = makeTree([['/a', 50, '5']]);
-    S.patchTreeChildren(oldTree, newTree);
+    patchTreeChildren(oldTree, newTree);
 
     expect(oldTree.querySelectorAll('[data-node-path]')).toHaveLength(1);
     expect(oldTree.querySelector('[data-node-path="/b"]')).toBeNull();
@@ -891,7 +889,7 @@ describe('patchTreeChildren', () => {
     const originalLi = oldTree.querySelector('[data-node-path="/a"]');
 
     const newTree = makeTree([['/a', 60, '6']]);
-    S.patchTreeChildren(oldTree, newTree);
+    patchTreeChildren(oldTree, newTree);
 
     const patchedLi = oldTree.querySelector('[data-node-path="/a"]');
     expect(patchedLi).toBe(originalLi); // same DOM node — not replaced
@@ -903,7 +901,7 @@ describe('patchTreeChildren', () => {
     container.appendChild(oldTree);
 
     const newTree = makeTree([['/a', 60, '6', ['/a/x', '/a/y']]]);
-    S.patchTreeChildren(oldTree, newTree);
+    patchTreeChildren(oldTree, newTree);
 
     const childUl = oldTree.querySelector('[data-node-path="/a"] > ul.children');
     expect(childUl).toBeTruthy();
@@ -916,7 +914,7 @@ describe('patchTreeChildren', () => {
     container.appendChild(oldTree);
 
     const newTree = makeTree([['/a', 40, '4']]); // now has files
-    S.patchTreeChildren(oldTree, newTree);
+    patchTreeChildren(oldTree, newTree);
 
     const li = oldTree.querySelector('[data-node-path="/a"]');
     expect(li.querySelector('.bar-wrap')).toBeTruthy();
@@ -929,7 +927,7 @@ describe('patchTreeChildren', () => {
     container.appendChild(oldTree);
 
     const newTree = makeTree([['/a', 0, '—']]); // no bar
-    S.patchTreeChildren(oldTree, newTree);
+    patchTreeChildren(oldTree, newTree);
 
     const li = oldTree.querySelector('[data-node-path="/a"]');
     expect(li.querySelector('.bar-wrap')).toBeNull();
@@ -946,7 +944,7 @@ describe('delegated click handler', () => {
 
   describe('data-action attributes', () => {
     it('renderTruncatedRow has data-action="expandTruncated" and data-dir-path', () => {
-      const state = S.createState();
+      const state = createState();
       const renderer = makeRenderer(state);
       const hiddenFiles = [
         { name: 'a.js', path: '/d/a.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 100 },
@@ -958,7 +956,7 @@ describe('delegated click handler', () => {
     });
 
     it('renderEmptyGroupNode has data-action="expandEmptyGroup" and data-group-key', () => {
-      const state = S.createState();
+      const state = createState();
       const renderer = makeRenderer(state);
       const nodes = [makeDir('/r/empty1', 'empty1'), makeDir('/r/empty2', 'empty2')];
       const li = renderer.renderEmptyGroupNode(nodes, 0, 10, []);
@@ -968,7 +966,7 @@ describe('delegated click handler', () => {
     });
 
     it('renderFileNode has data-action="openFile" and data-path when no search matches', () => {
-      const state = S.createState();
+      const state = createState();
       const renderer = makeRenderer(state);
       const li = renderer.renderFileNode(
         { name: 'foo.js', path: '/r/foo.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 42 },
@@ -980,7 +978,7 @@ describe('delegated click handler', () => {
     });
 
     it('indent guides have data-action="collapseGuide" and data-guide-path', () => {
-      const state = S.createState();
+      const state = createState();
       const renderer = makeRenderer(state);
       const ancestor = { path: '/r' };
       const li = renderer.renderFileNode(
@@ -997,7 +995,7 @@ describe('delegated click handler', () => {
 
   describe('renderTruncatedRow bar segment weights', () => {
     it('uses file count for segment widths when sort mode is "files"', () => {
-      const state = S.createState();
+      const state = createState();
       state.currentSortMode = 'files';
       const renderer = makeRenderer(state);
       // JS: 3 files, 100 bytes each; CSS: 1 file, 900 bytes
@@ -1015,7 +1013,7 @@ describe('delegated click handler', () => {
     });
 
     it('uses byte size for segment widths when sort mode is "size"', () => {
-      const state = S.createState();
+      const state = createState();
       state.currentSortMode = 'size';
       const renderer = makeRenderer(state);
       // JS: 3 files, 100 bytes each (300 total); CSS: 1 file, 900 bytes
@@ -1033,7 +1031,7 @@ describe('delegated click handler', () => {
     });
 
     it('sorts langs by size descending when sort mode is "size"', () => {
-      const state = S.createState();
+      const state = createState();
       state.currentSortMode = 'size';
       const renderer = makeRenderer(state);
       const hiddenFiles = [
@@ -1052,7 +1050,7 @@ describe('delegated click handler', () => {
 
   describe('openFile action', () => {
     it('clicking a file row posts openFile message', () => {
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       const renderer = makeRenderer(state);
@@ -1069,7 +1067,7 @@ describe('delegated click handler', () => {
     });
 
     it('clicking a file row does not toggle the parent dir', () => {
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       const renderer = makeRenderer(state);
@@ -1091,7 +1089,7 @@ describe('delegated click handler', () => {
 
   describe('collapseGuide action', () => {
     it('clicking an indent guide collapses the ancestor dir and rerenders', async () => {
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       const renderer = makeRenderer(state);
@@ -1119,7 +1117,7 @@ describe('delegated click handler', () => {
     });
 
     it('clicking an indent guide does nothing when filters are active', () => {
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       state.activeFilters.add('JavaScript');
@@ -1148,7 +1146,7 @@ describe('delegated click handler', () => {
 
   describe('dir row toggle', () => {
     it('clicking a dir row toggles chevron and children visibility without rerender', () => {
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       const renderer = makeRenderer(state);
@@ -1176,7 +1174,7 @@ describe('delegated click handler', () => {
     });
 
     it('clicking a dir row fires onExpandChanged callback', () => {
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       const onExpandChanged = vi.fn();
@@ -1196,7 +1194,7 @@ describe('delegated click handler', () => {
     });
 
     it('does not toggle leaf dirs (no children)', () => {
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       const renderer = makeRenderer(state);
@@ -1222,7 +1220,7 @@ describe('delegated click handler', () => {
       // the rebuilt dir-row loses hover state so its action buttons become display:none.
       // The second click of a double-click then lands on the dir-row and would undo the
       // action. We guard against this by ignoring clicks with e.detail >= 2.
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       const renderer = makeRenderer(state);
@@ -1248,7 +1246,7 @@ describe('delegated click handler', () => {
 
   describe('collapse resets truncation', () => {
     it('collapsing a dir with truncation expanded clears truncation and rerenders', async () => {
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       state.truncateThreshold = 2;
@@ -1281,7 +1279,7 @@ describe('delegated click handler', () => {
 
   describe('expandTruncated action', () => {
     it('clicking a truncated row updates state and rerenders', async () => {
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       state.truncateThreshold = 2;
@@ -1318,7 +1316,7 @@ describe('delegated click handler', () => {
     });
 
     it('clicking a truncated row does not toggle the parent dir', async () => {
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       state.truncateThreshold = 2;
@@ -1344,7 +1342,7 @@ describe('delegated click handler', () => {
     });
 
     it('rerender after expansion shows all files and removes truncated row', () => {
-      const state = S.createState();
+      const state = createState();
       state.truncateThreshold = 2;
       const renderer = makeRenderer(state);
       const files = [
@@ -1380,7 +1378,7 @@ describe('delegated click handler', () => {
     it('works with empty-string dirPath (root-level truncated row)', async () => {
       // Root-level DirNodes have path: '' (empty string). The handler must not
       // treat '' as falsy — this is the regression that caused the original bug.
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       state.truncateThreshold = 2;
@@ -1405,7 +1403,7 @@ describe('delegated click handler', () => {
 
   describe('expandEmptyGroup action', () => {
     it('clicking an empty group row updates state and rerenders', async () => {
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       const renderer = makeRenderer(state);
@@ -1430,7 +1428,7 @@ describe('delegated click handler', () => {
     });
 
     it('clicking an empty group row does not toggle the parent dir', async () => {
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       const renderer = makeRenderer(state);
@@ -1450,7 +1448,7 @@ describe('delegated click handler', () => {
     });
 
     it('rerender after expansion shows individual dirs instead of group row', () => {
-      const state = S.createState();
+      const state = createState();
       const renderer = makeRenderer(state);
       const empty1 = makeDir('/r/empty1', 'empty1');
       const empty2 = makeDir('/r/empty2', 'empty2');
@@ -1474,7 +1472,7 @@ describe('delegated click handler', () => {
     });
 
     it('works with empty-string groupKey (root-level empty group)', async () => {
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       const renderer = makeRenderer(state);
@@ -1495,7 +1493,7 @@ describe('delegated click handler', () => {
 
   describe('render-patch-click cycle', () => {
     it('truncated row click works correctly after patchTreeChildren moves it', async () => {
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       state.truncateThreshold = 2;
@@ -1523,7 +1521,7 @@ describe('delegated click handler', () => {
       const newTree = document.createElement('ul');
       newTree.className = 'tree';
       newTree.appendChild(renderer.renderDirNode(root, 0, 3, [], 300));
-      S.patchTreeChildren(oldTree, newTree);
+      patchTreeChildren(oldTree, newTree);
 
       // Now click the truncated row in the patched tree
       const truncRow = oldTree.querySelector('.truncated-row');
@@ -1540,10 +1538,10 @@ describe('delegated click handler', () => {
   describe('lazy child rendering', () => {
     // Build a tree that won't compact: root has two children (prevents single-child compaction).
     // Each child has files so hasChildren is true.
-    const jsFile = (dir, name) => ({ name, path: `${dir}/${name}`, langName: 'JS', langColor: '#f1e05a', sizeBytes: 100 });
+    const jsFile = (dir: string, name: string) => ({ name, path: `${dir}/${name}`, langName: 'JS', langColor: '#f1e05a', sizeBytes: 100 });
 
     it('collapsed dir produces an empty children UL', () => {
-      const state = S.createState();
+      const state = createState();
       const childA = makeDir('/r/a', 'a', { files: [jsFile('/r/a', 'x.js')], totalFiles: 1, stats: [] });
       const childB = makeDir('/r/b', 'b', { files: [jsFile('/r/b', 'y.js')], totalFiles: 1, stats: [] });
       const root = makeDir('/r', 'r', { children: [childA, childB], totalFiles: 2, stats: [] });
@@ -1563,7 +1561,7 @@ describe('delegated click handler', () => {
     });
 
     it('expanded dir populates children normally', () => {
-      const state = S.createState();
+      const state = createState();
       const childA = makeDir('/r/a', 'a', { files: [jsFile('/r/a', 'x.js')], totalFiles: 1, stats: [] });
       const childB = makeDir('/r/b', 'b', { files: [jsFile('/r/b', 'y.js')], totalFiles: 1, stats: [] });
       const root = makeDir('/r', 'r', { children: [childA, childB], totalFiles: 2, stats: [] });
@@ -1582,7 +1580,7 @@ describe('delegated click handler', () => {
     });
 
     it('clicking a collapsed dir with empty children triggers rerender', async () => {
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       const childA = makeDir('/r/a', 'a', { files: [jsFile('/r/a', 'x.js')], totalFiles: 1, stats: [] });
@@ -1608,7 +1606,7 @@ describe('delegated click handler', () => {
     });
 
     it('clicking an expanded dir with populated children does CSS-only toggle (no rerender)', () => {
-      const state = S.createState();
+      const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       const childA = makeDir('/r/a', 'a', { files: [jsFile('/r/a', 'x.js')], totalFiles: 1, stats: [] });
@@ -1635,7 +1633,7 @@ describe('delegated click handler', () => {
     });
 
     it('patch cycle with collapsed dirs preserves expanded state of other dirs', () => {
-      const state = S.createState();
+      const state = createState();
       const gcA = makeDir('/r/a/x', 'x', { files: [jsFile('/r/a/x', 'f.js')], totalFiles: 1, stats: [] });
       const gcB = makeDir('/r/b/y', 'y', { files: [jsFile('/r/b/y', 'g.js')], totalFiles: 1, stats: [] });
       const childA = makeDir('/r/a', 'a', { children: [gcA], totalFiles: 1, stats: [] });
@@ -1672,7 +1670,7 @@ describe('delegated click handler', () => {
       const newTree = document.createElement('ul');
       newTree.className = 'tree';
       newTree.appendChild(renderer.renderDirNode(root, 0, 10, [], 300));
-      S.patchTreeChildren(oldTree, newTree);
+      patchTreeChildren(oldTree, newTree);
 
       // State should be preserved
       expect(state.expanded.get('/r/a/x')).toBe(true);
@@ -1685,7 +1683,7 @@ describe('delegated click handler', () => {
 
 describe('dirMatchesSearch', () => {
   it('returns true when searchResults is null', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     renderer.beforeRender();
     const node = makeDir('/a', 'a', { files: [{ path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
@@ -1693,7 +1691,7 @@ describe('dirMatchesSearch', () => {
   });
 
   it('returns true when a direct file is in searchResults', () => {
-    const state = S.createState();
+    const state = createState();
     state.searchResults = new Map([['/a/foo.ts', []]]);
     const renderer = makeRenderer(state);
     renderer.beforeRender();
@@ -1702,7 +1700,7 @@ describe('dirMatchesSearch', () => {
   });
 
   it('returns false when no file matches', () => {
-    const state = S.createState();
+    const state = createState();
     state.searchResults = new Map([['/other/file.ts', []]]);
     const renderer = makeRenderer(state);
     renderer.beforeRender();
@@ -1711,7 +1709,7 @@ describe('dirMatchesSearch', () => {
   });
 
   it('returns true when a descendant file matches', () => {
-    const state = S.createState();
+    const state = createState();
     state.searchResults = new Map([['/a/b/nested.ts', []]]);
     const renderer = makeRenderer(state);
     renderer.beforeRender();
@@ -1721,7 +1719,7 @@ describe('dirMatchesSearch', () => {
   });
 
   it('caches results: returns same value on repeated calls', () => {
-    const state = S.createState();
+    const state = createState();
     state.searchResults = new Map([['/a/foo.ts', []]]);
     const renderer = makeRenderer(state);
     renderer.beforeRender();
@@ -1731,7 +1729,7 @@ describe('dirMatchesSearch', () => {
   });
 
   it('cache is reset by beforeRender', () => {
-    const state = S.createState();
+    const state = createState();
     state.searchResults = new Map([['/a/foo.ts', []]]);
     const renderer = makeRenderer(state);
     renderer.beforeRender();
@@ -1745,7 +1743,7 @@ describe('dirMatchesSearch', () => {
   });
 
   it('ignores activeFilters when they are empty (existing behavior preserved)', () => {
-    const state = S.createState();
+    const state = createState();
     state.searchResults = new Map([['/a/foo.ts', []]]);
     // No active filters — should behave as before
     const renderer = makeRenderer(state);
@@ -1755,7 +1753,7 @@ describe('dirMatchesSearch', () => {
   });
 
   it('returns false when file matches search but not active language filter', () => {
-    const state = S.createState();
+    const state = createState();
     state.searchResults = new Map([['/a/foo.ts', []]]);
     state.activeFilters = new Set(['YAML']);
     const renderer = makeRenderer(state);
@@ -1766,7 +1764,7 @@ describe('dirMatchesSearch', () => {
   });
 
   it('returns true when file matches both search and active language filter', () => {
-    const state = S.createState();
+    const state = createState();
     state.searchResults = new Map([['/a/config.yaml', []]]);
     state.activeFilters = new Set(['YAML']);
     const renderer = makeRenderer(state);
@@ -1776,7 +1774,7 @@ describe('dirMatchesSearch', () => {
   });
 
   it('returns false for the exact bug scenario: dir has YAML (matches filter, not search) + TypeScript (in search, not filter)', () => {
-    const state = S.createState();
+    const state = createState();
     // Search found a TypeScript file; filter wants only YAML
     state.searchResults = new Map([['/a/app.ts', []]]);
     state.activeFilters = new Set(['YAML']);
@@ -1797,7 +1795,7 @@ describe('dirMatchesSearch', () => {
 
 describe('renderMatchLine', () => {
   it('renders line number and text', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     renderer.beforeRender();
     const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
@@ -1815,7 +1813,7 @@ describe('renderMatchLine', () => {
   });
 
   it('renders text without highlight when matchLength is 0', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     renderer.beforeRender();
     const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
@@ -1826,7 +1824,7 @@ describe('renderMatchLine', () => {
   });
 
   it('clicking openFileAtLine posts openFile with line number', () => {
-    const state = S.createState();
+    const state = createState();
     state.lastRoots = [];
     const renderer = makeRenderer(state);
     renderer.beforeRender();
@@ -1839,7 +1837,7 @@ describe('renderMatchLine', () => {
   });
 
   it('uses highlightedHtml when present (sets innerHTML)', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     renderer.beforeRender();
     const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
@@ -1860,7 +1858,7 @@ describe('renderMatchLine', () => {
   });
 
   it('falls back to plain text when highlightedHtml is absent', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     renderer.beforeRender();
     const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
@@ -1872,7 +1870,7 @@ describe('renderMatchLine', () => {
   });
 
   it('highlightedHtml takes precedence over lineText when both present', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     renderer.beforeRender();
     const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
@@ -1892,7 +1890,7 @@ describe('renderMatchLine', () => {
   });
 
   it('sets data-node-path for DOM patching', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     renderer.beforeRender();
     const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
@@ -1902,7 +1900,7 @@ describe('renderMatchLine', () => {
   });
 
   it('merges multiple same-line matches into a single row with all highlights', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     renderer.beforeRender();
     const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
@@ -1920,7 +1918,7 @@ describe('renderMatchLine', () => {
   });
 
   it('renderFileMatches groups same-line matches into one row', () => {
-    const state = S.createState();
+    const state = createState();
     state.searchResults = new Map([
       ['/a/foo.ts', [
         { line: 5, column: 0, matchLength: 3, lineText: 'foo bar foo' },
@@ -1943,7 +1941,7 @@ describe('renderMatchLine', () => {
 
 describe('renderMoreMatchesRow', () => {
   it('renders the count label', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     renderer.beforeRender();
     const li = renderer.renderMoreMatchesRow(3, 1, []);
@@ -1951,7 +1949,7 @@ describe('renderMoreMatchesRow', () => {
   });
 
   it('uses singular form for count=1', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     renderer.beforeRender();
     const li = renderer.renderMoreMatchesRow(1, 1, []);
@@ -1959,7 +1957,7 @@ describe('renderMoreMatchesRow', () => {
   });
 
   it('sets data-node-path when filePath is provided', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     renderer.beforeRender();
     const li = renderer.renderMoreMatchesRow(3, 1, [], '/a/foo.ts');
@@ -1970,12 +1968,12 @@ describe('renderMoreMatchesRow', () => {
 // --- search: rendering integration ---
 
 describe('search rendering integration', () => {
-  function makeFile(path, name = null) {
+  function makeFile(path: string, name: string | null = null) {
     return { path, name: name || path.split('/').pop(), langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
   }
 
   it('renders match lines under matched files', () => {
-    const state = S.createState();
+    const state = createState();
     state.searchResults = new Map([
       ['/r/foo.ts', [{ line: 5, column: 0, matchLength: 3, lineText: 'abc def' }]],
     ]);
@@ -1992,7 +1990,7 @@ describe('search rendering integration', () => {
   });
 
   it('does not render match lines for filename-only results (empty matches array)', () => {
-    const state = S.createState();
+    const state = createState();
     state.searchResults = new Map([['/r/foo.ts', []]]);
     state.render = vi.fn();
     state.lastRoots = [];
@@ -2005,7 +2003,7 @@ describe('search rendering integration', () => {
   });
 
   it('hides files not in searchResults', () => {
-    const state = S.createState();
+    const state = createState();
     state.searchResults = new Map([['/r/match.ts', []]]);
     state.render = vi.fn();
     state.lastRoots = [];
@@ -2021,7 +2019,7 @@ describe('search rendering integration', () => {
   });
 
   it('auto-expands directories when searchResults is set', () => {
-    const state = S.createState();
+    const state = createState();
     state.searchResults = new Map([['/r/sub/file.ts', []]]);
     state.render = vi.fn();
     state.lastRoots = [];
@@ -2039,7 +2037,7 @@ describe('search rendering integration', () => {
   });
 
   it('disables file truncation when search is active', () => {
-    const state = S.createState();
+    const state = createState();
     state.truncateThreshold = 2;
     state.searchResults = new Map([
       ['/r/a.ts', []],
@@ -2059,7 +2057,7 @@ describe('search rendering integration', () => {
   });
 
   it('caps match lines at truncateThreshold per file and shows more-matches row', () => {
-    const state = S.createState();
+    const state = createState();
     state.truncateThreshold = 4; // default
     const matches = [1, 2, 3, 4, 5, 6, 7].map(line => ({ line, column: 0, matchLength: 1, lineText: 'x' }));
     state.searchResults = new Map([['/r/foo.ts', matches]]);
@@ -2088,13 +2086,13 @@ describe('search rendering integration', () => {
 
 describe('createMessageHandler search messages', () => {
   function makeHandlerEnv() {
-    const state = S.createState();
+    const state = createState();
     const scanBar = { show: vi.fn() };
     const rootEl = document.createElement('div');
     document.body.appendChild(rootEl);
-    state.render = vi.fn((roots) => { state.lastRoots = roots; });
+    state.render = vi.fn((roots: any) => { state.lastRoots = roots; });
     state.lastRoots = [makeDir('/ws', 'ws', {})];
-    const handler = S.createMessageHandler(state, scanBar, rootEl, { render: state.render });
+    const handler: any = createMessageHandler(state, scanBar as any, rootEl, { render: state.render } as any);
     return { state, scanBar, rootEl, handler };
   }
 
@@ -2211,7 +2209,7 @@ describe('createMessageHandler search messages', () => {
 // --- expandMatchedDirs ---
 describe('expandMatchedDirs', () => {
   it('expands only directories that contain matching files', () => {
-    const state = S.createState();
+    const state = createState();
     const roots = [
       makeDir('/ws', 'ws', {
         children: [
@@ -2225,7 +2223,7 @@ describe('expandMatchedDirs', () => {
       }),
     ];
     const searchResults = new Map([['/ws/src/a.ts', []]]);
-    S.expandMatchedDirs(state, roots, searchResults, new Set());
+    expandMatchedDirs(state, roots, searchResults, new Set());
 
     // /ws/src should be expanded (contains match), /ws/docs should not
     expect(state.expanded.get('/ws/src')).toBe(true);
@@ -2235,7 +2233,7 @@ describe('expandMatchedDirs', () => {
   });
 
   it('respects active language filters', () => {
-    const state = S.createState();
+    const state = createState();
     const roots = [
       makeDir('/ws', 'ws', {
         children: [
@@ -2250,14 +2248,14 @@ describe('expandMatchedDirs', () => {
     ];
     const searchResults = new Map([['/ws/src/a.ts', []], ['/ws/src/b.js', []]]);
     // Only JavaScript is in the active filter
-    S.expandMatchedDirs(state, roots, searchResults, new Set(['JavaScript']));
+    expandMatchedDirs(state, roots, searchResults, new Set(['JavaScript']));
 
     // Dir should still be expanded because b.js matches filter + search
     expect(state.expanded.get('/ws/src')).toBe(true);
   });
 
   it('does not expand dirs when no files match filter', () => {
-    const state = S.createState();
+    const state = createState();
     const roots = [
       makeDir('/ws', 'ws', {
         children: [
@@ -2269,7 +2267,7 @@ describe('expandMatchedDirs', () => {
     ];
     const searchResults = new Map([['/ws/src/a.ts', []]]);
     // Filter for JavaScript only — a.ts (TypeScript) doesn't pass
-    S.expandMatchedDirs(state, roots, searchResults, new Set(['JavaScript']));
+    expandMatchedDirs(state, roots, searchResults, new Set(['JavaScript']));
 
     expect(state.expanded.has('/ws/src')).toBe(false);
   });
@@ -2278,7 +2276,7 @@ describe('expandMatchedDirs', () => {
 // --- expandBatchFiles ---
 describe('expandBatchFiles', () => {
   it('expands dirs for new batch files without clearing prior expand state', () => {
-    const state = S.createState();
+    const state = createState();
     state.expanded.set('/ws/other', true); // pre-existing expand from another source
     const roots = [
       makeDir('/ws', 'ws', {
@@ -2289,7 +2287,7 @@ describe('expandBatchFiles', () => {
         ],
       }),
     ];
-    S.expandBatchFiles(state, roots, new Set(['/ws/src/a.ts']));
+    expandBatchFiles(state, roots, new Set(['/ws/src/a.ts']));
     // New match dir is expanded.
     expect(state.expanded.get('/ws/src')).toBe(true);
     // Pre-existing expand state is preserved (not cleared).
@@ -2297,7 +2295,7 @@ describe('expandBatchFiles', () => {
   });
 
   it('respects active language filters', () => {
-    const state = S.createState();
+    const state = createState();
     state.activeFilters = new Set(['JavaScript']);
     const roots = [
       makeDir('/ws', 'ws', {
@@ -2309,12 +2307,12 @@ describe('expandBatchFiles', () => {
       }),
     ];
     // TypeScript file is in batch but filter only allows JavaScript — should not expand.
-    S.expandBatchFiles(state, roots, new Set(['/ws/src/a.ts']));
+    expandBatchFiles(state, roots, new Set(['/ws/src/a.ts']));
     expect(state.expanded.has('/ws/src')).toBe(false);
   });
 
   it('accumulates expand state across multiple batch calls', () => {
-    const state = S.createState();
+    const state = createState();
     const roots = [
       makeDir('/ws', 'ws', {
         children: [
@@ -2328,11 +2326,11 @@ describe('expandBatchFiles', () => {
       }),
     ];
     // First batch expands /ws/src.
-    S.expandBatchFiles(state, roots, new Set(['/ws/src/a.ts']));
+    expandBatchFiles(state, roots, new Set(['/ws/src/a.ts']));
     expect(state.expanded.get('/ws/src')).toBe(true);
     expect(state.expanded.has('/ws/lib')).toBe(false);
     // Second batch expands /ws/lib — /ws/src remains expanded.
-    S.expandBatchFiles(state, roots, new Set(['/ws/lib/b.ts']));
+    expandBatchFiles(state, roots, new Set(['/ws/lib/b.ts']));
     expect(state.expanded.get('/ws/src')).toBe(true);
     expect(state.expanded.get('/ws/lib')).toBe(true);
   });
@@ -2341,13 +2339,13 @@ describe('expandBatchFiles', () => {
 // --- searchResultsHighlight message handler ---
 describe('searchResultsHighlight', () => {
   function makeHandlerEnv() {
-    const state = S.createState();
+    const state = createState();
     const scanBar = { show: vi.fn() };
     const rootEl = document.createElement('div');
     document.body.appendChild(rootEl);
-    state.render = vi.fn((roots) => { state.lastRoots = roots; });
+    state.render = vi.fn((roots: any) => { state.lastRoots = roots; });
     state.lastRoots = [makeDir('/ws', 'ws', {})];
-    const handler = S.createMessageHandler(state, scanBar, rootEl, { render: state.render });
+    const handler = createMessageHandler(state, scanBar as any, rootEl, { render: state.render } as any);
     return { state, handler };
   }
 
@@ -2371,13 +2369,13 @@ describe('searchResultsHighlight', () => {
 // --- searchProgress clears expanded state ---
 describe('searchProgress expand state reset', () => {
   it('clears expanded state so expandBatchFiles starts fresh', () => {
-    const state = S.createState();
+    const state = createState();
     const scanBar = { show: vi.fn() };
     const rootEl = document.createElement('div');
     document.body.appendChild(rootEl);
     state.render = vi.fn();
     state.lastRoots = [makeDir('/ws', 'ws', {})];
-    const handler = S.createMessageHandler(state, scanBar, rootEl, { render: state.render });
+    const handler: any = createMessageHandler(state, scanBar as any, rootEl, { render: state.render } as any);
     state.expanded.set('/ws/old-dir', true);
     handler({ data: { type: 'searchProgress' } });
     expect(state.expanded.size).toBe(0);
@@ -2388,7 +2386,7 @@ describe('searchProgress expand state reset', () => {
 
 describe('renderMatchLine — edge cases', () => {
   it('handles undefined lineText without throwing (stripped match beyond MAX_MATCH_LINES)', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     renderer.beforeRender();
     const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
@@ -2401,7 +2399,7 @@ describe('renderMatchLine — edge cases', () => {
   });
 
   it('escapes HTML special chars in lineText via textContent (plain-text path)', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     renderer.beforeRender();
     const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
@@ -2422,13 +2420,13 @@ describe('renderMatchLine — edge cases', () => {
 
 describe('searchResultsHighlight — idx and path edge cases', () => {
   function makeHandlerEnv() {
-    const state = S.createState();
+    const state = createState();
     const scanBar = { show: vi.fn() };
     const rootEl = document.createElement('div');
     document.body.appendChild(rootEl);
-    state.render = vi.fn((roots) => { state.lastRoots = roots; });
+    state.render = vi.fn((roots: any) => { state.lastRoots = roots; });
     state.lastRoots = [makeDir('/ws', 'ws', {})];
-    const handler = S.createMessageHandler(state, scanBar, rootEl, { render: state.render });
+    const handler = createMessageHandler(state, scanBar as any, rootEl, { render: state.render } as any);
     return { state, handler };
   }
 
@@ -2474,7 +2472,7 @@ describe('searchResultsHighlight — idx and path edge cases', () => {
 
 describe('dirMatchesSearch — empty dir', () => {
   it('returns false for a dir with no files and no children when search is active', () => {
-    const state = S.createState();
+    const state = createState();
     state.searchResults = new Map([['/a/other.ts', []]]);
     const renderer = makeRenderer(state);
     renderer.beforeRender();
@@ -2487,7 +2485,7 @@ describe('dirMatchesSearch — empty dir', () => {
 
 describe('expandMatchedDirs — deep nesting', () => {
   it('expands all ancestor dirs for a 3-level-deep match', () => {
-    const state = S.createState();
+    const state = createState();
     // Sibling dirs at each level prevent folder compaction (single-child chains collapse to the
     // deepest node, making intermediate paths invisible to `state.expanded`).
     const roots = [
@@ -2506,7 +2504,7 @@ describe('expandMatchedDirs — deep nesting', () => {
       }),
     ];
     const searchResults = new Map([['/ws/src/deep/a.ts', []]]);
-    S.expandMatchedDirs(state, roots, searchResults, new Set());
+    expandMatchedDirs(state, roots, searchResults, new Set());
 
     expect(state.expanded.get('/ws')).toBe(true);
     expect(state.expanded.get('/ws/src')).toBe(true);
@@ -2518,13 +2516,13 @@ describe('expandMatchedDirs — deep nesting', () => {
 
 describe('searchResultsBatch — empty matches', () => {
   function makeHandlerEnv() {
-    const state = S.createState();
+    const state = createState();
     const scanBar = { show: vi.fn() };
     const rootEl = document.createElement('div');
     document.body.appendChild(rootEl);
-    state.render = vi.fn((roots) => { state.lastRoots = roots; });
+    state.render = vi.fn((roots: any) => { state.lastRoots = roots; });
     state.lastRoots = [makeDir('/ws', 'ws', {})];
-    const handler = S.createMessageHandler(state, scanBar, rootEl, { render: state.render });
+    const handler = createMessageHandler(state, scanBar as any, rootEl, { render: state.render } as any);
     return { state, handler };
   }
 
@@ -2551,7 +2549,7 @@ describe('searchResultsBatch — empty matches', () => {
 
 describe('expandBatchFiles — orphan paths', () => {
   it('is a no-op for file paths that do not match any dir in the tree', () => {
-    const state = S.createState();
+    const state = createState();
     const roots = [
       makeDir('/ws', 'ws', {
         children: [
@@ -2563,7 +2561,7 @@ describe('expandBatchFiles — orphan paths', () => {
     ];
     // Path belongs to a completely different root
     expect(() => {
-      S.expandBatchFiles(state, roots, new Set(['/other/project/file.ts']));
+      expandBatchFiles(state, roots, new Set(['/other/project/file.ts']));
     }).not.toThrow();
     // No dirs should have been expanded
     expect(state.expanded.size).toBe(0);
@@ -2591,42 +2589,42 @@ describe('walkMatchingDirs', () => {
   }
 
   it('expands ancestors of matched files', () => {
-    const state = S.createState();
-    S.walkMatchingDirs(state, makeTree(), f => f.path === '/ws/src/lib/b.ts', false);
+    const state = createState();
+    walkMatchingDirs(state, makeTree(), f => f.path === '/ws/src/lib/b.ts', false);
     expect(state.expanded.get('/ws/src/lib')).toBe(true);
     expect(state.expanded.get('/ws/src')).toBe(true);
   });
 
   it('does not expand dirs with no matching files', () => {
-    const state = S.createState();
-    S.walkMatchingDirs(state, makeTree(), f => f.path === '/nonexistent.ts', false);
+    const state = createState();
+    walkMatchingDirs(state, makeTree(), f => f.path === '/nonexistent.ts', false);
     expect(state.expanded.size).toBe(0);
   });
 
   it('clearFirst=true clears state.expanded before walking', () => {
-    const state = S.createState();
+    const state = createState();
     state.expanded.set('/ws/src', true); // pre-existing
-    S.walkMatchingDirs(state, makeTree(), f => f.path === '/ws/src/lib/b.ts', true);
+    walkMatchingDirs(state, makeTree(), f => f.path === '/ws/src/lib/b.ts', true);
     // '/ws/src' should still be expanded (matched via descendant), not missing
     expect(state.expanded.get('/ws/src')).toBe(true);
     // but the clear happened — any path NOT matching is gone
     // (confirm by adding a path that wouldn't match)
-    const state2 = S.createState();
+    const state2 = createState();
     state2.expanded.set('/unrelated/path', true);
-    S.walkMatchingDirs(state2, makeTree(), () => false, true);
+    walkMatchingDirs(state2, makeTree(), () => false, true);
     expect(state2.expanded.has('/unrelated/path')).toBe(false);
   });
 
   it('clearFirst=false preserves existing expanded state', () => {
-    const state = S.createState();
+    const state = createState();
     state.expanded.set('/unrelated/path', true);
-    S.walkMatchingDirs(state, makeTree(), () => false, false);
+    walkMatchingDirs(state, makeTree(), () => false, false);
     expect(state.expanded.has('/unrelated/path')).toBe(true);
   });
 
   it('is a no-op for empty roots', () => {
-    const state = S.createState();
-    expect(() => S.walkMatchingDirs(state, [], () => true, false)).not.toThrow();
+    const state = createState();
+    expect(() => walkMatchingDirs(state, [], () => true, false)).not.toThrow();
     expect(state.expanded.size).toBe(0);
   });
 });
@@ -2635,11 +2633,11 @@ describe('walkMatchingDirs', () => {
 
 describe('scheduleSearchRender', () => {
   it('schedules a render after 300ms', async () => {
-    const state = S.createState();
+    const state = createState();
     const rerender = vi.fn();
     state.rerender = rerender;
     state.lastRoots = [makeDir('/ws', 'ws', {})];
-    S.scheduleSearchRender(state);
+    scheduleSearchRender(state);
     expect(rerender).not.toHaveBeenCalled();
     await new Promise(r => setTimeout(r, 350));
     expect(rerender).toHaveBeenCalledOnce();
@@ -2647,22 +2645,22 @@ describe('scheduleSearchRender', () => {
   });
 
   it('does not schedule a second timer when one is already pending', async () => {
-    const state = S.createState();
+    const state = createState();
     const rerender = vi.fn();
     state.rerender = rerender;
     state.lastRoots = [makeDir('/ws', 'ws', {})];
-    S.scheduleSearchRender(state);
-    S.scheduleSearchRender(state); // second call — should be a no-op
+    scheduleSearchRender(state);
+    scheduleSearchRender(state); // second call — should be a no-op
     await new Promise(r => setTimeout(r, 350));
     expect(rerender).toHaveBeenCalledOnce(); // only fired once
   });
 
   it('is a no-op when state.lastRoots is null', async () => {
-    const state = S.createState();
+    const state = createState();
     const rerender = vi.fn();
     state.rerender = rerender;
     state.lastRoots = null;
-    S.scheduleSearchRender(state);
+    scheduleSearchRender(state);
     await new Promise(r => setTimeout(r, 350));
     expect(rerender).not.toHaveBeenCalled();
     expect(state._searchRenderTimer).toBeNull();
@@ -2672,16 +2670,16 @@ describe('scheduleSearchRender', () => {
 // --- renderFileMatches ---
 
 describe('renderFileMatches', () => {
-  function makeFile(path) {
+  function makeFile(path: string) {
     return { path, name: path.split('/').pop(), langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
   }
 
-  function makeMatch(line, col = 0, len = 3) {
+  function makeMatch(line: number, col = 0, len = 3) {
     return { line, column: col, matchLength: len, lineText: 'abc def ghi' };
   }
 
   it('appends nothing when searchResults is null', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
     renderer._rootEl.appendChild(container);
@@ -2691,7 +2689,7 @@ describe('renderFileMatches', () => {
   });
 
   it('appends nothing when file has no matches', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
     renderer._rootEl.appendChild(container);
@@ -2702,7 +2700,7 @@ describe('renderFileMatches', () => {
   });
 
   it('appends up to truncateThreshold match-line rows', () => {
-    const state = S.createState();
+    const state = createState();
     state.truncateThreshold = 4; // default
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
@@ -2718,7 +2716,7 @@ describe('renderFileMatches', () => {
   });
 
   it('appends a "more matches" row when there are more than truncateThreshold matches', () => {
-    const state = S.createState();
+    const state = createState();
     state.truncateThreshold = 4; // default
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
@@ -2735,7 +2733,7 @@ describe('renderFileMatches', () => {
   });
 
   it('appends nothing when file path is not in searchResults', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
     renderer._rootEl.appendChild(container);
@@ -2749,20 +2747,20 @@ describe('renderFileMatches', () => {
 // --- renderFileMatches: context grouping ---
 
 describe('renderFileMatches — context grouping', () => {
-  function makeFile(path) {
+  function makeFile(path: string) {
     return { path, name: path.split('/').pop(), langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
   }
 
-  function makeMatch(line, col = 0, len = 3) {
+  function makeMatch(line: number, col = 0, len = 3) {
     return { line, column: col, matchLength: len, lineText: 'abc def ghi' };
   }
 
-  function makeContext(line) {
+  function makeContext(line: number) {
     return { line, column: 0, matchLength: 0, lineText: 'context line', isContext: true };
   }
 
   it('wraps match + context in a match-group wrapper', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
     renderer._rootEl.appendChild(container);
@@ -2791,7 +2789,7 @@ describe('renderFileMatches — context grouping', () => {
   });
 
   it('context divs inside group have no data-action (clicks bubble to wrapper)', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
     renderer._rootEl.appendChild(container);
@@ -2811,7 +2809,7 @@ describe('renderFileMatches — context grouping', () => {
   });
 
   it('splits shared context between two matches at midpoint', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
     renderer._rootEl.appendChild(container);
@@ -2841,7 +2839,7 @@ describe('renderFileMatches — context grouping', () => {
   });
 
   it('adds gap-before class between non-contiguous groups', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
     renderer._rootEl.appendChild(container);
@@ -2859,7 +2857,7 @@ describe('renderFileMatches — context grouping', () => {
   });
 
   it('no gap-before between contiguous groups', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
     renderer._rootEl.appendChild(container);
@@ -2875,7 +2873,7 @@ describe('renderFileMatches — context grouping', () => {
   });
 
   it('truncation counts match groups, not context lines', () => {
-    const state = S.createState();
+    const state = createState();
     state.truncateThreshold = 2;
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
@@ -2899,7 +2897,7 @@ describe('renderFileMatches — context grouping', () => {
   });
 
   it('match without context produces a group with only the match div', () => {
-    const state = S.createState();
+    const state = createState();
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
     renderer._rootEl.appendChild(container);
@@ -2917,7 +2915,7 @@ describe('renderFileMatches — context grouping', () => {
 // --- setupDebugEval ---
 describe('setupDebugEval', () => {
   it('is exported on DirviewShared', () => {
-    expect(typeof S.setupDebugEval).toBe('function');
+    expect(typeof setupDebugEval).toBe('function');
   });
 
   it('posts debugEvalResult back to vscode when data-debug is set', async () => {
@@ -2925,7 +2923,7 @@ describe('setupDebugEval', () => {
     const postMessage = vi.fn();
     const mockVscode = { postMessage };
 
-    S.setupDebugEval(mockVscode);
+    setupDebugEval(mockVscode);
 
     // Dispatch a debugEval message — the handler should eval the script and postMessage the result.
     window.dispatchEvent(new MessageEvent('message', {
@@ -2949,7 +2947,7 @@ describe('setupDebugEval', () => {
     const postMessage = vi.fn();
     const mockVscode = { postMessage };
 
-    S.setupDebugEval(mockVscode);
+    setupDebugEval(mockVscode);
 
     window.dispatchEvent(new MessageEvent('message', {
       data: { type: 'debugEval', id: 100, script: 'throw new Error("boom")' },
@@ -2969,7 +2967,7 @@ describe('setupDebugEval', () => {
     const postMessage = vi.fn();
     const mockVscode = { postMessage };
 
-    S.setupDebugEval(mockVscode);
+    setupDebugEval(mockVscode);
 
     window.dispatchEvent(new MessageEvent('message', {
       data: { type: 'debugEval', id: 101, script: '42' },
@@ -2984,7 +2982,7 @@ describe('setupDebugEval', () => {
     const postMessage = vi.fn();
     const mockVscode = { postMessage };
 
-    S.setupDebugEval(mockVscode);
+    setupDebugEval(mockVscode);
 
     window.dispatchEvent(new MessageEvent('message', {
       data: { type: 'update', roots: [] },
@@ -3008,7 +3006,7 @@ describe('renderTree showRootNode', () => {
   }
 
   it('renders root as a depth-0 dir-row when showRootNode is true', () => {
-    const state = S.createState();
+    const state = createState();
     state.dirPath = '';
     state.workspaceFolderName = 'myProject';
     const root = makeWorkspaceRoot();
@@ -3018,7 +3016,7 @@ describe('renderTree showRootNode', () => {
     const renderer = makeRenderer(state);
     const container = document.createElement('div');
     document.body.appendChild(container);
-    S.renderTree(state, renderer, container, { showRootNode: true });
+    renderTree(state, renderer, container, { showRootNode: true });
 
     const tree = container.querySelector('ul.tree');
     expect(tree).not.toBeNull();
@@ -3031,7 +3029,7 @@ describe('renderTree showRootNode', () => {
   });
 
   it('children appear at depth 1 (inside root children UL)', () => {
-    const state = S.createState();
+    const state = createState();
     state.dirPath = '';
     const root = makeWorkspaceRoot();
     state.lastRoots = [root];
@@ -3041,7 +3039,7 @@ describe('renderTree showRootNode', () => {
     const renderer = makeRenderer(state);
     const container = document.createElement('div');
     document.body.appendChild(container);
-    S.renderTree(state, renderer, container, { showRootNode: true });
+    renderTree(state, renderer, container, { showRootNode: true });
 
     // Root is at depth 0, children are inside root's children UL
     const rootLi = container.querySelector('[data-node-path="/ws"]');
@@ -3052,7 +3050,7 @@ describe('renderTree showRootNode', () => {
   });
 
   it('falls back to rendering root children at depth 0 when showRootNode is false', () => {
-    const state = S.createState();
+    const state = createState();
     const root = makeWorkspaceRoot();
     state.lastRoots = [root];
     state.currentSortMode = 'files';
@@ -3060,7 +3058,7 @@ describe('renderTree showRootNode', () => {
     const renderer = makeRenderer(state);
     const container = document.createElement('div');
     document.body.appendChild(container);
-    S.renderTree(state, renderer, container);  // no showRootNode
+    renderTree(state, renderer, container);  // no showRootNode
 
     const tree = container.querySelector('ul.tree');
     // /ws root itself is NOT rendered as a dir-row
@@ -3076,7 +3074,7 @@ describe('renderTree showRootNode', () => {
 describe('onNavigate dir-name click', () => {
   // Two children prevents single-child compaction (which would change data-node-path).
   function makeNavTree() {
-    const jsFile = (dir, name) => ({ name, path: `${dir}/${name}`, langName: 'JS', langColor: '#f1e05a', sizeBytes: 0 });
+    const jsFile = (dir: string, name: string) => ({ name, path: `${dir}/${name}`, langName: 'JS', langColor: '#f1e05a', sizeBytes: 0 });
     const src = makeDir('/ws/src', 'src', { files: [jsFile('/ws/src', 'a.js')], totalFiles: 1, stats: [] });
     const lib = makeDir('/ws/lib', 'lib', { files: [jsFile('/ws/lib', 'b.js')], totalFiles: 1, stats: [] });
     const root = makeDir('/ws', 'ws', { children: [src, lib], totalFiles: 2, stats: [] });
@@ -3084,7 +3082,7 @@ describe('onNavigate dir-name click', () => {
   }
 
   it('calls onNavigate with dir path when dir-name is clicked', () => {
-    const state = S.createState();
+    const state = createState();
     const navigate = vi.fn();
     const { root } = makeNavTree();
     state.expanded.set('/ws', true);
@@ -3102,7 +3100,7 @@ describe('onNavigate dir-name click', () => {
   });
 
   it('does not toggle expand/collapse when dir-name is clicked (navigate instead)', () => {
-    const state = S.createState();
+    const state = createState();
     state.render = vi.fn();
     const navigate = vi.fn();
     const { root } = makeNavTree();
@@ -3124,7 +3122,7 @@ describe('onNavigate dir-name click', () => {
   });
 
   it('renders breadcrumb with ancestor segments at depth 0 when state.dirPath is set', () => {
-    const state = S.createState();
+    const state = createState();
     state.dirPath = 'src/views';
     state.workspaceFolderName = 'dirview';
     const navigate = vi.fn();
@@ -3147,7 +3145,7 @@ describe('onNavigate dir-name click', () => {
   });
 
   it('clicking breadcrumb ancestor segment navigates to ancestor path', () => {
-    const state = S.createState();
+    const state = createState();
     state.dirPath = 'src/views';
     state.workspaceFolderName = 'dirview';
     const navigate = vi.fn();
@@ -3168,7 +3166,7 @@ describe('onNavigate dir-name click', () => {
   });
 
   it('does not render breadcrumb at depth 0 when state.dirPath is empty (workspace root)', () => {
-    const state = S.createState();
+    const state = createState();
     state.dirPath = '';
     state.workspaceFolderName = 'dirview';
     const navigate = vi.fn();
@@ -3185,7 +3183,7 @@ describe('onNavigate dir-name click', () => {
   });
 
   it('does not call onNavigate when chevron is clicked (expand/collapse instead)', async () => {
-    const state = S.createState();
+    const state = createState();
     state.render = vi.fn();
     state.lastRoots = [];
     const navigate = vi.fn();
@@ -3213,14 +3211,14 @@ describe('onNavigate dir-name click', () => {
 describe('setupStickyTracking', () => {
   it('returns an object with updateStuck and setEnabled functions', () => {
     const el = document.createElement('div');
-    const result = S.setupStickyTracking(el);
+    const result = setupStickyTracking(el);
     expect(typeof result.updateStuck).toBe('function');
     expect(typeof result.setEnabled).toBe('function');
   });
 
   it('setEnabled(false) adds sticky-disabled class to document.body', () => {
     const el = document.createElement('div');
-    const { setEnabled } = S.setupStickyTracking(el);
+    const { setEnabled } = setupStickyTracking(el);
     document.body.classList.remove('sticky-disabled');
     setEnabled(false);
     expect(document.body.classList.contains('sticky-disabled')).toBe(true);
@@ -3228,20 +3226,20 @@ describe('setupStickyTracking', () => {
 
   it('setEnabled(true) removes sticky-disabled class from document.body', () => {
     const el = document.createElement('div');
-    const { setEnabled } = S.setupStickyTracking(el);
+    const { setEnabled } = setupStickyTracking(el);
     document.body.classList.add('sticky-disabled');
     setEnabled(true);
     expect(document.body.classList.contains('sticky-disabled')).toBe(false);
   });
 
-  it('setEnabled(false) clears is-stuck classes from sticky-dir elements', () => {
+  it('setEnabled(false) clears is-stuck-bottom class from sticky-dir elements', () => {
     const el = document.createElement('div');
     const stickyEl = document.createElement('div');
-    stickyEl.className = 'sticky-dir is-stuck';
+    stickyEl.className = 'sticky-dir is-stuck-bottom';
     el.appendChild(stickyEl);
-    const { setEnabled } = S.setupStickyTracking(el);
+    const { setEnabled } = setupStickyTracking(el);
     setEnabled(false);
-    expect(stickyEl.classList.contains('is-stuck')).toBe(false);
+    expect(stickyEl.classList.contains('is-stuck-bottom')).toBe(false);
   });
 
   it('updateStuck short-circuits when sticky-disabled is on body', () => {
@@ -3250,7 +3248,7 @@ describe('setupStickyTracking', () => {
     stickyEl.className = 'sticky-dir';
     el.appendChild(stickyEl);
     document.body.classList.add('sticky-disabled');
-    const { updateStuck } = S.setupStickyTracking(el);
+    const { updateStuck } = setupStickyTracking(el);
     // Should not throw or add classes when disabled
     updateStuck();
     expect(stickyEl.classList.contains('is-stuck')).toBe(false);
@@ -3261,12 +3259,12 @@ describe('setupStickyTracking', () => {
 // --- Feature 3: single-dir root truncation disabled ---
 
 describe('single-dir root truncation disabled', () => {
-  function makeFile(dir, name) {
+  function makeFile(dir: string, name: string) {
     return { name, path: `${dir}/${name}`, langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 100 };
   }
 
   it('does not truncate files when depth=0 dir has no child directories', () => {
-    const state = S.createState();
+    const state = createState();
     state.truncateThreshold = 2;
     const files = [
       makeFile('/r', 'a.ts'), makeFile('/r', 'b.ts'), makeFile('/r', 'c.ts'), makeFile('/r', 'd.ts'),
@@ -3284,7 +3282,7 @@ describe('single-dir root truncation disabled', () => {
   });
 
   it('still truncates at depth=0 when the dir has child directories', () => {
-    const state = S.createState();
+    const state = createState();
     state.truncateThreshold = 2;
     const files = [
       makeFile('/r', 'a.ts'), makeFile('/r', 'b.ts'), makeFile('/r', 'c.ts'), makeFile('/r', 'd.ts'),
@@ -3306,7 +3304,7 @@ describe('single-dir root truncation disabled', () => {
 
 describe('matchesCollapsed — tieredCollapseAll', () => {
   it('populates matchesCollapsed with all search result paths when collapsing', () => {
-    const state = S.createState();
+    const state = createState();
     state.searchResults = new Map([
       ['/ws/a.ts', []],
       ['/ws/b.ts', []],
@@ -3315,7 +3313,7 @@ describe('matchesCollapsed — tieredCollapseAll', () => {
     const ws = makeDir('/ws', 'ws', { children: [a], totalFiles: 1 });
     state.expanded.set('/ws/a', true);
 
-    S.tieredCollapseAll(state, [ws]);
+    tieredCollapseAll(state, [ws]);
 
     // All search result file paths added to matchesCollapsed
     expect(state.matchesCollapsed.has('/ws/a.ts')).toBe(true);
@@ -3323,14 +3321,14 @@ describe('matchesCollapsed — tieredCollapseAll', () => {
   });
 
   it('does not modify matchesCollapsed when searchResults is null', () => {
-    const state = S.createState();
+    const state = createState();
     state.matchesCollapsed.add('/existing');
     // searchResults is null (no active search)
     const a = makeDir('/ws/a', 'a', { totalFiles: 1 });
     const ws = makeDir('/ws', 'ws', { children: [a], totalFiles: 1 });
     state.expanded.set('/ws/a', true);
 
-    S.tieredCollapseAll(state, [ws]);
+    tieredCollapseAll(state, [ws]);
 
     // matchesCollapsed should only have the pre-existing path, not be modified by the collapse
     // (the if (state.searchResults) guard prevents population when search is null)
@@ -3340,13 +3338,13 @@ describe('matchesCollapsed — tieredCollapseAll', () => {
 
 describe('matchesCollapsed — tieredExpandAll', () => {
   it('clears matchesCollapsed when expanding', () => {
-    const state = S.createState();
+    const state = createState();
     state.matchesCollapsed.add('/ws/a.ts');
     state.matchesCollapsed.add('/ws/b.ts');
     const a = makeDir('/ws/a', 'a', { totalFiles: 1 });
     const ws = makeDir('/ws', 'ws', { children: [a], totalFiles: 1 });
 
-    S.tieredExpandAll(state, [ws]);
+    tieredExpandAll(state, [ws]);
 
     expect(state.matchesCollapsed.size).toBe(0);
   });
@@ -3355,12 +3353,12 @@ describe('matchesCollapsed — tieredExpandAll', () => {
 // --- Feature 2: collapsible file-row with matches ---
 
 describe('collapsible file-row with search matches', () => {
-  function makeFile(path, name = null) {
+  function makeFile(path: string, name: string | null = null) {
     return { path, name: name || path.split('/').pop(), langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
   }
 
   it('file row has has-matches class and chevron when file has matches', () => {
-    const state = S.createState();
+    const state = createState();
     const file = makeFile('/r/foo.ts');
     state.searchResults = new Map([['/r/foo.ts', [{ line: 1, column: 0, matchLength: 3, lineText: 'abc' }]]]);
     const renderer = makeRenderer(state);
@@ -3374,7 +3372,7 @@ describe('collapsible file-row with search matches', () => {
   });
 
   it('file row does NOT have has-matches class when file has no matches in searchResults', () => {
-    const state = S.createState();
+    const state = createState();
     const file = makeFile('/r/foo.ts');
     state.searchResults = new Map([['/r/foo.ts', []]]); // empty matches array
     const renderer = makeRenderer(state);
@@ -3385,7 +3383,7 @@ describe('collapsible file-row with search matches', () => {
   });
 
   it('clicking the file row (outside filename) toggles matchesCollapsed and rerenders', async () => {
-    const state = S.createState();
+    const state = createState();
     state.render = vi.fn();
     state.lastRoots = [];
     const file = makeFile('/r/foo.ts');
@@ -3409,7 +3407,7 @@ describe('collapsible file-row with search matches', () => {
   });
 
   it('clicking the filename (data-action=openFile) posts openFile, not toggle', () => {
-    const state = S.createState();
+    const state = createState();
     state.render = vi.fn();
     state.lastRoots = [];
     const file = makeFile('/r/foo.ts');
@@ -3432,7 +3430,7 @@ describe('collapsible file-row with search matches', () => {
   });
 
   it('renderFileMatches returns early when file is in matchesCollapsed', () => {
-    const state = S.createState();
+    const state = createState();
     state.matchesCollapsed.add('/ws/a.ts');
     state.searchResults = new Map([['/ws/a.ts', [{ line: 1, column: 0, matchLength: 3, lineText: 'abc' }]]]);
     const file = { path: '/ws/a.ts', name: 'a.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
@@ -3445,7 +3443,7 @@ describe('collapsible file-row with search matches', () => {
   });
 
   it('more-matches row has data-action="expandTruncated" for clickable expand', () => {
-    const state = S.createState();
+    const state = createState();
     state.truncateThreshold = 2;
     const matches = [1, 2, 3, 4].map(line => ({ line, column: 0, matchLength: 1, lineText: 'x' }));
     const renderer = makeRenderer(state);
@@ -3459,10 +3457,10 @@ describe('collapsible file-row with search matches', () => {
 
 // --- createSearchBar setDirPill ---
 describe('createSearchBar setDirPill', () => {
-  function makeSearchBar(standalone) {
-    const state = S.createState();
-    const vscode = { postMessage: vi.fn() };
-    const bar = S.createSearchBar(state, vscode, standalone ? { standalone: true } : undefined);
+  function makeSearchBar(standalone: boolean) {
+    const state = createState();
+    const vscode = { postMessage: vi.fn() } as any;
+    const bar = createSearchBar(state, vscode, standalone ? { standalone: true } : undefined);
     return { bar, vscode };
   }
 
@@ -3502,5 +3500,378 @@ describe('createSearchBar setDirPill', () => {
     bar.setDirPill('src/scanner');
     const pill = bar.el.querySelector('.search-dir-pill');
     expect(pill).toBeNull();
+  });
+});
+
+// --- renderFileMatches: dedent ---
+
+describe('renderFileMatches — dedent', () => {
+  function makeFile(path: string) {
+    return { path, name: path.split('/').pop(), langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+  }
+
+  function makeMatchWithText(line: number, text: string, col = 0, len = 3) {
+    return { line, column: col, matchLength: len, lineText: text };
+  }
+
+  function makeContextWithText(line: number, text: string) {
+    return { line, column: 0, matchLength: 0, lineText: text, isContext: true };
+  }
+
+  it('strips shared leading indentation from all lines in a group', () => {
+    const state = createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    // All lines indented by at least 4 spaces; inner line has 8
+    state.searchResults = new Map([['/ws/a.ts', [
+      makeContextWithText(1, '    outer line'),
+      makeMatchWithText(2, '        inner line', 8, 5),
+      makeContextWithText(3, '    outer line'),
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const group = container.querySelector('.match-group');
+    const rows = group.querySelectorAll('.match-context-row, .match-line-row');
+    // Context rows should have 0 leading spaces (4 stripped)
+    expect(rows[0].querySelector('.match-line-text').textContent).toBe('outer line');
+    // Match row should have 4 leading spaces (8 - 4 = 4 relative)
+    expect(rows[1].querySelector('.match-line-text').textContent).toBe('    inner line');
+    expect(rows[2].querySelector('.match-line-text').textContent).toBe('outer line');
+  });
+
+  it('blank lines do not affect dedent calculation', () => {
+    const state = createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    state.searchResults = new Map([['/ws/a.ts', [
+      makeContextWithText(1, '    indented'),
+      makeContextWithText(2, ''),
+      makeMatchWithText(3, '    match here', 4, 5),
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const group = container.querySelector('.match-group');
+    const rows = group.querySelectorAll('.match-context-row, .match-line-row');
+    // Dedent should be 4 (blank line ignored), so "indented" has no leading spaces
+    expect(rows[0].querySelector('.match-line-text').textContent).toBe('indented');
+    // Blank line should be empty
+    expect(rows[1].querySelector('.match-line-text').textContent).toBe('');
+    // Match should have no leading spaces (4 - 4 = 0)
+    expect(rows[2].querySelector('.match-line-text').textContent).toBe('match here');
+  });
+
+  it('no dedent when first line has no indentation', () => {
+    const state = createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    state.searchResults = new Map([['/ws/a.ts', [
+      makeMatchWithText(1, 'no indent', 0, 2),
+      makeContextWithText(2, '    indented'),
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const group = container.querySelector('.match-group');
+    const rows = group.querySelectorAll('.match-line-row, .match-context-row');
+    expect(rows[0].querySelector('.match-line-text').textContent).toBe('no indent');
+    expect(rows[1].querySelector('.match-line-text').textContent).toBe('    indented');
+  });
+
+  it('dedent works with highlightedHtml (strips from DOM text nodes)', () => {
+    const state = createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    // Simulate highlighted HTML with leading whitespace in a text node
+    state.searchResults = new Map([['/ws/a.ts', [
+      {
+        line: 1, column: 4, matchLength: 3, lineText: '    abc def',
+        highlightedHtml: '    <span style="color:#569cd6">abc</span> def',
+      },
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const group = container.querySelector('.match-group');
+    const textEl = group.querySelector('.match-line-text');
+    // Dedent=4, so the 4 leading spaces should be stripped from the text node
+    expect(textEl.textContent).toBe('abc def');
+  });
+
+  it('dedent adjusts match highlight position in plain-text path', () => {
+    const state = createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    // Match at column 8 with 4-space dedent -> should highlight at column 4
+    state.searchResults = new Map([['/ws/a.ts', [
+      makeMatchWithText(1, '    foo bar baz', 8, 3),
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const group = container.querySelector('.match-group');
+    const highlight = group.querySelector('.match-highlight');
+    expect(highlight).not.toBeNull();
+    expect(highlight.textContent).toBe('bar');
+  });
+});
+
+// --- stripLeadingChars ---
+
+describe('stripLeadingChars via renderContextLine', () => {
+  it('strips leading chars from highlighted context HTML', () => {
+    const state = createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+    const match = {
+      line: 1, column: 0, matchLength: 0, lineText: '    context line', isContext: true,
+      highlightedHtml: '    <span style="color:#569cd6">context</span> line',
+    };
+    const li = renderer.renderContextLine(file, match, 1, [], 4);
+    const textEl = li.querySelector('.match-line-text');
+    // 4 leading spaces should be stripped from the first text node
+    expect(textEl.textContent).toBe('context line');
+  });
+
+  it('strips chars across multiple text nodes', () => {
+    const state = createState();
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
+    const match = {
+      line: 1, column: 0, matchLength: 0, lineText: '      deep indent', isContext: true,
+      // HTML: 3 chars in first span, 3 in second text node, then content
+      highlightedHtml: '<span style="color:#888">   </span>   <span style="color:#569cd6">deep</span> indent',
+    };
+    const li = renderer.renderContextLine(file, match, 1, [], 6);
+    const textEl = li.querySelector('.match-line-text');
+    // 6 leading whitespace chars (3 in span + 3 bare) should be stripped
+    expect(textEl.textContent).toBe('deep indent');
+  });
+});
+
+// --- file filter: getVisibleFiles with fileFilterFn ---
+describe('getVisibleFiles with fileFilterFn', () => {
+  const files = [
+    { name: 'apiHandler.ts', path: '/ws/apiHandler.ts', langName: 'TypeScript' },
+    { name: 'utils.ts', path: '/ws/utils.ts', langName: 'TypeScript' },
+    { name: 'auth.js', path: '/ws/auth.js', langName: 'JavaScript' },
+  ] as any[];
+
+  it('returns all files when fileFilterFn is null', () => {
+    const result = (getVisibleFiles as any)(files, new Set(), null, null);
+    expect(result).toEqual(files);
+  });
+
+  it('filters files by name with fileFilterFn', () => {
+    const fn = (name: string) => name.toLowerCase().includes('api');
+    const result = (getVisibleFiles as any)(files, new Set(), null, fn);
+    expect(result).toEqual([files[0]]);
+  });
+
+  it('combines fileFilterFn with activeFilters', () => {
+    const fn = (name: string) => /\.ts$/.test(name);
+    const result = (getVisibleFiles as any)(files, new Set(['TypeScript']), null, fn);
+    expect(result.map((f: any) => f.name)).toEqual(['apiHandler.ts', 'utils.ts']);
+  });
+
+  it('combines fileFilterFn with searchResults', () => {
+    const fn = (name: string) => name.includes('api') || name.includes('auth');
+    const searchResults = new Map([['/ws/apiHandler.ts', []]]);
+    const result = (getVisibleFiles as any)(files, new Set(), searchResults, fn);
+    // Must match BOTH searchResults and fileFilterFn
+    expect(result.map((f: any) => f.name)).toEqual(['apiHandler.ts']);
+  });
+});
+
+// --- file filter: dirMatchesFileFilter ---
+describe('dirMatchesFileFilter', () => {
+  it('returns true for all dirs when fileFilterFn is null', () => {
+    const state = createState();
+    state.fileFilterFn = null;
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const dir = makeDir('/ws/src', 'src', {
+      files: [{ name: 'index.ts', path: '/ws/src/index.ts', langName: 'TypeScript' }],
+    });
+    expect(renderer.dirMatchesFileFilter(dir)).toBe(true);
+  });
+
+  it('returns true when a direct file matches', () => {
+    const state = createState();
+    state.fileFilterFn = (name: string) => name.includes('api');
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const dir = makeDir('/ws/src', 'src', {
+      files: [
+        { name: 'apiHandler.ts', path: '/ws/src/apiHandler.ts', langName: 'TypeScript' },
+        { name: 'utils.ts', path: '/ws/src/utils.ts', langName: 'TypeScript' },
+      ],
+    });
+    expect(renderer.dirMatchesFileFilter(dir)).toBe(true);
+  });
+
+  it('returns false when no file matches', () => {
+    const state = createState();
+    state.fileFilterFn = (name: string) => name.includes('api');
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const dir = makeDir('/ws/src', 'src', {
+      files: [{ name: 'utils.ts', path: '/ws/src/utils.ts', langName: 'TypeScript' }],
+    });
+    expect(renderer.dirMatchesFileFilter(dir)).toBe(false);
+  });
+
+  it('returns true when a descendant file matches', () => {
+    const state = createState();
+    state.fileFilterFn = (name: string) => name.includes('api');
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const child = makeDir('/ws/src/handlers', 'handlers', {
+      files: [{ name: 'apiHandler.ts', path: '/ws/src/handlers/apiHandler.ts', langName: 'TypeScript' }],
+    });
+    const dir = makeDir('/ws/src', 'src', { children: [child] });
+    expect(renderer.dirMatchesFileFilter(dir)).toBe(true);
+  });
+
+  it('respects activeFilters intersection', () => {
+    const state = createState();
+    state.fileFilterFn = (name: string) => name.includes('api');
+    state.activeFilters = new Set(['JavaScript']);
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const dir = makeDir('/ws/src', 'src', {
+      files: [{ name: 'apiHandler.ts', path: '/ws/src/apiHandler.ts', langName: 'TypeScript' }],
+    });
+    // File matches name filter but not language filter
+    expect(renderer.dirMatchesFileFilter(dir)).toBe(false);
+  });
+});
+
+// --- file filter: search bar regex toggle ---
+describe('search bar file filter regex toggle', () => {
+  function makeSearchBarForFilter(standalone: boolean) {
+    const state = createState();
+    state.render = vi.fn();
+    state.lastRoots = [];
+    state.lastAutoRescanEnabled = true;
+    state.currentSortMode = 'files';
+    state.scanBar = { show: vi.fn() } as any;
+    const vscode = { postMessage: vi.fn() } as any;
+    const bar = createSearchBar(state, vscode, standalone ? { standalone: true } : undefined);
+    return { bar, state, vscode };
+  }
+
+  it('has a regex toggle button in the file filter row', () => {
+    const { bar } = makeSearchBarForFilter(false);
+    const row = bar.el.querySelector('.search-filter-input-row');
+    const regexBtns = row.querySelectorAll('.search-toggle');
+    expect(regexBtns.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('posts searchFiles with *text* glob when regex is off and no glob chars', () => {
+    vi.useFakeTimers();
+    const { bar, vscode } = makeSearchBarForFilter(false);
+    const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
+    includeInput.value = 'api';
+    includeInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    expect(vscode.postMessage).toHaveBeenCalledWith({ command: 'searchFiles', glob: '*api*' });
+    vi.useRealTimers();
+  });
+
+  it('posts searchFiles with glob as-is when glob chars present', () => {
+    vi.useFakeTimers();
+    const { bar, vscode } = makeSearchBarForFilter(false);
+    const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
+    includeInput.value = '*.ts';
+    includeInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    expect(vscode.postMessage).toHaveBeenCalledWith({ command: 'searchFiles', glob: '*.ts' });
+    vi.useRealTimers();
+  });
+
+  it('sets fileFilterFn and rerenders when regex toggle is on', () => {
+    vi.useFakeTimers();
+    const { bar, state } = makeSearchBarForFilter(false);
+    // Activate regex toggle
+    const filterRow = bar.el.querySelector('.search-filter-input-row');
+    const regexBtn = filterRow.querySelector('.search-toggle');
+    regexBtn.click();
+    // Type regex pattern
+    const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
+    includeInput.value = 'api|auth';
+    includeInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    expect(state.fileFilterFn).toBeInstanceOf(Function);
+    expect(state.fileFilterFn!('apiHandler.ts')).toBe(true);
+    expect(state.fileFilterFn!('authService.js')).toBe(true);
+    expect(state.fileFilterFn!('utils.ts')).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it('clears fileFilterFn on clearSearch', () => {
+    vi.useFakeTimers();
+    const { bar, state } = makeSearchBarForFilter(false);
+    // Set up regex filter
+    const filterRow = bar.el.querySelector('.search-filter-input-row');
+    const regexBtn = filterRow.querySelector('.search-toggle');
+    regexBtn.click();
+    const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
+    includeInput.value = 'api';
+    includeInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    expect(state.fileFilterFn).toBeInstanceOf(Function);
+    // Clear
+    const clearBtn = bar.el.querySelector('.search-toggle[title="Clear Search (Escape)"]');
+    clearBtn.click();
+    expect(state.fileFilterFn).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('does not send to ripgrep when regex toggle is on with content search', () => {
+    vi.useFakeTimers();
+    const { bar, vscode, state } = makeSearchBarForFilter(false);
+    // Activate regex toggle
+    const filterRow = bar.el.querySelector('.search-filter-input-row');
+    const regexBtn = filterRow.querySelector('.search-toggle');
+    regexBtn.click();
+    // Type in both inputs
+    const mainInput = bar.el.querySelector('.search-main-input') as HTMLInputElement;
+    const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
+    includeInput.value = 'api|auth';
+    mainInput.value = 'fetchUser';
+    mainInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    // Should send content search WITHOUT include (regex is client-side)
+    expect(vscode.postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      command: 'search',
+      pattern: 'fetchUser',
+      include: undefined,
+    }));
+    expect(state.fileFilterFn).toBeInstanceOf(Function);
+    vi.useRealTimers();
+  });
+
+  it('main input always does content search even with glob chars', () => {
+    vi.useFakeTimers();
+    const { bar, vscode } = makeSearchBarForFilter(false);
+    const mainInput = bar.el.querySelector('.search-main-input') as HTMLInputElement;
+    mainInput.value = '*.ts';
+    mainInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    // Should NOT send searchFiles — main input always does content search now
+    expect(vscode.postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      command: 'search',
+      pattern: '*.ts',
+    }));
+    vi.useRealTimers();
   });
 });

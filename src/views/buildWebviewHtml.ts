@@ -1,11 +1,8 @@
 import * as vscode from 'vscode';
 import { getNonce } from './getNonce';
 
-/** Shared script files loaded before any view-specific script (main.js, tab.js, etc.). */
-export const SHARED_SCRIPTS = [
-  'shared-icons.js', 'shared-utils.js', 'shared-state.js',
-  'shared-renderer.js', 'shared.js',
-];
+// With esbuild bundling, each view gets a single bundled JS file.
+// SHARED_SCRIPTS is no longer needed — kept as empty for backwards compat with any references.
 
 export interface BuildWebviewHtmlOptions {
   scripts: string[];   // filenames relative to out/webview/, e.g. ['shared.js', 'main.js']

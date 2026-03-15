@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { DirNode, ScanUpdatePayload } from '../scanner/types';
 import { SortMode } from '../config';
-import { buildWebviewHtml, SHARED_SCRIPTS } from './buildWebviewHtml';
+import { buildWebviewHtml } from './buildWebviewHtml';
 import { handleCommonMessage, setupVisibilityReplay } from './providerUtils';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
@@ -110,7 +110,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   private getHtml(webview: vscode.Webview): string {
     return buildWebviewHtml(webview, this.extensionUri, {
-      scripts: [...SHARED_SCRIPTS, 'main.js'],
+      scripts: ['main.js'],
       styles: ['style.css'],
       title: 'Directory Breakdown',
       bodyAttrs: `data-vscode-context='{"preventDefaultContextMenuItems": true}'`,

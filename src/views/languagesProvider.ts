@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ScanUpdatePayload } from '../scanner/types';
-import { buildWebviewHtml, SHARED_SCRIPTS } from './buildWebviewHtml';
+import { buildWebviewHtml } from './buildWebviewHtml';
 import { setupVisibilityReplay } from './providerUtils';
 
 export class LanguagesProvider implements vscode.WebviewViewProvider {
@@ -80,7 +80,7 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
 
   private getHtml(webview: vscode.Webview): string {
     return buildWebviewHtml(webview, this.extensionUri, {
-      scripts: [...SHARED_SCRIPTS, 'languages.js'],
+      scripts: ['languages.js'],
       styles: ['languages.css'],
       title: 'Languages',
       debug: this.debug,

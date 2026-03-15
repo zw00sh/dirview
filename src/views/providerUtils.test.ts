@@ -404,10 +404,10 @@ describe('handleCommonMessage', () => {
     expect(result).toBe(true);
   });
 
-  it('openFile without path — returns false', () => {
-    const result = handleCommonMessage({ command: 'openFile' }, {});
-    expect(result).toBe(false);
-    expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
+  it('openFile with path — always returns true (path is required by type)', () => {
+    const result = handleCommonMessage({ command: 'openFile', path: '/a/b.ts' }, {});
+    expect(result).toBe(true);
+    expect(vscode.commands.executeCommand).toHaveBeenCalled();
   });
 
   it('openDirInTab — calls onOpenDirInTab and returns true', () => {

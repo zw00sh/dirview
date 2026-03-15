@@ -17,3 +17,20 @@ await esbuild.build({
 });
 
 console.log(`esbuild: extension bundled → out/extension.js (${devMode ? 'dev' : 'production'})`);
+
+// Bundle webview entry points — each produces a single self-contained JS file.
+// format: 'iife' because webview has no module system (loaded via <script> tags).
+const webviewEntries = ['main', 'tab', 'languages'];
+for (const entry of webviewEntries) {
+  await esbuild.build({
+    entryPoints: [`src/views/webview/${entry}.ts`],
+    bundle: true,
+    outfile: `out/webview/${entry}.js`,
+    format: 'iife',
+    platform: 'browser',
+    sourcemap: false,
+    minify: !devMode,
+    define: { DEV_MODE: String(devMode) },
+  });
+  console.log(`esbuild: webview ${entry} bundled → out/webview/${entry}.js`);
+}

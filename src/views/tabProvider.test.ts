@@ -23,7 +23,7 @@ vi.mock('vscode', () => ({
   ViewColumn: { One: 1 },
 }));
 
-vi.mock('./buildWebviewHtml', () => ({ buildWebviewHtml: vi.fn(() => ''), SHARED_SCRIPTS: [] }));
+vi.mock('./buildWebviewHtml', () => ({ buildWebviewHtml: vi.fn(() => '') }));
 vi.mock('./providerUtils', () => ({ handleSearchMessage: vi.fn(() => false), handleCommonMessage: vi.fn(() => false) }));
 vi.mock('../search/searchService', () => ({ SearchService: class {} }));
 

@@ -3,11 +3,12 @@ import * as vscode from 'vscode';
 import { SearchService, SearchMatch } from '../search/searchService';
 import { getLangInfo } from '../language/languageMap';
 import { highlightLine, highlightLineMulti } from '../highlight/highlighter';
+import type { WebviewToBackendMessage } from './webview/types';
 
 /** Handles messages that are common to both SidebarProvider and TabProvider.
  *  Returns true if the message was handled, false if the caller should continue processing. */
 export function handleCommonMessage(
-  message: { command: string; path?: string; line?: number },
+  message: WebviewToBackendMessage,
   callbacks: {
     onRefresh?: () => void;
     onOpenDirInTab?: (path: string) => void;
@@ -17,7 +18,7 @@ export function handleCommonMessage(
     callbacks.onRefresh?.();
     return true;
   }
-  if (message.command === 'openFile' && message.path) {
+  if (message.command === 'openFile') {
     const uri = vscode.Uri.file(message.path);
     if (typeof message.line === 'number' && message.line > 0) {
       // Open file with cursor positioned at the matched line.
@@ -28,7 +29,7 @@ export function handleCommonMessage(
     }
     return true;
   }
-  if (message.command === 'openDirInTab' && message.path) {
+  if (message.command === 'openDirInTab') {
     callbacks.onOpenDirInTab?.(message.path);
     return true;
   }
@@ -39,7 +40,7 @@ export function handleCommonMessage(
  *  Runs the ripgrep search and posts searchProgress / searchResults back via postMessage.
  *  Returns true if the message was handled, false otherwise (non-blocking — fires async). */
 export function handleSearchMessage(
-  message: { command: string; pattern?: string; caseSensitive?: boolean; useRegex?: boolean; include?: string; glob?: string; contextLines?: number },
+  message: WebviewToBackendMessage,
   searchService: SearchService,
   postMessage: (msg: object) => void,
   rootPaths: string[]
