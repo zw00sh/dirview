@@ -1,4 +1,5 @@
 import * as child_process from 'child_process';
+import * as path from 'path';
 
 export interface SearchMatch {
   line: number;
@@ -39,17 +40,33 @@ export class SearchService {
   // Monotonically increasing counter: incremented on each new search so stale
   // promise callbacks from a cancelled search can detect they're outdated.
   private generation = 0;
+  /** Whether a working ripgrep binary was found. Set by probe(). */
+  hasRipgrep = false;
 
-  constructor() {
+  constructor(appRoot?: string) {
+    // Resolve ripgrep binary: try the npm package first (available during development),
+    // then VSCode's own bundled ripgrep (works in published extensions where node_modules
+    // is excluded from the VSIX), then fall back to system rg.
+    let resolved = '';
     try {
-      // @vscode/ripgrep is marked external in esbuild so it resolves from node_modules at runtime.
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const rg = require('@vscode/ripgrep');
-      this.rgPath = rg.rgPath;
-    } catch {
-      // Fall back to system rg if the package isn't available (shouldn't happen in practice).
-      this.rgPath = 'rg';
+      resolved = rg.rgPath;
+    } catch { /* not available — expected in published extension */ }
+    if (!resolved && appRoot) {
+      resolved = path.join(appRoot, 'node_modules', '@vscode', 'ripgrep', 'bin', 'rg');
     }
+    this.rgPath = resolved || 'rg';
+  }
+
+  /** Verify the resolved rg binary actually works. Call once after construction. */
+  probe(): Promise<boolean> {
+    return new Promise((resolve) => {
+      try {
+        const proc = child_process.spawn(this.rgPath, ['--version']);
+        proc.on('close', (code) => { this.hasRipgrep = code === 0; resolve(this.hasRipgrep); });
+        proc.on('error', () => { this.hasRipgrep = false; resolve(false); });
+      } catch { this.hasRipgrep = false; resolve(false); }
+    });
   }
 
   /** Returns the current search generation. Callers can snapshot this value

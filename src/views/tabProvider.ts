@@ -21,10 +21,22 @@ export class TabProvider {
   onOpenDirInTab: ((dirPath: string) => void) | undefined;
 
   private config: Config;
+  /** Cached ripgrep probe result — resolved once on first tab creation. */
+  private rgProbe: Promise<boolean> | undefined;
+  private rgAvailable = false;
 
   constructor(extensionUri: vscode.Uri, config: Config) {
     this.extensionUri = extensionUri;
     this.config = config;
+  }
+
+  /** Probe ripgrep once and cache the result. */
+  private probeRipgrep(): Promise<boolean> {
+    if (!this.rgProbe) {
+      const svc = new SearchService(vscode.env.appRoot);
+      this.rgProbe = svc.probe().then((ok) => { this.rgAvailable = ok; return ok; });
+    }
+    return this.rgProbe;
   }
 
   private findPanelId(panel: vscode.WebviewPanel): number | undefined {
@@ -106,7 +118,10 @@ export class TabProvider {
   /** Opens a tab rooted at dirPath.  When allowDuplicateTabs is false,
    *  focuses an existing tab for the same path instead of creating a new one.
    *  dirPath is relative to workspace root; use '' for the full workspace view. */
-  openForDir(dirPath: string): void {
+  async openForDir(dirPath: string): Promise<void> {
+    // Ensure ripgrep probe is complete before creating the tab so we can
+    // send the capability flag in the first update message.
+    await this.probeRipgrep();
     const allowDuplicates = vscode.workspace.getConfiguration('dirview').get<boolean>('allowDuplicateTabs', true);
     if (!allowDuplicates) {
       for (const entry of this.panels.values()) {
@@ -132,7 +147,7 @@ export class TabProvider {
       }
     );
 
-    const searchService = new SearchService();
+    const searchService = new SearchService(vscode.env.appRoot);
     this.searchServices.set(id, searchService);
 
     panel.iconPath = {
@@ -147,7 +162,7 @@ export class TabProvider {
       const currentPath = panelId !== undefined ? this.panels.get(panelId)!.dirPath : undefined;
       const rootPaths = this.getRootPaths(currentPath ?? '');
       const svc = panelId !== undefined ? (this.searchServices.get(panelId) ?? searchService) : searchService;
-      if (handleSearchMessage(message, svc, (msg) => post(panel.webview, msg), rootPaths)) { return; }
+      if (handleSearchMessage(message, svc, (msg) => post(panel.webview, msg), rootPaths, this.rgAvailable)) { return; }
 
       if (handleCommonMessage(message, {
         onRefresh: this.onRefresh,
@@ -185,6 +200,7 @@ export class TabProvider {
             truncateThreshold: this.lastPayload?.truncateThreshold ?? 4,
             showIgnored: this.lastPayload?.showIgnored ?? false,
             stickyHeadersEnabled: this.config.tabStickyHeadersEnabled,
+            hasRipgrep: this.rgAvailable,
           });
         }
       }
@@ -208,6 +224,7 @@ export class TabProvider {
           truncateThreshold: this.lastPayload?.truncateThreshold ?? 4,
           showIgnored: this.lastPayload?.showIgnored ?? false,
           stickyHeadersEnabled: this.config.tabStickyHeadersEnabled,
+          hasRipgrep: this.rgAvailable,
         });
       }
     });
@@ -235,6 +252,7 @@ export class TabProvider {
           truncateThreshold: this.lastPayload?.truncateThreshold ?? 4,
           showIgnored: this.lastPayload?.showIgnored ?? false,
           stickyHeadersEnabled: this.config.tabStickyHeadersEnabled,
+          hasRipgrep: this.rgAvailable,
         });
       }, 100);
     }
@@ -263,6 +281,7 @@ export class TabProvider {
         type: 'update', roots: effectiveRoots, dirPath,
         workspaceFolderName: this.getWorkspaceFolderName(dirPath),
         autoRescanEnabled, sortMode, truncateThreshold, showIgnored, stickyHeadersEnabled,
+        hasRipgrep: this.rgAvailable,
       });
     }
   }

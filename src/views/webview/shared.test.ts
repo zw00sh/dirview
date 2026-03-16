@@ -10,7 +10,7 @@ import {
   patchTreeChildren, patchDirLi,
   getVisibleChildren, getVisibleFiles,
   createSearchBar,
-  scheduleSearchRender, updateSearchStatus, expandBatchFiles,
+  scheduleSearchRender, updateSearchStatus, expandBatchFiles, buildAncestorPaths,
   SVG_CHEVRON, SVG_EYE, SVG_FOLD, SVG_UNFOLD, SVG_SORT_FILES, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL,
 } from './index';
 import type { DirNode, FileNode, WebviewState, Renderer, LangStat } from './types';
@@ -3790,5 +3790,77 @@ describe('search bar file filter regex toggle', () => {
       pattern: '*.ts',
     }));
     vi.useRealTimers();
+  });
+});
+
+// --- buildAncestorPaths ---
+describe('buildAncestorPaths', () => {
+  it('produces workspace-relative ancestors from absolute Unix paths', () => {
+    const result = buildAncestorPaths(['/ws/src/lib/foo.ts'], ['/ws']);
+    expect(result).toEqual(new Set(['src', 'src/lib']));
+  });
+
+  it('produces workspace-relative ancestors from absolute Windows paths', () => {
+    const result = buildAncestorPaths(['C:\\ws\\src\\lib\\foo.ts'], ['C:\\ws']);
+    expect(result).toEqual(new Set(['src', 'src/lib']));
+  });
+
+  it('handles mixed separators in Windows paths', () => {
+    const result = buildAncestorPaths(['C:\\ws/src\\lib/foo.ts'], ['C:\\ws']);
+    expect(result).toEqual(new Set(['src', 'src/lib']));
+  });
+
+  it('produces absolute ancestors when no rootPaths given', () => {
+    const result = buildAncestorPaths(['/ws/src/foo.ts']);
+    expect(result).toEqual(new Set(['/ws', '/ws/src']));
+  });
+
+  it('deduplicates ancestors across multiple files', () => {
+    const result = buildAncestorPaths(['/ws/src/a.ts', '/ws/src/lib/b.ts'], ['/ws']);
+    expect(result).toEqual(new Set(['src', 'src/lib']));
+  });
+});
+
+// --- createSearchBar setHasRipgrep ---
+describe('createSearchBar setHasRipgrep', () => {
+  function makeSearchBar() {
+    const state = createState();
+    state.render = vi.fn();
+    state.lastRoots = [];
+    state.lastAutoRescanEnabled = true;
+    state.currentSortMode = 'files';
+    state.scanBar = { show: vi.fn() } as any;
+    const vscode = { postMessage: vi.fn() } as any;
+    const bar = createSearchBar(state, vscode);
+    return { bar, state };
+  }
+
+  it('hides content search controls when ripgrep is unavailable', () => {
+    const { bar } = makeSearchBar();
+    bar.setHasRipgrep(false);
+    const inputContainer = bar.el.querySelector('.search-input-container') as HTMLElement;
+    const contextWrap = bar.el.querySelector('.search-context-input-wrap') as HTMLElement;
+    const contextBtn = bar.el.querySelector('.search-context-toggle') as HTMLElement;
+    expect(inputContainer.style.display).toBe('none');
+    expect(contextWrap.style.display).toBe('none');
+    expect(contextBtn.style.display).toBe('none');
+  });
+
+  it('keeps file include filter visible when ripgrep is unavailable', () => {
+    const { bar } = makeSearchBar();
+    bar.setHasRipgrep(false);
+    const filterRow = bar.el.querySelector('.search-filter-input-row') as HTMLElement;
+    expect(filterRow).toBeTruthy();
+    expect(filterRow.style.display).not.toBe('none');
+  });
+
+  it('restores content search controls when ripgrep becomes available', () => {
+    const { bar } = makeSearchBar();
+    bar.setHasRipgrep(false);
+    bar.setHasRipgrep(true);
+    const inputContainer = bar.el.querySelector('.search-input-container') as HTMLElement;
+    const contextWrap = bar.el.querySelector('.search-context-input-wrap') as HTMLElement;
+    expect(inputContainer.style.display).toBe('');
+    expect(contextWrap.style.display).toBe('');
   });
 });

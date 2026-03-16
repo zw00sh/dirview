@@ -329,6 +329,9 @@ const sharedHandler = createMessageHandler(state, scanBar, root, {
       updateStickyBtn();
       setStickyEnabled(message.stickyHeadersEnabled);
     }
+    if (typeof message.hasRipgrep === 'boolean') {
+      searchBar.setHasRipgrep(message.hasRipgrep);
+    }
   },
   onLoading: () => {
     legendSection.style.display = 'none';

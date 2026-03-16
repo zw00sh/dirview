@@ -50,14 +50,22 @@ export function handleCommonMessage(
 
 /** Handles search-related messages from a webview (search, searchFiles, clearSearch).
  *  Runs the ripgrep search and posts searchProgress / searchResults back via postMessage.
+ *  When hasRipgrep is false, content search is rejected and file search falls back to findFiles.
  *  Returns true if the message was handled, false otherwise (non-blocking — fires async). */
 export function handleSearchMessage(
   message: WebviewToBackendMessage,
   searchService: SearchService,
   postMessage: (msg: BackendToWebviewMessage) => void,
-  rootPaths: string[]
+  rootPaths: string[],
+  hasRipgrep = true
 ): boolean {
   if (message.command === 'search' && message.pattern !== undefined) {
+    if (!hasRipgrep) {
+      // No ripgrep — content search is not available. UI should prevent this,
+      // but guard against stale messages.
+      postMessage({ type: 'searchResults', matches: null, error: 'Content search requires ripgrep' });
+      return true;
+    }
     postMessage({ type: 'searchProgress', rootPaths });
     // Cap how many lines per file receive syntax highlighting to avoid Shiki overhead
     const CONCURRENCY = 10;
@@ -232,14 +240,29 @@ export function handleSearchMessage(
 
   if (message.command === 'searchFiles' && message.glob !== undefined) {
     postMessage({ type: 'searchProgress', rootPaths });
-    const { result } = searchService.searchFiles(message.glob, rootPaths);
-    result.then((r) => {
-      const matchesObj: Record<string, []> = {};
-      for (const p of r.matches.keys()) { matchesObj[p] = []; }
-      postMessage({ type: 'searchResults', matches: matchesObj, fileCount: r.fileCount, matchCount: 0, truncated: r.truncated });
-    }).catch((err: Error) => {
-      postMessage({ type: 'searchResults', matches: null, error: String(err) });
-    });
+    if (hasRipgrep) {
+      const { result } = searchService.searchFiles(message.glob, rootPaths);
+      result.then((r) => {
+        const matchesObj: Record<string, []> = {};
+        for (const p of r.matches.keys()) { matchesObj[p] = []; }
+        postMessage({ type: 'searchResults', matches: matchesObj, fileCount: r.fileCount, matchCount: 0, truncated: r.truncated });
+      }).catch((err: Error) => {
+        postMessage({ type: 'searchResults', matches: null, error: String(err) });
+      });
+    } else {
+      // Fallback: use vscode.workspace.findFiles when ripgrep is unavailable.
+      vscode.workspace.findFiles(message.glob).then((uris) => {
+        // Filter to files under rootPaths (for directory-scoped tabs).
+        const filtered = rootPaths.length > 0
+          ? uris.filter(u => rootPaths.some(r => u.fsPath.startsWith(r)))
+          : uris;
+        const matchesObj: Record<string, []> = {};
+        for (const u of filtered) { matchesObj[u.fsPath] = []; }
+        postMessage({ type: 'searchResults', matches: matchesObj, fileCount: filtered.length, matchCount: 0, truncated: false });
+      }).catch((err: Error) => {
+        postMessage({ type: 'searchResults', matches: null, error: String(err) });
+      });
+    }
     return true;
   }
 

@@ -26,7 +26,7 @@ export interface SearchMatch {
 export type BackendToWebviewMessage =
   | { type: 'scanning' }
   | { type: 'loading' }
-  | { type: 'update'; roots: DirNode[]; autoRescanEnabled: boolean; sortMode: SortMode; truncateThreshold: number; stickyHeadersEnabled: boolean; showIgnored?: boolean; dirPath?: string; workspaceFolderName?: string; activeFilters?: string[]; showPct?: boolean }
+  | { type: 'update'; roots: DirNode[]; autoRescanEnabled: boolean; sortMode: SortMode; truncateThreshold: number; stickyHeadersEnabled: boolean; showIgnored?: boolean; dirPath?: string; workspaceFolderName?: string; activeFilters?: string[]; showPct?: boolean; hasRipgrep?: boolean }
   | { type: 'updateTruncation'; truncateThreshold: number; truncationEnabled?: boolean }
   | { type: 'updateSortMode'; sortMode: SortMode }
   | { type: 'updateStickyHeaders'; enabled: boolean }
@@ -205,6 +205,8 @@ export interface SearchBarResult {
   updateFilterWarning: (count: number) => void;
   setDirPill: (dirPath: string) => void;
   triggerSearch: () => void;
+  /** Update ripgrep availability — hides content search + context UI when false. */
+  setHasRipgrep: (available: boolean) => void;
 }
 
 export interface SearchStatusData {

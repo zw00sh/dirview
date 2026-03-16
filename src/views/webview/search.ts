@@ -467,7 +467,16 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     dirPill.style.display = '';
   }
 
-  return { el, focus, clear: clearSearch, show, hide, updateStatus, setStatus, updateFilterWarning, setDirPill, triggerSearch };
+  function setHasRipgrep(available: boolean): void {
+    // When ripgrep is unavailable, hide content search controls (main input, case/regex
+    // toggles, context lines) but keep the file include filter functional.
+    const hidden = !available;
+    inputContainer.style.display = hidden ? 'none' : '';
+    contextInputWrap.style.display = hidden ? 'none' : '';
+    contextBtn.style.display = hidden ? 'none' : '';
+  }
+
+  return { el, focus, clear: clearSearch, show, hide, updateStatus, setStatus, updateFilterWarning, setDirPill, triggerSearch, setHasRipgrep };
 }
 
 // Updates search-result counters on state and triggers the search bar status display.
@@ -498,10 +507,14 @@ export function scheduleSearchRender(state: WebviewState): void {
 // Uses lastIndexOf chaining instead of split+join for performance.
 export function buildAncestorPaths(filePaths: Iterable<string>, rootPaths?: string[]): Set<string> {
   const ancestors = new Set<string>();
+  // Normalize rootPaths to forward slashes so Windows backslash paths match.
+  const normalRoots = rootPaths?.map(r => r.replace(/\\/g, '/'));
   for (let filePath of filePaths) {
+    // Normalize backslashes so ancestor paths use '/' to match DirNode.path format.
+    filePath = filePath.replace(/\\/g, '/');
     // Strip workspace root prefix to produce relative paths matching DirNode.path.
-    if (rootPaths) {
-      for (const root of rootPaths) {
+    if (normalRoots) {
+      for (const root of normalRoots) {
         if (filePath.startsWith(root + '/')) {
           filePath = filePath.slice(root.length + 1);
           break;
