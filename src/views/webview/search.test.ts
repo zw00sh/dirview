@@ -111,6 +111,36 @@ describe('filterTree search', () => {
     expect(result.roots[0].children.length).toBe(1);
     expect(result.roots[0].children[0].name).toBe('src');
   });
+
+  it('keeps subtree root when using ancestor index with workspace root paths', () => {
+    // Subtree tab: root DirNode has path 'v2', not ''. Ancestor paths must be
+    // computed from workspace roots (not search scope) to include 'v2' in the set.
+    const nested = makeDir('v2/src', 'src', { files: [{ path: '/ws/v2/src/api.ts', name: 'api.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
+    const root = makeDir('v2', 'v2', { children: [nested] });
+    // Workspace root is /ws (not /ws/v2), so buildAncestorPaths produces 'v2', 'v2/src'
+    const searchResults = new Map([['/ws/v2/src/api.ts', []]]);
+    const searchAncestorPaths = buildAncestorPaths(searchResults.keys(), ['/ws']);
+    const result = ft([root], { searchResults, searchAncestorPaths });
+    expect(result.roots.length).toBe(1);
+    expect(result.roots[0].children.length).toBe(1);
+    expect(result.roots[0].children[0].files.length).toBe(1);
+  });
+
+  it('subtree tab: ancestor index built from search scope prunes root (regression)', () => {
+    // When searchRootPaths = ['/ws/v2'] (search scope, not workspace root),
+    // buildAncestorPaths produces 'src' instead of 'v2/src'. The root DirNode
+    // with path 'v2' is not in the set, so filterTree prunes the entire tree.
+    const nested = makeDir('v2/src', 'src', { files: [{ path: '/ws/v2/src/api.ts', name: 'api.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
+    const root = makeDir('v2', 'v2', { children: [nested] });
+    // Wrong: using search scope /ws/v2 instead of workspace root /ws
+    const searchResults = new Map([['/ws/v2/src/api.ts', []]]);
+    const badAncestors = buildAncestorPaths(searchResults.keys(), ['/ws/v2']);
+    // 'v2' is NOT in badAncestors — only '', 'src' are
+    expect(badAncestors.has('v2')).toBe(false);
+    const result = ft([root], { searchResults, searchAncestorPaths: badAncestors });
+    // Root gets pruned because 'v2' not in ancestor set and has no direct file matches
+    expect(result.roots.length).toBe(0);
+  });
 });
 
 // --- renderMatchLine ---
