@@ -45,8 +45,7 @@ body {
 
 .empty-state-text {
   color: var(--vscode-descriptionForeground);
-  font-style: italic;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.4;
 }
 
@@ -69,11 +68,16 @@ body {
   50% { opacity: 0.3; }
 }
 
-/* Fill viewport when empty state is the only child of #root */
-#root:has(> .empty-state:only-child) {
+/* Fill viewport when empty state is present in #root */
+#root:has(> .empty-state) {
   min-height: calc(100vh - 8px);
   display: flex;
   flex-direction: column;
+}
+
+/* Hide the (empty) tree when an empty state is shown alongside it (e.g. no search results) */
+#root:has(> .empty-state) > .tree {
+  display: none;
 }
 
 /* Tree */
