@@ -116,6 +116,10 @@ export interface WebviewState extends CoreWebviewState {
   /** Monotonic counter incremented on every search/filter state mutation.
    *  Used by filterTree() to invalidate its cache. */
   searchResultsVersion: number;
+  /** Total visible file count from the most recent filterTree pass. */
+  lastFilteredFileCount: number;
+  /** Optional callback invoked after each render completes (post-rAF). */
+  onAfterRender: (() => void) | null;
 }
 
 // ── Renderer ──────────────────────────────────────────────────────────────────

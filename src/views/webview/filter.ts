@@ -15,6 +15,8 @@ export interface FilterInputs {
 export interface FilteredTree {
   roots: DirNode[];
   isFiltered: boolean;
+  /** Total number of files visible after filtering. */
+  totalVisibleFiles: number;
 }
 
 // ── Cache ────────────────────────────────────────────────────────────────────
@@ -53,7 +55,9 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
 
   // No filters active — return originals
   if (!isFiltered) {
-    cachedResult = { roots, isFiltered: false };
+    let total = 0;
+    for (const r of roots) total += r.totalFiles;
+    cachedResult = { roots, isFiltered: false, totalVisibleFiles: total };
     cachedRoots = roots;
     cachedActiveFilters = activeFilters;
     cachedFileFilterFn = fileFilterFn;
@@ -126,12 +130,19 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
   }
 
   const filteredRoots: DirNode[] = [];
+  let totalVisibleFiles = 0;
   for (const root of roots) {
     const fr = filterNode(root);
     if (fr !== null) filteredRoots.push(fr);
   }
+  // Count visible files by walking the filtered tree.
+  function countFiles(node: DirNode): void {
+    totalVisibleFiles += (node.files || []).length;
+    for (const c of node.children) countFiles(c);
+  }
+  for (const r of filteredRoots) countFiles(r);
 
-  const result: FilteredTree = { roots: filteredRoots, isFiltered: true };
+  const result: FilteredTree = { roots: filteredRoots, isFiltered: true, totalVisibleFiles };
 
   // Update cache
   cachedResult = result;

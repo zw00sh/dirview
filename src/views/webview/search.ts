@@ -165,6 +165,50 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   // ── State ──────────────────────────────────────────────────────────────
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Dynamic debounce: skip the delay when the current query extends a
+  // known-small result set.  We remember the first query whose result count
+  // dropped below the threshold — any query that starts with that anchor is
+  // cheap, even if the user backtracks within the narrowed range.
+  const DEBOUNCE_SKIP_THRESHOLD = 500;
+  let anchorMainQuery: string | null = null;
+  let anchorIncludeQuery: string | null = null;
+  // The query that was last sent to triggerSearch — used by updateDebounceAnchor
+  // to associate results with the query that produced them (the live input value
+  // may have changed by the time async results arrive).
+  let lastTriggeredMain = '';
+  let lastTriggeredInclude = '';
+
+  function updateDebounceAnchor(fileCount: number): void {
+    if (state.searchActive) { return; }
+    if (fileCount < DEBOUNCE_SKIP_THRESHOLD) {
+      // Set anchor to the earliest (shortest) query that crossed below threshold.
+      if (anchorMainQuery === null || !lastTriggeredMain.startsWith(anchorMainQuery) || !lastTriggeredInclude.startsWith(anchorIncludeQuery!)) {
+        anchorMainQuery = lastTriggeredMain;
+        anchorIncludeQuery = lastTriggeredInclude;
+      }
+    } else {
+      // Result set is large — clear the anchor.
+      anchorMainQuery = null;
+      anchorIncludeQuery = null;
+    }
+  }
+
+
+  function computeDebounce(): number {
+    if (anchorMainQuery === null) { return 300; }
+    if (state.searchActive) { return 300; }
+    const newMain = mainInput.value.trim();
+    const newInclude = includeInput.value.trim();
+    // Current query is within the narrowed range anchored by the small result set.
+    if (newMain.startsWith(anchorMainQuery!) && newInclude.startsWith(anchorIncludeQuery!)) {
+      return 0;
+    }
+    // Diverged from the anchor — invalidate it and use full debounce.
+    anchorMainQuery = null;
+    anchorIncludeQuery = null;
+    return 300;
+  }
+
   // Search history — two independent stacks (oldest → newest)
   const searchHistory: string[] = [];
   let searchHistoryIdx = -1;
@@ -247,6 +291,9 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     );
     statusEl.textContent = text;
     statusEl.style.display = visible ? '' : 'none';
+    // Use the actual visible file count when a client-side regex filter is also
+    // active (it further reduces results beyond what ripgrep returned).
+    updateDebounceAnchor(state.fileFilterFn ? state.lastFilteredFileCount : state.searchFileCount);
   }
 
   // setStatus is the externally-driven variant used by the standalone search fold.
@@ -289,6 +336,8 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   function triggerSearch(): void {
     const pattern = mainInput.value.trim();
     const fileFilter = includeInput.value.trim();
+    lastTriggeredMain = pattern;
+    lastTriggeredInclude = fileFilter;
 
     clearBtn.style.display = pattern ? '' : 'none';
     includeClearBtn.style.display = fileFilter ? '' : 'none';
@@ -325,6 +374,20 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     if (!pattern) {
       if (includeUseRegex) {
         // Regex file filter with no content query — client-side only, rerender tree.
+        // Update status and debounce anchor after the async render completes
+        // (rerender uses double rAF, so lastFilteredFileCount isn't set yet).
+        state.onAfterRender = () => {
+          state.onAfterRender = null;
+          const visibleFiles = state.lastFilteredFileCount;
+          updateDebounceAnchor(visibleFiles);
+          if (fileFilter) {
+            const { text, visible } = formatSearchStatus(false, true, visibleFiles, 0, visibleFiles, false);
+            statusEl.textContent = text;
+            statusEl.style.display = visible ? '' : 'none';
+          } else {
+            statusEl.style.display = 'none';
+          }
+        };
         state.rerender();
       } else if (fileFilter) {
         // Glob file filter with no content query → ripgrep filename search.
@@ -349,6 +412,8 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     if (debounceTimer) { clearTimeout(debounceTimer); }
     mainInput.value = '';
     includeInput.value = '';
+    anchorMainQuery = null;
+    anchorIncludeQuery = null;
     clearBtn.style.display = 'none';
     includeClearBtn.style.display = 'none';
     statusEl.style.display = 'none';
@@ -434,12 +499,16 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     // Validate regex immediately (no debounce) so the error border appears instantly.
     validateRegex(mainInput.value.trim(), useRegex, inputContainer);
     if (!mainInput.value && !includeInput.value) {
+      anchorMainQuery = null;
+      anchorIncludeQuery = null;
       state.fileFilterFn = null;
       state.searchResultsVersion++;
       vscode.postMessage({ command: 'clearSearch' });
       return;
     }
-    debounceTimer = setTimeout(triggerSearch, 300);
+    const delay = computeDebounce();
+    if (delay === 0) { triggerSearch(); }
+    else { debounceTimer = setTimeout(triggerSearch, delay); }
   });
 
   includeInput.addEventListener('input', () => {
@@ -448,7 +517,9 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     includeClearBtn.style.display = includeInput.value ? '' : 'none';
     // Validate regex immediately (no debounce) so the error border appears instantly.
     validateRegex(includeInput.value.trim(), includeUseRegex, filterContainer);
-    debounceTimer = setTimeout(triggerSearch, 300);
+    const delay = computeDebounce();
+    if (delay === 0) { triggerSearch(); }
+    else { debounceTimer = setTimeout(triggerSearch, delay); }
   });
 
   // Escape, Enter, and history navigation
