@@ -170,8 +170,9 @@ export class TabProvider {
       const panelId = this.findPanelId(panel);
       const currentPath = panelId !== undefined ? this.panels.get(panelId)!.dirPath : undefined;
       const rootPaths = this.getRootPaths(currentPath ?? '');
+      const wsRootPaths = this.getRootPaths('');
       const svc = panelId !== undefined ? (this.searchServices.get(panelId) ?? searchService) : searchService;
-      if (handleSearchMessage(message, svc, (msg) => post(panel.webview, msg), rootPaths, this.rgAvailable)) { return; }
+      if (handleSearchMessage(message, svc, (msg) => post(panel.webview, msg), rootPaths, this.rgAvailable, wsRootPaths)) { return; }
 
       if (handleCommonMessage(message, {
         onRefresh: this.onRefresh,

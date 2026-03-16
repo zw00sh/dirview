@@ -289,6 +289,12 @@ describe('handleSearchMessage — searchFiles', () => {
     expect(messages[0]).toEqual({ type: 'searchProgress', rootPaths: ['/ws'] });
   });
 
+  it('searchProgress uses workspaceRootPaths when provided (subtree tab)', () => {
+    const service = createFakeSearchService();
+    handleSearchMessage({ command: 'searchFiles', glob: '*.ts' }, service, postMessage, ['/ws/v2'], true, ['/ws']);
+    expect(messages[0]).toEqual({ type: 'searchProgress', rootPaths: ['/ws'] });
+  });
+
   it('posts searchResults with file paths and empty match arrays on resolve', async () => {
     const service = createFakeSearchService();
     handleSearchMessage({ command: 'searchFiles', glob: '*.ts' }, service, postMessage, ['/ws']);
