@@ -333,10 +333,11 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
 
     const li = h('li', { dataset: { nodePath: displayNode.path } });
 
-    const isExpanded = state.expanded.get(displayNode.path) ?? (state.activeFilters.size > 0 || depth === 0);
+    const hasActiveFilter = state.activeFilters.size > 0 || !!state.searchResults || !!state.fileFilterFn;
+    const isExpanded = state.expanded.get(displayNode.path) ?? (hasActiveFilter || depth === 0);
     // Record implicit depth-0 expansion so button state reflects reality after initial render.
     // Skip during active filter/search to avoid recording ephemeral auto-expanded state.
-    if (!state.expanded.has(displayNode.path) && depth === 0 && state.activeFilters.size === 0 && !state.searchResults) {
+    if (!state.expanded.has(displayNode.path) && depth === 0 && !hasActiveFilter) {
       state.expanded.set(displayNode.path, true);
     }
 

@@ -3673,7 +3673,7 @@ describe('dirMatchesFileFilter', () => {
 });
 
 // --- file filter: search bar regex toggle ---
-describe('search bar file filter regex toggle', () => {
+describe('search bar file filter', () => {
   function makeSearchBarForFilter(standalone: boolean) {
     const state = createState();
     state.render = vi.fn();
@@ -3686,43 +3686,23 @@ describe('search bar file filter regex toggle', () => {
     return { bar, state, vscode };
   }
 
-  it('has a regex toggle button in the file filter row', () => {
+  it('has a regex toggle button inside the filter container', () => {
     const { bar } = makeSearchBarForFilter(false);
-    const row = bar.el.querySelector('.search-filter-input-row');
-    const regexBtns = row.querySelectorAll('.search-toggle');
+    const container = bar.el.querySelector('.search-filter-container');
+    const regexBtns = container.querySelectorAll('.search-toggle');
     expect(regexBtns.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('posts searchFiles with *text* glob when regex is off and no glob chars', () => {
-    vi.useFakeTimers();
-    const { bar, vscode } = makeSearchBarForFilter(false);
-    const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
-    includeInput.value = 'api';
-    includeInput.dispatchEvent(new Event('input'));
-    vi.advanceTimersByTime(300);
-    expect(vscode.postMessage).toHaveBeenCalledWith({ command: 'searchFiles', glob: '*api*' });
-    vi.useRealTimers();
+  it('regex mode is active by default', () => {
+    const { bar } = makeSearchBarForFilter(false);
+    const container = bar.el.querySelector('.search-filter-container');
+    const regexBtn = container.querySelector('.search-toggle');
+    expect(regexBtn.classList.contains('active')).toBe(true);
   });
 
-  it('posts searchFiles with glob as-is when glob chars present', () => {
-    vi.useFakeTimers();
-    const { bar, vscode } = makeSearchBarForFilter(false);
-    const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
-    includeInput.value = '*.ts';
-    includeInput.dispatchEvent(new Event('input'));
-    vi.advanceTimersByTime(300);
-    expect(vscode.postMessage).toHaveBeenCalledWith({ command: 'searchFiles', glob: '*.ts' });
-    vi.useRealTimers();
-  });
-
-  it('sets fileFilterFn and rerenders when regex toggle is on', () => {
+  it('sets fileFilterFn and rerenders with regex by default (no toggle needed)', () => {
     vi.useFakeTimers();
     const { bar, state } = makeSearchBarForFilter(false);
-    // Activate regex toggle
-    const filterRow = bar.el.querySelector('.search-filter-input-row');
-    const regexBtn = filterRow.querySelector('.search-toggle');
-    regexBtn.click();
-    // Type regex pattern
     const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
     includeInput.value = 'api|auth';
     includeInput.dispatchEvent(new Event('input'));
@@ -3734,13 +3714,40 @@ describe('search bar file filter regex toggle', () => {
     vi.useRealTimers();
   });
 
+  it('posts searchFiles with glob as-is when regex is toggled off', () => {
+    vi.useFakeTimers();
+    const { bar, vscode } = makeSearchBarForFilter(false);
+    // Deactivate regex toggle (on by default)
+    const container = bar.el.querySelector('.search-filter-container');
+    const regexBtn = container.querySelector('.search-toggle');
+    regexBtn.click();
+    const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
+    includeInput.value = '*.ts';
+    includeInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    expect(vscode.postMessage).toHaveBeenCalledWith({ command: 'searchFiles', glob: '*.ts' });
+    vi.useRealTimers();
+  });
+
+  it('passes glob to ripgrep without normalization (no *text* wrapping)', () => {
+    vi.useFakeTimers();
+    const { bar, vscode } = makeSearchBarForFilter(false);
+    // Deactivate regex toggle
+    const container = bar.el.querySelector('.search-filter-container');
+    const regexBtn = container.querySelector('.search-toggle');
+    regexBtn.click();
+    const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
+    includeInput.value = 'api';
+    includeInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    // Should pass 'api' as-is, not '*api*'
+    expect(vscode.postMessage).toHaveBeenCalledWith({ command: 'searchFiles', glob: 'api' });
+    vi.useRealTimers();
+  });
+
   it('clears fileFilterFn on clearSearch', () => {
     vi.useFakeTimers();
     const { bar, state } = makeSearchBarForFilter(false);
-    // Set up regex filter
-    const filterRow = bar.el.querySelector('.search-filter-input-row');
-    const regexBtn = filterRow.querySelector('.search-toggle');
-    regexBtn.click();
     const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
     includeInput.value = 'api';
     includeInput.dispatchEvent(new Event('input'));
@@ -3753,14 +3760,10 @@ describe('search bar file filter regex toggle', () => {
     vi.useRealTimers();
   });
 
-  it('does not send to ripgrep when regex toggle is on with content search', () => {
+  it('does not send glob to ripgrep when regex is on with content search', () => {
     vi.useFakeTimers();
     const { bar, vscode, state } = makeSearchBarForFilter(false);
-    // Activate regex toggle
-    const filterRow = bar.el.querySelector('.search-filter-input-row');
-    const regexBtn = filterRow.querySelector('.search-toggle');
-    regexBtn.click();
-    // Type in both inputs
+    // Regex is on by default — type in both inputs
     const mainInput = bar.el.querySelector('.search-main-input') as HTMLInputElement;
     const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
     includeInput.value = 'api|auth';
@@ -3784,7 +3787,6 @@ describe('search bar file filter regex toggle', () => {
     mainInput.value = '*.ts';
     mainInput.dispatchEvent(new Event('input'));
     vi.advanceTimersByTime(300);
-    // Should NOT send searchFiles — main input always does content search now
     expect(vscode.postMessage).toHaveBeenCalledWith(expect.objectContaining({
       command: 'search',
       pattern: '*.ts',

@@ -129,18 +129,20 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   filterContainer.insertBefore(langPill, filterContainer.firstChild);
   filterContainer.appendChild(includeInput);
 
-  // Regex toggle for file filter — switches from ripgrep glob to client-side regex matching
+  // Regex toggle for file filter — inside the bordered container, matching the main input style.
+  // When active: client-side regex filtering. When inactive: glob passed to ripgrep as-is.
   const includeRegexBtn = h('button', {
-    className: 'search-toggle',
+    className: 'search-toggle active',
     title: 'Use Regular Expression',
     innerHTML: Icons.SVG_REGEX,
     attr: { 'aria-label': 'Use Regular Expression' },
   });
-  let includeUseRegex = false;
+  let includeUseRegex = true;
+  filterContainer.appendChild(includeRegexBtn);
 
   const includeSection = h('div', { className: 'search-filter-section' },
     h('label', { className: 'search-filter-label', textContent: 'find or filter files' }),
-    h('div', { className: 'search-filter-input-row' }, filterContainer, includeRegexBtn),
+    h('div', { className: 'search-filter-input-row' }, filterContainer),
   );
 
   // ── Status line ────────────────────────────────────────────────────────
@@ -271,7 +273,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
 
     const contextLines = contextLinesEnabled ? (parseInt(contextInput.value, 10) || 0) : 0;
 
-    // File filter: regex mode uses client-side filtering; otherwise ripgrep glob.
+    // File filter: regex mode uses client-side filtering; glob mode passes to ripgrep as-is.
     if (includeUseRegex && fileFilter) {
       // Client-side regex filtering — don't send to ripgrep.
       try {
@@ -285,18 +287,16 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
       state.fileFilterFn = null;
     }
 
-    // Normalize file filter for ripgrep: plain text → *text* substring glob.
-    const normalizedGlob = (!includeUseRegex && fileFilter)
-      ? (/[*?{}]/.test(fileFilter) ? fileFilter : `*${fileFilter}*`)
-      : undefined;
+    // Glob mode: pass the filter to ripgrep as-is (no normalization).
+    const glob = (!includeUseRegex && fileFilter) ? fileFilter : undefined;
 
     if (!pattern) {
       if (includeUseRegex) {
         // Regex file filter with no content query — client-side only, rerender tree.
         state.rerender();
       } else if (fileFilter) {
-        // Glob/substring file filter with no content query → ripgrep filename search.
-        vscode.postMessage({ command: 'searchFiles', glob: normalizedGlob! });
+        // Glob file filter with no content query → ripgrep filename search.
+        vscode.postMessage({ command: 'searchFiles', glob: glob! });
       }
     } else {
       // Content search, optionally scoped by file filter glob.
@@ -305,7 +305,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
         pattern,
         caseSensitive,
         useRegex,
-        include: normalizedGlob,
+        include: glob,
         contextLines: contextLines || undefined,
       });
       // If regex file filter is also active, rerender will apply it client-side
