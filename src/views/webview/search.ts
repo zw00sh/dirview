@@ -181,10 +181,14 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   );
 
   // ── Status line ────────────────────────────────────────────────────────
-  const statusEl = h('div', { className: 'search-status', style: { display: 'none' } });
-  const truncWarning = h('div', { className: 'search-truncation-warning', style: { display: 'none' } },
-    h('span', { innerHTML: Icons.SVG_WARNING }),
-    h('span', { textContent: 'Results are truncated, narrow the search to show all' }),
+  const statusTextEl = h('span', { className: 'search-status-text' });
+  const truncWarning = h('span', { className: 'search-truncation-warning', style: { display: 'none' } },
+    h('span', { textContent: ' - ' }),
+    h('span', { className: 'search-truncation-icon', innerHTML: Icons.SVG_WARNING }),
+    h('span', { textContent: ' The result set only contains a subset of all matches' }),
+  );
+  const statusEl = h('div', { className: 'search-status', style: { display: 'none' } },
+    statusTextEl, truncWarning,
   );
 
   const queryDetails = h('div', { className: 'search-query-details' },
@@ -192,7 +196,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   );
 
   const el = h('div', { className: 'search-bar' },
-    inputRow, queryDetails, truncWarning, statusEl,
+    inputRow, queryDetails, statusEl,
   );
 
   // ── State ──────────────────────────────────────────────────────────────
@@ -341,9 +345,9 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   }
 
   function applyStatus(result: { text: string; visible: boolean; truncated: boolean }): void {
-    statusEl.textContent = result.text;
+    statusTextEl.textContent = result.text;
     statusEl.style.display = result.visible ? '' : 'none';
-    truncWarning.style.display = result.truncated ? '' : 'none';
+    truncWarning.style.display = result.truncated ? 'inline' : 'none';
   }
 
   // setStatus is the externally-driven variant used by the standalone search fold.
