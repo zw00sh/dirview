@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.1] — 2026-03-16
+
+### Changed
+- Tab opens immediately on startup instead of waiting for the scan to complete.
+
 ## [0.5.1] — 2026-03-13
 
 ### Changed
