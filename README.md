@@ -8,12 +8,13 @@ Unashamedly vibe coded, but it works. Open a workspace and you get a sidebar tre
 
 ## Features
 
-- proportional color bars per directory, using GitHub linguist colors
-- sidebar tree view and a full-width editor tab with a language legend
-- sort by file count, name, or size
-- filter by language, toggle ignored files, truncate noisy directories
-- drill into any subdirectory as its own tab root
-- auto-rescans on file changes
+- Proportional color bars per directory, using GitHub linguist colors
+- Sidebar tree view and a full-width editor tab with a language legend
+- Sort by file count, name, or size
+- Filter by language, toggle ignored files, truncate noisy directories
+- Drill into any subdirectory as its own tab root
+- Open the full breakdown tab from the Command Palette (`Directory Breakdown: Open Breakdown Tab`) or from the sidebar title bar button
+- Auto-rescans on file changes
 
 ## Installation
 

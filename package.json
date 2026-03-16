@@ -111,7 +111,8 @@
       },
       {
         "command": "dirview.openInTab",
-        "title": "Open in Editor Tab",
+        "title": "Open Breakdown Tab",
+        "category": "Directory Breakdown",
         "icon": "$(open-preview)"
       },
       {
