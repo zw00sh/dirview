@@ -215,7 +215,10 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     return h('li', row);
   }
 
-  function renderDirNode(node: DirNode, depth: number, maxMetric: number, ancestors: IndentAncestor[], clientWidth: number): HTMLLIElement {
+  // Renders just the directory row (<li> with <div class="dir-row">) without children.
+  // Used by the virtual scroller to render flat dir rows. Also called internally by
+  // renderDirNode() which adds the children <ul> on top.
+  function renderDirRow(node: DirNode, depth: number, maxMetric: number, ancestors: IndentAncestor[], clientWidth: number): HTMLLIElement {
     // Compact folders: collapse chain of dirs with exactly 1 child dir and 0 files.
     // Tree is pre-filtered, so children/files are already the visible set.
     let displayNode: DirNode = node;
@@ -382,6 +385,26 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
 
     li.appendChild(row);
 
+    return li;
+  }
+
+  function renderDirNode(node: DirNode, depth: number, maxMetric: number, ancestors: IndentAncestor[], clientWidth: number): HTMLLIElement {
+    // Render the <li> + <div class="dir-row"> via renderDirRow (shared with virtual scroller).
+    const li = renderDirRow(node, depth, maxMetric, ancestors, clientWidth);
+
+    // Retrieve the display node from nodeMap — renderDirRow registered it under the
+    // compacted path which is stored as li's data-node-path.
+    const displayPath = li.dataset.nodePath!;
+    const entry = nodeMap.get(displayPath)!;
+    const displayNode = entry.node as DirNode;
+    const hasChildren = entry.hasChildren;
+
+    const isFiltered = !!(state as any)._isFiltered;
+    const isExpanded = state.expanded.get(displayNode.path) ?? (isFiltered || depth === 0);
+
+    const sortedChildren: DirNode[] = sortDirs(displayNode.children, state.currentSortMode);
+    const sortedFiles: FileNode[] = sortFiles(displayNode.files || []);
+
     // Children container — lazy: only populate when expanded to avoid building
     // collapsed subtrees during off-screen tree construction for patching.
     if (hasChildren) {
@@ -451,6 +474,7 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
       _renderFileMatches(ctx, container, file, depth, ancestors),
     renderTruncatedRow,
     renderEmptyGroupNode,
+    renderDirRow,
     renderDirNode,
   };
 }

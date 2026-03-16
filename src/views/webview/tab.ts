@@ -1,16 +1,16 @@
 import {
+  h,
   createScanBar,
   createTooltip,
   createState,
   createRenderer,
-  renderTree,
   createMessageHandler,
   createSearchBar,
   computeStats,
   renderLegend,
   tieredExpandAll,
   tieredCollapseAll,
-  setupStickyTracking,
+  emptyState,
   SVG_EYE,
   SVG_EYE_CLOSED,
   SVG_FOLD,
@@ -20,9 +20,12 @@ import {
   SVG_SORT_SIZE,
   SVG_STICKY,
   SVG_STICKY_OFF,
-  emptyState,
 } from './index';
-import type { DirNode, SortMode, LangStat, BackendToWebviewMessage } from './types';
+import { flattenTree } from './virtual/flatten';
+import { createVirtualScroller } from './virtual/scroller';
+import { createStickyOverlay } from './virtual/sticky-overlay';
+import type { FlatRow } from './virtual/types';
+import type { DirNode, SortMode, LangStat, BackendToWebviewMessage, Renderer } from './types';
 
 const vscode = acquireVsCodeApi();
 const legendSection = document.getElementById('legend-section')!;
@@ -150,9 +153,6 @@ function updateStickyBtn() {
   toggleStickyBtn.setAttribute('aria-label', toggleStickyBtn.title);
 }
 
-// Set up sticky tracking — returns {updateStuck, setEnabled} for toggling sticky headers.
-const { updateStuck: _updateStuck, setEnabled: setStickyEnabled } = setupStickyTracking(root);
-
 function updateRefreshBtn(autoRescanEnabled: boolean) {
   refreshBtn.style.display = autoRescanEnabled ? 'none' : '';
 }
@@ -161,6 +161,101 @@ updateToggleIgnoredBtn();
 updateTruncationBtn();
 updateStickyBtn();
 updateRefreshBtn(true);
+
+// ── Virtual scroller + sticky overlay ───────────────────────────────────
+
+function renderFlatRow(r: Renderer, row: FlatRow): HTMLElement {
+  switch (row.type) {
+    case 'dir':
+      return r.renderDirRow(row.node, row.depth, row.maxMetric, row.ancestors, row.clientWidth);
+    case 'file':
+      return r.renderFileNode(row.file, row.depth, row.ancestors);
+    case 'truncated':
+      return r.renderTruncatedRow(row.hiddenFiles, row.depth, row.ancestors, row.dirPath, row.maxMetric, row.clientWidth);
+    case 'emptyGroup':
+      return r.renderEmptyGroupNode(row.nodes, row.depth, row.maxMetric, row.ancestors);
+    case 'matchGroup': {
+      // Build copy text for context menu
+      const firstMatch = row.matches[0];
+      let copyText: string;
+      if (row.matches.length === 1) {
+        copyText = firstMatch.matchGroup[0].lineText || '';
+      } else {
+        const copyLines: string[] = [];
+        for (const me of row.matches) {
+          for (const ctx of me.contextBefore) { copyLines.push(ctx.lineText || ''); }
+          copyLines.push(me.matchGroup[0].lineText || '');
+        }
+        copyText = copyLines.join('\n');
+      }
+      const wrapper = h('li', {
+        className: 'match-group' + (row.hasGap ? ' gap-before' : ''),
+        dataset: {
+          nodePath: 'match:' + row.file.path + ':' + firstMatch.matchGroup[0].line,
+          action: 'openFileAtLine',
+          path: row.file.path,
+          line: String(firstMatch.matchGroup[0].line),
+        },
+        attr: { 'data-vscode-context': JSON.stringify({
+          webviewSection: 'matchLine',
+          path: row.file.path,
+          lineText: copyText,
+          preventDefaultContextMenuItems: true,
+        }) },
+      });
+      // Spacer for gap
+      if (row.hasGap) {
+        wrapper.appendChild(h('div', { className: 'match-group-spacer' }, r.renderIndentGuides(row.depth, row.ancestors)));
+      }
+      // Render each match cluster
+      for (const me of row.matches) {
+        for (const ctx of me.contextBefore) {
+          const ctxLi = r.renderContextLine(row.file, ctx, row.depth, row.ancestors, row.dedent);
+          const ctxDiv = ctxLi.firstElementChild as HTMLElement;
+          delete ctxDiv.dataset.action;
+          delete ctxDiv.dataset.path;
+          delete ctxDiv.dataset.line;
+          wrapper.appendChild(ctxDiv);
+        }
+        const matchLi = r.renderMatchLine(row.file, me.matchGroup, row.depth, row.ancestors, row.dedent);
+        const matchDiv = matchLi.firstElementChild as HTMLElement;
+        matchDiv.removeAttribute('data-vscode-context');
+        wrapper.appendChild(matchDiv);
+      }
+      // Context-after
+      for (const ctx of row.contextAfter) {
+        const ctxLi = r.renderContextLine(row.file, ctx, row.depth, row.ancestors, row.dedent);
+        const ctxDiv = ctxLi.firstElementChild as HTMLElement;
+        delete ctxDiv.dataset.action;
+        delete ctxDiv.dataset.path;
+        delete ctxDiv.dataset.line;
+        wrapper.appendChild(ctxDiv);
+      }
+      return wrapper;
+    }
+    case 'moreMatches':
+      return r.renderMoreMatchesRow(row.count, row.depth, row.ancestors, row.filePath);
+    case 'workspaceHeader':
+      return h('li', { className: 'workspace-root-header', textContent: row.name });
+  }
+}
+
+let currentFlatRows: FlatRow[] = [];
+
+const scroller = createVirtualScroller({
+  container: root,
+  renderRow: (row) => renderFlatRow(renderer, row),
+  overscan: 15,
+  treeClass: '',
+  onRender: (visibleStart, _visibleEnd) => {
+    overlay.update(currentFlatRows, visibleStart);
+  },
+});
+
+const overlay = createStickyOverlay({
+  container: root,
+  renderRow: (row) => renderFlatRow(renderer, row),
+});
 
 // ── Toolbar event listeners ─────────────────────────────────────────────
 
@@ -180,6 +275,7 @@ sortBtn.addEventListener('click', () => {
   sortBtn.title = getSortTitle(next);
   sortBtn.setAttribute('aria-label', sortBtn.title);
   sortBtn.innerHTML = ({ files: SVG_SORT_FILES, name: SVG_SORT_NAME, size: SVG_SORT_SIZE } as Record<SortMode, string>)[next] || SVG_SORT_FILES;
+  scroller.setTreeClass(next === 'size' ? 'sort-size' : '');
   state.rerender();
 });
 toggleIgnoredBtn.addEventListener('click', () => {
@@ -291,14 +387,13 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   updateLegend(roots ? computeStats(state.lastRoots!) : []);
   searchBar.updateFilterWarning(state.activeFilters.size);
 
-  // Remove one-time placeholders (loading/initializing) without wiping the
-  // whole container — preserves any existing tree for incremental patching.
   root.querySelector('.empty-state')?.remove();
 
   updateRefreshBtn(autoRescanEnabled);
 
   if (!roots || roots.length === 0) {
-    root.querySelector('ul.tree')?.remove();
+    currentFlatRows = [];
+    scroller.update([], 0);
     if (!root.querySelector('.empty-state')) {
       root.appendChild(emptyState('noWorkspace'));
     }
@@ -306,8 +401,36 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   }
 
   root.querySelector('.empty-state')?.remove();
-  renderTree(state, renderer, root, { showRootNode: true });
-  _updateStuck();
+
+  // Clear nodeMap before each render pass
+  renderer.beforeRender();
+
+  // Set _isFiltered on state so the renderer's renderDirRow can read it for chevron/expand logic.
+  (state as any)._isFiltered = state.activeFilters.size > 0 || state.searchResults !== null || state.fileFilterFn !== null;
+
+  // Build flat rows and update virtual scroller
+  const { flatRows, totalHeight, totalVisibleFiles } = flattenTree(state, roots, {
+    showRootNode: true,
+    clientWidth: root.clientWidth || 600,
+  });
+  state.lastFilteredFileCount = totalVisibleFiles;
+  currentFlatRows = flatRows;
+
+  // Check if filtered tree is empty (no matching files/dirs)
+  const isFiltered = state.activeFilters.size > 0 || state.searchResults !== null || state.fileFilterFn !== null;
+  const filteredEmpty = isFiltered && flatRows.length === 0;
+
+  scroller.setTreeClass(state.currentSortMode === 'size' ? 'sort-size' : '');
+  scroller.update(flatRows, totalHeight);
+
+  // Show/hide "no results" empty state
+  const existingNoResults = root.querySelector(':scope > .empty-state');
+  if (filteredEmpty) {
+    if (!existingNoResults) { root.appendChild(emptyState('noResults')); }
+  } else {
+    existingNoResults?.remove();
+  }
+
   updateSearchActiveAlert();
 }
 
@@ -334,7 +457,7 @@ const sharedHandler = createMessageHandler(state, scanBar, root, {
     if (typeof message.stickyHeadersEnabled === 'boolean') {
       currentStickyEnabled = message.stickyHeadersEnabled;
       updateStickyBtn();
-      setStickyEnabled(message.stickyHeadersEnabled);
+      overlay.setEnabled(message.stickyHeadersEnabled);
     }
     if (typeof message.hasRipgrep === 'boolean') {
       searchBar.setHasRipgrep(message.hasRipgrep);
@@ -355,7 +478,7 @@ window.addEventListener('message', (event: MessageEvent) => {
   if (message.type === 'updateStickyHeaders') {
     currentStickyEnabled = message.enabled;
     updateStickyBtn();
-    setStickyEnabled(message.enabled);
+    overlay.setEnabled(message.enabled);
     return;
   }
   if (message.type === 'updateTruncation') {
