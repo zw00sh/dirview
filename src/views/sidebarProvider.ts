@@ -47,8 +47,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     setupVisibilityReplay(webviewView, () => {
       if (!this.lastUpdate) { return undefined; }
-      const { roots, autoRescanEnabled, sortMode, truncateThreshold, sidebarStickyHeadersEnabled: stickyHeadersEnabled } = this.lastUpdate;
-      return { type: 'update', roots, autoRescanEnabled, sortMode, truncateThreshold, stickyHeadersEnabled };
+      const { roots, autoRescanEnabled, sortMode, truncateThreshold, sidebarStickyHeadersEnabled: stickyHeadersEnabled, isLocal } = this.lastUpdate;
+      return { type: 'update', roots, autoRescanEnabled, sortMode, truncateThreshold, stickyHeadersEnabled, isLocal };
     });
   }
 
@@ -63,7 +63,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       this.view.title = roots.length === 1 ? roots[0].name : 'Files';
     }
     const stickyHeadersEnabled = payload.sidebarStickyHeadersEnabled;
-    if (this.view) { post(this.view.webview, { type: 'update', roots, autoRescanEnabled, sortMode, truncateThreshold, stickyHeadersEnabled }); }
+    const isLocal = payload.isLocal;
+    if (this.view) { post(this.view.webview, { type: 'update', roots, autoRescanEnabled, sortMode, truncateThreshold, stickyHeadersEnabled, isLocal }); }
   }
 
   updateTruncateThreshold(truncateThreshold: number): void {

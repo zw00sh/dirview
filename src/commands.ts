@@ -29,6 +29,7 @@ export function registerCommands(
   providers: Providers,
   doScan: () => void,
   getTruncateThreshold: () => number,
+  getIsLocal: () => boolean,
 ): void {
   const { sidebar, tab, languages } = providers;
 
@@ -55,7 +56,7 @@ export function registerCommands(
   // Three separate commands for each sort mode — each shows a different icon via the
   // dirview.sortMode context key. All handlers are identical: advance to the next mode.
   const cycleSortHandler = async () => {
-    const newMode = await config.cycleSortMode();
+    const newMode = await config.cycleSortMode(getIsLocal());
     sidebar.updateSortMode(newMode);
   };
   context.subscriptions.push(

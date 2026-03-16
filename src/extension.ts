@@ -40,6 +40,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   registerCommands(context, config, { sidebar: sidebarProvider, tab: tabProvider, languages: languagesProvider },
     () => coordinator.scan(),
     () => coordinator.getTruncateThreshold(),
+    () => coordinator.isLocal,
   );
 
   coordinator.startWatcher(context);

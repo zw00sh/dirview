@@ -8,6 +8,7 @@ export interface ScanUpdatePayload {
   showIgnored: boolean;
   sidebarStickyHeadersEnabled: boolean;
   tabStickyHeadersEnabled: boolean;
+  isLocal: boolean;
 }
 
 export interface FileTypeStats {

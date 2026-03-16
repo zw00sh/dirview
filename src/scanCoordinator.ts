@@ -12,6 +12,7 @@ export class ScanCoordinator {
   private scanQueued = false;
   private abortController: AbortController | undefined;
   private watcher: FileWatcher | undefined;
+  isLocal = true;
 
   constructor(
     private config: Config,
@@ -42,6 +43,7 @@ export class ScanCoordinator {
       const result = await scanWorkspace(this.config.showIgnored, this.abortController.signal);
       // If the scan was cancelled, don't push stale partial data to the views.
       if (this.abortController.signal.aborted) { return; }
+      this.isLocal = result.isLocal;
       this.watcher?.updateAutoRescan(result.totalFiles);
       const autoRescanEnabled = this.watcher ? this.watcher.isAutoRescanEnabled : true;
       vscode.commands.executeCommand('setContext', 'dirview.autoRescanEnabled', autoRescanEnabled);
@@ -54,6 +56,7 @@ export class ScanCoordinator {
         showIgnored: this.config.showIgnored,
         sidebarStickyHeadersEnabled: this.config.sidebarStickyHeadersEnabled,
         tabStickyHeadersEnabled: this.config.tabStickyHeadersEnabled,
+        isLocal: result.isLocal,
       };
       this.sidebar.update(payload);
       this.languages.update(payload);

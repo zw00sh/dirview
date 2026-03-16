@@ -3,6 +3,7 @@ import type { SortMode } from './views/webview/types';
 
 export type { SortMode };
 const SORT_CYCLE: readonly SortMode[] = ['files', 'name', 'size'] as const;
+const SORT_CYCLE_NO_SIZE: readonly SortMode[] = ['files', 'name'] as const;
 
 export class Config {
   private context: vscode.ExtensionContext;
@@ -33,10 +34,11 @@ export class Config {
     return this.context.workspaceState.get<SortMode>('dirview.sortMode', 'files');
   }
 
-  async cycleSortMode(): Promise<SortMode> {
+  async cycleSortMode(isLocal = true): Promise<SortMode> {
+    const cycle = isLocal ? SORT_CYCLE : SORT_CYCLE_NO_SIZE;
     const current = this.sortMode;
-    const idx = SORT_CYCLE.indexOf(current);
-    const next = SORT_CYCLE[(idx + 1) % SORT_CYCLE.length];
+    const idx = cycle.indexOf(current);
+    const next = cycle[(idx + 1) % cycle.length];
     await this.context.workspaceState.update('dirview.sortMode', next);
     await vscode.commands.executeCommand('setContext', 'dirview.sortMode', next);
     return next;

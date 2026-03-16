@@ -209,6 +209,7 @@ export class TabProvider {
             truncateThreshold: this.lastPayload?.truncateThreshold ?? 4,
             showIgnored: this.lastPayload?.showIgnored ?? false,
             stickyHeadersEnabled: this.config.tabStickyHeadersEnabled,
+            isLocal: this.lastPayload?.isLocal ?? true,
             hasRipgrep: this.rgAvailable,
           });
         }
@@ -290,6 +291,7 @@ export class TabProvider {
         type: 'update', roots: effectiveRoots, dirPath,
         workspaceFolderName: this.getWorkspaceFolderName(dirPath),
         autoRescanEnabled, sortMode, truncateThreshold, showIgnored, stickyHeadersEnabled,
+        isLocal: payload.isLocal,
         hasRipgrep: this.rgAvailable,
       });
     }

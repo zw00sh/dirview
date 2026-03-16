@@ -106,6 +106,7 @@ const renderer = createRenderer(state, {
 
 let currentShowIgnored = false;
 let currentTruncationEnabled = true;
+let currentIsLocal = true;
 // The directory path this tab is rooted at ('' = workspace root).
 state.dirPath = '';
 // Workspace folder name used by ancestor path context menus.
@@ -119,6 +120,13 @@ let legendShowPct = false;
 // SVG icons for the legend display toggle — typographic % and # glyphs, matching sidebar title bar icons
 const SVG_PCT = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><text x="8" y="12.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', sans-serif" font-weight="600" font-size="13" fill="currentColor">%</text></svg>';
 const SVG_HASH = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><text x="8" y="12.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', sans-serif" font-weight="600" font-size="13" fill="currentColor">#</text></svg>';
+
+function getSortTitle(mode: SortMode): string {
+  const sortNames: Record<SortMode, string> = { files: 'by file count', name: 'by name', size: 'by size' };
+  const base = 'Sort: ' + (sortNames[mode] || 'by file count');
+  if (!currentIsLocal) { return base + ' (size unavailable on remote filesystems)'; }
+  return base;
+}
 
 // ── Toolbar button helpers ──────────────────────────────────────────────
 
@@ -166,11 +174,10 @@ toggleTruncationBtn.addEventListener('click', () => {
 });
 sortBtn.addEventListener('click', () => {
   if (!state.lastRoots) { return; }
-  const modes: SortMode[] = ['files', 'name', 'size'];
+  const modes: SortMode[] = currentIsLocal ? ['files', 'name', 'size'] : ['files', 'name'];
   const next = modes[(modes.indexOf(state.currentSortMode) + 1) % modes.length];
   state.currentSortMode = next;
-  const sortNames: Record<SortMode, string> = { files: 'by file count', name: 'by name', size: 'by size' };
-  sortBtn.title = 'Sort: ' + (sortNames[next] || 'by file count');
+  sortBtn.title = getSortTitle(next);
   sortBtn.setAttribute('aria-label', sortBtn.title);
   sortBtn.innerHTML = ({ files: SVG_SORT_FILES, name: SVG_SORT_NAME, size: SVG_SORT_SIZE } as Record<SortMode, string>)[next] || SVG_SORT_FILES;
   state.rerender();
@@ -277,8 +284,7 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   state.lastAutoRescanEnabled = autoRescanEnabled;
   state.currentSortMode = sortMode || 'files';
 
-  const sortNames: Record<SortMode, string> = { files: 'by file count', name: 'by name', size: 'by size' };
-  sortBtn.title = 'Sort: ' + (sortNames[state.currentSortMode] || 'by file count');
+  sortBtn.title = getSortTitle(state.currentSortMode);
   sortBtn.setAttribute('aria-label', sortBtn.title);
   sortBtn.innerHTML = ({ files: SVG_SORT_FILES, name: SVG_SORT_NAME, size: SVG_SORT_SIZE } as Record<SortMode, string>)[state.currentSortMode] || SVG_SORT_FILES;
 
@@ -315,6 +321,7 @@ const sharedHandler = createMessageHandler(state, scanBar, root, {
   resolveUpdateSortMode: () => state.currentSortMode || 'files',
   onBeforeUpdate: (message: BackendToWebviewMessage & { type: 'update' }) => {
     currentShowIgnored = message.showIgnored || false;
+    if (typeof message.isLocal === 'boolean') { currentIsLocal = message.isLocal; }
     updateToggleIgnoredBtn();
     if (typeof message.dirPath === 'string') {
       const dirChanged = state.dirPath !== message.dirPath;
