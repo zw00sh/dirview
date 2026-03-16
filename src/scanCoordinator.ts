@@ -64,6 +64,8 @@ export class ScanCoordinator {
       this.languages.update(payload);
       this.tab.update(payload);
     } catch (err) {
+      // Aborted scans are expected when a new scan is queued — don't show as error.
+      if (this.abortController?.signal.aborted) { return; }
       const message = err instanceof Error ? err.message : String(err);
       this.sidebar.showError(message);
       this.tab.showError(message);
