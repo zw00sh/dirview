@@ -195,6 +195,11 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
 
 
   function computeDebounce(): number {
+    // Client-side regex file filter (no content search) is cheap enough
+    // to run without any debounce — flattenTree + virtual scroller render
+    // completes in < 16ms even on 28k-file trees.
+    if (!mainInput.value.trim() && includeUseRegex) { return 0; }
+
     if (anchorMainQuery === null) { return 300; }
     if (state.searchActive) { return 300; }
     const newMain = mainInput.value.trim();
