@@ -129,16 +129,6 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   filterContainer.insertBefore(langPill, filterContainer.firstChild);
   filterContainer.appendChild(includeInput);
 
-  // Clear button for the file filter input — mirrors clearBtn for the main input.
-  const includeClearBtn = h('button', {
-    className: 'search-toggle',
-    title: 'Clear File Filter',
-    innerHTML: Icons.SVG_CLOSE,
-    style: { display: 'none' },
-    attr: { 'aria-label': 'Clear File Filter' },
-  });
-  filterContainer.appendChild(includeClearBtn);
-
   // Regex toggle for file filter — inside the bordered container, matching the main input style.
   // When active: client-side regex filtering. When inactive: glob passed to ripgrep as-is.
   const includeRegexBtn = h('button', {
@@ -149,6 +139,16 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   });
   let includeUseRegex = true;
   filterContainer.appendChild(includeRegexBtn);
+
+  // Clear button for the file filter input — last in the container, matching clearBtn order.
+  const includeClearBtn = h('button', {
+    className: 'search-toggle',
+    title: 'Clear File Filter',
+    innerHTML: Icons.SVG_CLOSE,
+    style: { display: 'none' },
+    attr: { 'aria-label': 'Clear File Filter' },
+  });
+  filterContainer.appendChild(includeClearBtn);
 
   const includeSection = h('div', { className: 'search-filter-section' },
     h('label', { className: 'search-filter-label', textContent: 'find or filter files' }),
