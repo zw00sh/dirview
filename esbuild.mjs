@@ -6,7 +6,7 @@ await esbuild.build({
   entryPoints: ['src/extension.ts'],
   bundle: true,
   outfile: 'out/extension.js',
-  external: ['vscode', '@vscode/ripgrep'],
+  external: ['vscode', '@vscode/ripgrep', 'ws'],
   format: 'cjs',
   platform: 'node',
   sourcemap: false,

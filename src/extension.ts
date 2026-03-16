@@ -89,12 +89,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
   );
 
-  await coordinator.scan();
-
   const openOnStartup = vscode.workspace.getConfiguration('dirview').get<boolean>('openTabOnStartup', false);
   if (openOnStartup && vscode.workspace.workspaceFolders?.length) {
     tabProvider.openOrFocus();
   }
+
+  await coordinator.scan();
 }
 
 export function deactivate(): void {}
