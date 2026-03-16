@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.1] — 2026-03-17
+
+### Added
+- **Command Palette entry** — "Directory Breakdown: Open Breakdown Tab" now available from the Command Palette.
+- **Background rescan after search** — when auto-rescan is disabled (large repos), a background rescan is triggered after each search completes so the tree catches up with filesystem changes discovered by ripgrep.
+
+### Changed
+- Search status text now uses VS Code's native font size and foreground color (at 0.65 opacity), matching the native search panel styling.
+- Truncation warning restyled as an inline suffix on the result count line: "N results in M files - (icon) The result set only contains a subset of all matches".
+- Sidebar no longer starts with directories expanded; expand-all button works correctly on first click.
+
+### Fixed
+- Sidebar expand-all doing nothing on first click when directories had no explicit expand state.
+
 ## [1.3.0] — 2026-03-17
 
 ### Added
