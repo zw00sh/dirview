@@ -733,12 +733,30 @@ body {
 }
 
 .search-status {
-  font-size: 11px;
-  color: var(--vscode-descriptionForeground);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+  opacity: 0.65;
+  line-height: 1.4;
   padding: 2px 2px 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.search-truncation-warning {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-inputValidation-warningForeground, #cca700);
+  opacity: 0.65;
+  line-height: 1.4;
+  padding: 2px 2px 0;
+}
+.search-truncation-warning svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 /* ── Match lines (search result rows under file nodes) ───────────────────── */

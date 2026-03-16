@@ -182,13 +182,17 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
 
   // ── Status line ────────────────────────────────────────────────────────
   const statusEl = h('div', { className: 'search-status', style: { display: 'none' } });
+  const truncWarning = h('div', { className: 'search-truncation-warning', style: { display: 'none' } },
+    h('span', { innerHTML: Icons.SVG_WARNING }),
+    h('span', { textContent: 'Results are truncated, narrow the search to show all' }),
+  );
 
   const queryDetails = h('div', { className: 'search-query-details' },
     detailsToggle, detailsSection,
   );
 
   const el = h('div', { className: 'search-bar' },
-    inputRow, queryDetails, statusEl,
+    inputRow, queryDetails, truncWarning, statusEl,
   );
 
   // ── State ──────────────────────────────────────────────────────────────
@@ -283,27 +287,28 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     matchCount: number,
     fileCount: number,
     truncated: boolean,
-  ): { text: string; visible: boolean } {
+  ): { text: string; visible: boolean; truncated: boolean } {
     if (active) {
-      return { text: 'Searching\u2026', visible: true };
+      return { text: 'Searching\u2026', visible: true, truncated: false };
     }
     if (!hasResults) {
-      return { text: '', visible: false };
+      return { text: '', visible: false, truncated: false };
     }
     if (resultCount === 0) {
       const q = mainInput.value.trim() || includeInput.value.trim();
-      return { text: q ? 'No results' : '', visible: !!q };
+      return { text: q ? 'No results' : '', visible: !!q, truncated: false };
     }
-    const trunc = truncated ? ' (truncated)' : '';
     if (matchCount > 0) {
       return {
-        text: `${matchCount} result${matchCount !== 1 ? 's' : ''} in ${fileCount} file${fileCount !== 1 ? 's' : ''}${trunc}`,
+        text: `${matchCount} result${matchCount !== 1 ? 's' : ''} in ${fileCount} file${fileCount !== 1 ? 's' : ''}`,
         visible: true,
+        truncated,
       };
     }
     return {
-      text: `${fileCount} file${fileCount !== 1 ? 's' : ''}${trunc}`,
+      text: `${fileCount} file${fileCount !== 1 ? 's' : ''}`,
       visible: true,
+      truncated,
     };
   }
 
@@ -323,7 +328,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     }
 
     // Show immediate status (ripgrep totals or "Searching…").
-    const { text, visible } = formatSearchStatus(
+    const result = formatSearchStatus(
       state.searchActive,
       state.searchResults !== null || state.fileFilterActive,
       state.searchResults ? state.searchResults.size : 0,
@@ -331,24 +336,27 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
       state.searchFileCount,
       state.searchTruncated,
     );
-    statusEl.textContent = text;
-    statusEl.style.display = visible ? '' : 'none';
+    applyStatus(result);
     updateDebounceAnchor(state.searchResults ? state.lastFilteredFileCount : state.searchFileCount);
+  }
+
+  function applyStatus(result: { text: string; visible: boolean; truncated: boolean }): void {
+    statusEl.textContent = result.text;
+    statusEl.style.display = result.visible ? '' : 'none';
+    truncWarning.style.display = result.truncated ? '' : 'none';
   }
 
   // setStatus is the externally-driven variant used by the standalone search fold.
   // Called with the searchStatus message data from the host (no state dependency).
   function setStatus(data: SearchStatusData): void {
-    const { text, visible } = formatSearchStatus(
+    applyStatus(formatSearchStatus(
       !!data.active,
       !!data.matches,
       data.matches ? Object.keys(data.matches).length : 0,
       data.matchCount ?? 0,
       data.fileCount ?? 0,
       !!data.truncated,
-    );
-    statusEl.textContent = text;
-    statusEl.style.display = visible ? '' : 'none';
+    ));
   }
 
   // Wire state.searchBar_updateStatus so the message handler can call it (non-standalone only).
@@ -436,6 +444,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     includeClearBtn.style.display = 'none';
     excludeClearBtn.style.display = 'none';
     statusEl.style.display = 'none';
+    truncWarning.style.display = 'none';
     inputContainer.classList.remove('regex-error');
     state.fileFilterActive = false;
     state.searchResultsVersion++;
@@ -465,6 +474,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     if (!includeInput.value.trim() && !excludeInput.value.trim()) {
       // No filter either — full clear.
       statusEl.style.display = 'none';
+    truncWarning.style.display = 'none';
       state.fileFilterActive = false;
       state.searchResultsVersion++;
       vscode.postMessage({ command: 'clearSearch' });
@@ -480,6 +490,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     if (!mainInput.value.trim() && !excludeInput.value.trim()) {
       // No content query or exclude either — full clear.
       statusEl.style.display = 'none';
+    truncWarning.style.display = 'none';
       state.fileFilterActive = false;
       state.searchResultsVersion++;
       vscode.postMessage({ command: 'clearSearch' });
@@ -494,6 +505,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     if (debounceTimer) { clearTimeout(debounceTimer); }
     if (!mainInput.value.trim() && !includeInput.value.trim()) {
       statusEl.style.display = 'none';
+    truncWarning.style.display = 'none';
       state.fileFilterActive = false;
       state.searchResultsVersion++;
       vscode.postMessage({ command: 'clearSearch' });
@@ -708,16 +720,14 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     const hasResults = state.searchResults !== null || state.fileFilterActive;
     const fileCount = state.lastFilteredFileCount;
     const matchCount = state.lastFilteredMatchCount;
-    const { text, visible } = formatSearchStatus(
+    applyStatus(formatSearchStatus(
       false,
       hasResults,
       fileCount,
       matchCount,
       fileCount,
       state.searchTruncated,
-    );
-    statusEl.textContent = text;
-    statusEl.style.display = visible ? '' : 'none';
+    ));
     updateDebounceAnchor(fileCount);
   }
 

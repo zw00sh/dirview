@@ -5,6 +5,7 @@ import {
   createState,
   createRenderer,
   createMessageHandler,
+  isFiltered,
   emptyState,
 } from './index';
 import { flattenTree } from './virtual/flatten';
@@ -146,7 +147,7 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   root.querySelector('.empty-state')?.remove();
   renderer.beforeRender();
 
-  state._isFiltered = state.activeFilters.size > 0 || state.searchResults !== null || state.fileFilterActive;
+  state._isFiltered = isFiltered(state);
 
   const { flatRows, totalHeight } = flattenTree(state, roots, {
     showRootNode: false,

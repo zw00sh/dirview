@@ -10,6 +10,7 @@ import {
   renderLegend,
   tieredExpandAll,
   tieredCollapseAll,
+  isFiltered,
   emptyState,
   SVG_EYE,
   SVG_EYE_CLOSED,
@@ -450,7 +451,7 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   renderer.beforeRender();
 
   // Set _isFiltered on state so the renderer's renderDirRow can read it for chevron/expand logic.
-  state._isFiltered = state.activeFilters.size > 0 || state.searchResults !== null || state.fileFilterActive;
+  state._isFiltered = isFiltered(state);
 
   // Build flat rows and update virtual scroller
   const { flatRows, totalHeight, totalVisibleFiles, totalVisibleMatches, filteredRoots, searchFilteredStats } = flattenTree(state, roots, {
@@ -465,8 +466,7 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   currentFlatRows = flatRows;
 
   // Check if filtered tree is empty (no matching files/dirs)
-  const isFiltered = state.activeFilters.size > 0 || state.searchResults !== null || state.fileFilterActive;
-  const filteredEmpty = isFiltered && flatRows.length === 0;
+  const filteredEmpty = state._isFiltered && flatRows.length === 0;
 
   scroller.setTreeClass(state.currentSortMode === 'size' ? 'sort-size' : '');
   scroller.update(flatRows, totalHeight);

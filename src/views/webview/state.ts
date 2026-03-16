@@ -3,6 +3,20 @@
 import type { DirNode, WebviewState, SortMode } from './types';
 import { compactedNode, compactedPath, hasExpandedDescendant } from './utils';
 
+/** Whether any filter (language, search, or file include/exclude) is active. */
+export function isFiltered(state: WebviewState): boolean {
+  return state.activeFilters.size > 0 || !!state.searchResults || state.fileFilterActive;
+}
+
+/** Ensure tab-mode root nodes have an explicit expanded entry.
+ *  Called before flatten/render so roots are always visually expanded. */
+export function ensureRootsExpanded(state: WebviewState, roots: DirNode[]): void {
+  for (const r of roots) {
+    const cn = compactedNode(r);
+    if (!state.expanded.has(cn.path)) { state.expanded.set(cn.path, true); }
+  }
+}
+
 // Create a fresh webview state object with default values.
 export function createState(): WebviewState {
   const state: WebviewState = {
@@ -83,17 +97,21 @@ export function walkCollapse(state: WebviewState, nodes: DirNode[]): void {
 // expandable items. The tiers mirror the per-dir button with the virtual workspace root as target:
 // Tier 1: any top-level item not expanded → expand all top-level items
 // Tier 2: all top-level items expanded → recursively expand entire subtree
+//
+// Note: dirs without an explicit expanded entry default to collapsed unless a filter is active
+// (isFiltered fallback). Depth-0 auto-expand was removed — sidebar starts collapsed.
 export function tieredExpandAll(state: WebviewState, roots: DirNode[]): void {
   const topLevel = roots.flatMap(r => r.children || []);
   if (topLevel.length === 0) { return; }
 
-  // When filters are active, dirs are implicitly expanded by the renderer.
-  // Use isFiltered as fallback so tier checks recognize implicitly expanded nodes.
-  const isFiltered = state.activeFilters.size > 0 || !!state.searchResults || state.fileFilterActive;
+  // When filters are active, dirs are implicitly expanded by the renderer
+  // (isExpanded = state.expanded.get(path) ?? isFiltered). Use the same
+  // fallback here so tier checks match what the user sees on screen.
+  const filtered = isFiltered(state);
 
   const allTopExpanded = topLevel.every(node => {
     const cn = compactedNode(node);
-    return cn.children.length === 0 || (state.expanded.get(cn.path) ?? isFiltered);
+    return cn.children.length === 0 || (state.expanded.get(cn.path) ?? filtered);
   });
 
   if (!allTopExpanded) {
@@ -116,23 +134,24 @@ export function tieredExpandAll(state: WebviewState, roots: DirNode[]): void {
 // Tier 1: any top-level item has expanded descendants → collapse those (keep top-level items open)
 // Tier 2: only top-level items expanded (no deeper descendants) → collapse all top-level items
 // Tier 3: nothing is expanded → no-op
+//
+// Note: uses isFiltered() for implicit expansion detection, matching the renderer's fallback logic.
 export function tieredCollapseAll(state: WebviewState, roots: DirNode[]): void {
   const topLevel = roots.flatMap(r => r.children || []);
   if (topLevel.length === 0) { return; }
 
-  // When filters are active, dirs are implicitly expanded by the renderer.
-  // Use isFiltered as fallback so tier checks recognize implicitly expanded nodes.
-  const isFiltered = state.activeFilters.size > 0 || !!state.searchResults || state.fileFilterActive;
-  const isNodeExpanded = (node: DirNode) => state.expanded.get(compactedPath(node)) ?? isFiltered;
+  const filtered = isFiltered(state);
+  const isNodeExpanded = (node: DirNode) => state.expanded.get(compactedPath(node)) ?? filtered;
 
   const anyTopExpanded = topLevel.some(isNodeExpanded);
   if (!anyTopExpanded) {
     // Tier 3: nothing to collapse
     return;
   }
+
   const anyDeeperExpanded = topLevel.some(node => {
     const cn = compactedNode(node);
-    return hasExpandedDescendant(state, cn, isFiltered);
+    return hasExpandedDescendant(state, cn, filtered);
   });
 
   if (anyDeeperExpanded) {

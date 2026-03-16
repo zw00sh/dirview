@@ -1,6 +1,7 @@
 // Tree rendering functions: renderRoots, renderTree.
 
-import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, emptyState, compactedNode } from '../utils';
+import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, emptyState } from '../utils';
+import { ensureRootsExpanded } from '../state';
 import { filterTree } from '../filter';
 import { patchTreeChildren } from './dom-patch';
 import { h } from '../h';
@@ -25,9 +26,8 @@ export function renderRoots(
 
   if (opts && opts.showRootNode) {
     // Tab view: each root is a visible depth-0 node, always expanded.
+    ensureRootsExpanded(state, roots);
     for (const r of roots) {
-      const cn = compactedNode(r);
-      if (!state.expanded.has(cn.path)) { state.expanded.set(cn.path, true); }
       state.currentRootName = r.name;
       treeEl.appendChild(renderer.renderDirNode(r, 0, maxMetric, [], clientWidth));
     }

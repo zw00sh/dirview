@@ -232,8 +232,8 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
 
     const li = h('li', { dataset: { nodePath: displayNode.path } });
 
-    const isFiltered = !!state._isFiltered;
-    const isExpanded = state.expanded.get(displayNode.path) ?? isFiltered;
+    // Explicit entry, or implicitly expanded when filtered.
+    const shouldExpand = state.expanded.get(displayNode.path) ?? !!state._isFiltered;
 
     const sortedChildren: DirNode[] = sortDirs(displayNode.children, state.currentSortMode);
     const sortedFiles: FileNode[] = sortFiles(displayNode.files || []);
@@ -268,7 +268,7 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
 
     // Chevron
     row.appendChild(h('span', {
-      className: 'chevron' + (hasChildren ? (isExpanded ? ' open' : '') : ' leaf'),
+      className: 'chevron' + (hasChildren ? (shouldExpand ? ' open' : '') : ' leaf'),
       innerHTML: SVG_CHEVRON,
     }));
 
@@ -394,8 +394,8 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     const displayNode = entry.node as DirNode;
     const hasChildren = entry.hasChildren;
 
-    const isFiltered = !!state._isFiltered;
-    const isExpanded = state.expanded.get(displayNode.path) ?? isFiltered;
+    // Explicit entry, or implicitly expanded when filtered.
+    const shouldExpand = state.expanded.get(displayNode.path) ?? !!state._isFiltered;
 
     const sortedChildren: DirNode[] = sortDirs(displayNode.children, state.currentSortMode);
     const sortedFiles: FileNode[] = sortFiles(displayNode.files || []);
@@ -403,13 +403,13 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     // Children container — lazy: only populate when expanded to avoid building
     // collapsed subtrees during off-screen tree construction for patching.
     if (hasChildren) {
-      const childrenEl = h('ul', { className: 'children' + (isExpanded ? ' open' : '') });
+      const childrenEl = h('ul', { className: 'children' + (shouldExpand ? ' open' : '') });
 
-      if (isExpanded) {
+      if (shouldExpand) {
         const nextAncestors: IndentAncestor[] = [...ancestors, { path: displayNode.path }];
 
         // Empty dir grouping — only when no filter is active (filtered trees already pruned)
-        if (!isFiltered && sortedChildren.length > 0) {
+        if (!state._isFiltered && sortedChildren.length > 0) {
           for (const group of groupEmptyDirs(sortedChildren)) {
             if (group.type === 'emptyGroup') {
               if (state.emptyGroupExpanded.has(group.nodes[0].path)) {
@@ -431,7 +431,7 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
 
         // File truncation — disabled when filter is active (all matched files must be shown).
         const isSingleDirRoot = depth === 0 && sortedChildren.length === 0;
-        const shouldTruncate = !isFiltered && !isSingleDirRoot && state.truncateThreshold > 0 && sortedFiles.length > state.truncateThreshold && !state.truncationExpanded.has(displayNode.path);
+        const shouldTruncate = !state._isFiltered && !isSingleDirRoot && state.truncateThreshold > 0 && sortedFiles.length > state.truncateThreshold && !state.truncationExpanded.has(displayNode.path);
         const shownFiles = shouldTruncate ? sortedFiles.slice(0, state.truncateThreshold) : sortedFiles;
         const hiddenFiles = shouldTruncate ? sortedFiles.slice(state.truncateThreshold) : [];
 

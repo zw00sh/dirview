@@ -3,6 +3,7 @@
 // rendering logic in render-tree.ts and renderer/index.ts exactly.
 
 import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, compactedNode } from '../utils';
+import { ensureRootsExpanded } from '../state';
 import { filterTree } from '../filter';
 import { assembleMatchGroups } from '../match-grouping';
 import type { DirNode, FileNode, WebviewState, IndentAncestor, SearchMatch } from '../types';
@@ -57,8 +58,8 @@ export function flattenTree(
     // Folder compaction: collapse single-child-no-files chains.
     const displayNode = compactedNode(node);
 
-    // Check expanded state — mirrors renderDirNode logic.
-    const isExpanded = state.expanded.get(displayNode.path) ?? isFiltered;
+    // Check expanded state — explicit entry, or implicitly expanded when filtered.
+    const shouldExpand = state.expanded.get(displayNode.path) ?? isFiltered;
 
     const sortedChildren = sortDirs(displayNode.children, state.currentSortMode);
     const sortedFiles = sortFiles(displayNode.files || []);
@@ -74,13 +75,13 @@ export function flattenTree(
       ancestors,
       node: displayNode,
       originalNode: node,
-      isExpanded,
+      isExpanded: shouldExpand,
       hasChildren,
       maxMetric,
       clientWidth,
     });
 
-    if (!isExpanded || !hasChildren) { return; }
+    if (!shouldExpand || !hasChildren) { return; }
 
     // Build ancestors for children
     const nextAncestors: IndentAncestor[] = [...ancestors, { path: displayNode.path }];
@@ -241,9 +242,8 @@ export function flattenTree(
 
   if (showRootNode) {
     // Tab mode: each root is a visible depth-0 node, always expanded.
+    ensureRootsExpanded(state, filteredRoots);
     for (const r of filteredRoots) {
-      const cn = compactedNode(r);
-      if (!state.expanded.has(cn.path)) { state.expanded.set(cn.path, true); }
       flattenDirNode(r, 0, []);
     }
   } else {
