@@ -49,6 +49,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     vscode.window.onDidChangeActiveColorTheme(e => {
       updateTheme(e.kind);
+      tabProvider.notifyThemeChanged();
     })
   );
 

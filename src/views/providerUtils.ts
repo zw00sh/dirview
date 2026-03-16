@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { SearchService, SearchMatch } from '../search/searchService';
 import { getLangInfo } from '../language/languageMap';
-import { highlightLine, highlightLineMulti } from '../highlight/highlighter';
+import { highlightGroup } from '../highlight/highlighter';
 import type { WebviewToBackendMessage, BackendToWebviewMessage } from './webview/types';
 
 /** Optional hook for the bench WebSocket bridge — receives a copy of every outgoing message. */
@@ -62,38 +62,123 @@ export function handleSearchMessage(
     // Cap how many lines per file receive syntax highlighting to avoid Shiki overhead
     const CONCURRENCY = 10;
 
-    // Syntax-highlights entries up to the render cap per file with concurrency limiting.
-    // Context lines are highlighted too (matchLength=0 produces syntax-highlighted HTML
-    // without a match-highlight span). Returns { path, idx, html } patches.
+    // Builds match groups from sorted matches using context-buffering + midpoint-split
+    // logic matching the frontend's renderFileMatches. Each group contains indices into
+    // the original matches array and lines to highlight as a multi-line block for correct
+    // grammar state across lines (e.g. block comments, template literals).
+    function buildMatchGroups(matches: SearchMatch[]): Array<{
+      indices: number[];
+      lines: Array<{ rawText: string; ranges: Array<{ col: number; len: number }> }>;
+    }> {
+      const sorted = matches.map((m, i) => ({ m, i }));
+      sorted.sort((a, b) => a.m.line - b.m.line);
+
+      const groups: Array<{
+        indices: number[];
+        lines: Array<{ rawText: string; ranges: Array<{ col: number; len: number }> }>;
+      }> = [];
+      let contextBuffer: Array<{ m: SearchMatch; i: number }> = [];
+
+      for (let si = 0; si < sorted.length; ) {
+        const { m, i } = sorted[si];
+
+        if (m.isContext) {
+          contextBuffer.push({ m, i });
+          si++;
+          continue;
+        }
+
+        // Group consecutive same-line non-context matches
+        const sameLineEntries = [{ m, i }];
+        let sj = si + 1;
+        while (sj < sorted.length && !sorted[sj].m.isContext && sorted[sj].m.line === m.line) {
+          sameLineEntries.push(sorted[sj]);
+          sj++;
+        }
+
+        const matchLineEntry = {
+          rawText: m.lineText || '',
+          ranges: sameLineEntries.map(e => ({ col: e.m.column, len: e.m.matchLength })),
+        };
+        const matchIndices = sameLineEntries.map(e => e.i);
+
+        // Split buffered context between previous group and this group at midpoint
+        if (contextBuffer.length > 0) {
+          if (groups.length === 0) {
+            const contextLines = contextBuffer.map(c => ({
+              rawText: c.m.lineText || '',
+              ranges: [] as Array<{ col: number; len: number }>,
+            }));
+            const contextIndices = contextBuffer.map(c => c.i);
+            groups.push({
+              indices: [...contextIndices, ...matchIndices],
+              lines: [...contextLines, matchLineEntry],
+            });
+          } else {
+            const mid = Math.ceil(contextBuffer.length / 2);
+            const prevGroup = groups[groups.length - 1];
+            for (let ci = 0; ci < mid; ci++) {
+              prevGroup.indices.push(contextBuffer[ci].i);
+              prevGroup.lines.push({
+                rawText: contextBuffer[ci].m.lineText || '',
+                ranges: [],
+              });
+            }
+            const afterMid = contextBuffer.slice(mid);
+            const contextLines = afterMid.map(c => ({
+              rawText: c.m.lineText || '',
+              ranges: [] as Array<{ col: number; len: number }>,
+            }));
+            const contextIndices = afterMid.map(c => c.i);
+            groups.push({
+              indices: [...contextIndices, ...matchIndices],
+              lines: [...contextLines, matchLineEntry],
+            });
+          }
+          contextBuffer = [];
+        } else {
+          groups.push({
+            indices: matchIndices,
+            lines: [matchLineEntry],
+          });
+        }
+
+        si = sj;
+      }
+
+      // Trailing context goes to last group
+      if (contextBuffer.length > 0 && groups.length > 0) {
+        const lastGroup = groups[groups.length - 1];
+        for (const c of contextBuffer) {
+          lastGroup.indices.push(c.i);
+          lastGroup.lines.push({
+            rawText: c.m.lineText || '',
+            ranges: [],
+          });
+        }
+      }
+
+      return groups;
+    }
+
+    // Syntax-highlights match groups with concurrency limiting.
+    // Groups are highlighted as multi-line blocks preserving grammar state across lines.
     async function highlightBatch(batch: Map<string, SearchMatch[]>): Promise<Array<{ path: string; idx: number; html: string }>> {
       const executing = new Set<Promise<void>>();
       const patches: Array<{ path: string; idx: number; html: string }> = [];
       for (const [filePath, matches] of batch) {
         const task = (async () => {
           const langName = getLangInfo(path.basename(filePath)).name;
-          for (let i = 0; i < matches.length; ) {
-            const m = matches[i];
-            if (m.lineText === undefined) { i++; continue; }
-            // Group consecutive same-line non-context matches
-            const groupIndices = [i];
-            let j = i + 1;
-            while (j < matches.length && !matches[j].isContext && matches[j].line === m.line) {
-              groupIndices.push(j);
-              j++;
-            }
-            if (groupIndices.length > 1) {
-              // Multi-match line: highlight all ranges together
-              const ranges = groupIndices.map(idx => ({ col: matches[idx].column, len: matches[idx].matchLength }));
-              const html = await highlightLineMulti(m.lineText, ranges, langName);
+          const groups = buildMatchGroups(matches);
+          for (const group of groups) {
+            if (group.lines.every(l => l.rawText === '')) { continue; }
+            const htmls = await highlightGroup(group.lines, langName);
+            for (let li = 0; li < htmls.length; li++) {
+              const html = htmls[li];
               if (html !== undefined) {
-                for (const idx of groupIndices) { patches.push({ path: filePath, idx, html }); }
+                patches.push({ path: filePath, idx: group.indices[li], html });
               }
-            } else {
-              // Single match: use the standard path
-              const html = await highlightLine(m.lineText, m.column, m.matchLength, langName);
-              if (html !== undefined) { patches.push({ path: filePath, idx: i, html }); }
             }
-            i = j;
           }
         })();
         const p = task.then(() => { executing.delete(p); });

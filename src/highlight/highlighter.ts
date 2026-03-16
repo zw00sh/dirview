@@ -209,6 +209,9 @@ function totalLength(tokens: ThemedToken[]): number {
 /**
  * Syntax-highlights a line with multiple match ranges highlighted.
  * Ranges must be non-overlapping and sorted by column (ascending).
+ * No trimming is applied — rawText is passed directly to Shiki so that
+ * multi-line tokenization (via highlightGroup) produces correct grammar state.
+ * The frontend handles dedent for display purposes.
  * Returns `undefined` if the language is unsupported (fall back to plain text).
  */
 export async function highlightLineMulti(
@@ -219,36 +222,68 @@ export async function highlightLineMulti(
   const shikiLang = resolveShikiLang(langName);
   if (!shikiLang) { return undefined; }
 
-  // Trim leading whitespace once, adjusting all columns
-  const trimmedStart = rawText.length - rawText.trimStart().length;
-  const lineText = rawText.trimStart();
+  if (rawText.length > MAX_HIGHLIGHT) { return undefined; }
 
-  if (lineText.length > MAX_HIGHLIGHT) { return undefined; }
-
-  const adjustedRanges = ranges.map(r => ({
-    col: Math.max(0, r.col - trimmedStart),
-    len: r.len,
-  }));
-
-  // Compute visible window centered on the first match (option 1 from plan)
-  const firstRange = adjustedRanges[0];
+  // Compute visible window centered on the first match
+  const firstRange = ranges[0];
   const win = firstRange
-    ? computeVisibleWindow(lineText.length, firstRange.col, firstRange.len, MAX_DISPLAY)
+    ? computeVisibleWindow(rawText.length, firstRange.col, firstRange.len, MAX_DISPLAY)
     : null;
 
   try {
     const h = await getHighlighter();
     await ensureLangLoaded(h, shikiLang);
-    const { tokens } = h.codeToTokens(lineText, {
+    const { tokens } = h.codeToTokens(rawText, {
       lang: shikiLang,
       theme: currentThemeName,
       includeExplanation: false,
     });
     const lineTokens = tokens[0] ?? [];
 
-    return buildHighlightedHtml(lineTokens, 0, 0, win?.start, win?.end, adjustedRanges);
+    return buildHighlightedHtml(lineTokens, 0, 0, win?.start, win?.end, ranges);
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * Syntax-highlights a group of lines as a single multi-line block, preserving
+ * grammar state across lines (e.g. block comments, template literals).
+ * Each line entry includes the raw text and any match ranges to highlight.
+ * Returns one HTML string (or undefined) per input line.
+ */
+export async function highlightGroup(
+  lines: Array<{ rawText: string; ranges: Array<{ col: number; len: number }> }>,
+  langName: string
+): Promise<(string | undefined)[]> {
+  const shikiLang = resolveShikiLang(langName);
+  if (!shikiLang) { return lines.map(() => undefined); }
+
+  // Skip if any line exceeds the highlight limit
+  if (lines.some(l => l.rawText.length > MAX_HIGHLIGHT)) { return lines.map(() => undefined); }
+
+  const joined = lines.map(l => l.rawText).join('\n');
+
+  try {
+    const h = await getHighlighter();
+    await ensureLangLoaded(h, shikiLang);
+    const { tokens } = h.codeToTokens(joined, {
+      lang: shikiLang,
+      theme: currentThemeName,
+      includeExplanation: false,
+    });
+
+    // tokens is one array per line
+    return lines.map((line, i) => {
+      const lineTokens = tokens[i] ?? [];
+      const firstRange = line.ranges[0];
+      const win = firstRange
+        ? computeVisibleWindow(line.rawText.length, firstRange.col, firstRange.len, MAX_DISPLAY)
+        : null;
+      return buildHighlightedHtml(lineTokens, 0, 0, win?.start, win?.end, line.ranges);
+    });
+  } catch {
+    return lines.map(() => undefined);
   }
 }
 

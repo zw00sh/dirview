@@ -10,13 +10,13 @@ vi.mock('vscode', () => ({
   commands: { executeCommand: vi.fn() },
 }));
 
-// highlightLine mock — returns a resolved promise with a fake HTML string by default.
+// highlightGroup mock — returns resolved promise with fake HTML strings per line.
 // Tests can override via highlightDeferred to control async timing.
-let highlightDeferred: { resolve: (v: string | undefined) => void; promise: Promise<string | undefined> } | null = null;
+let highlightDeferred: { resolve: (v: (string | undefined)[]) => void; promise: Promise<(string | undefined)[]> } | null = null;
 vi.mock('../highlight/highlighter', () => ({
-  highlightLine: vi.fn((_text: string, _col: number, _len: number, _lang: string) => {
+  highlightGroup: vi.fn((lines: Array<{ rawText: string; ranges: unknown[] }>, _lang: string) => {
     if (highlightDeferred) { return highlightDeferred.promise; }
-    return Promise.resolve('<span>highlighted</span>');
+    return Promise.resolve(lines.map(() => '<span>highlighted</span>'));
   }),
 }));
 

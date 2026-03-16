@@ -35,6 +35,10 @@ const searchHeaderEl = document.getElementById('search-header')!;
 const searchChevronEl = document.getElementById('search-chevron')!;
 const searchContentEl = document.getElementById('search-content')!;
 const searchActiveAlert = document.getElementById('search-active-alert')!;
+const legendActiveAlert = document.getElementById('legend-active-alert')!;
+const treeSection = document.getElementById('tree-section')!;
+const treeHeaderEl = document.getElementById('tree-header')!;
+const treeChevronEl = document.getElementById('tree-chevron')!;
 const root = document.getElementById('root')!;
 const sortBtn = document.getElementById('tab-sort')!;
 const toggleStickyBtn = document.getElementById('tab-toggle-sticky')!;
@@ -56,8 +60,10 @@ const searchBar = createSearchBar(state, vscode, {
 searchContentEl.appendChild(searchBar.el);
 
 let searchCollapsed = false;
-// Initialise chevron to match expanded state (chevron rotated 90° = expanded).
+let treeCollapsed = false;
+// Initialise chevrons to match expanded state (chevron rotated 90° = expanded).
 searchChevronEl.style.transform = 'rotate(90deg)';
+treeChevronEl.style.transform = 'rotate(90deg)';
 
 // Cmd+F / Ctrl+F: expand and focus the search section.
 window.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -75,6 +81,10 @@ window.addEventListener('keydown', (e: KeyboardEvent) => {
 
 function updateSearchActiveAlert() {
   searchActiveAlert.style.display = (searchCollapsed && state.searchResults) ? '' : 'none';
+}
+
+function updateLegendActiveAlert() {
+  legendActiveAlert.style.display = (legendCollapsed && state.activeFilters.size > 0) ? '' : 'none';
 }
 
 const renderer = createRenderer(state, {
@@ -146,6 +156,11 @@ updateRefreshBtn(true);
 
 // ── Toolbar event listeners ─────────────────────────────────────────────
 
+// Stop toolbar button clicks from bubbling to the collapsible tree header.
+for (const btn of [sortBtn, toggleStickyBtn, toggleTruncationBtn, toggleIgnoredBtn, expandAllBtn, collapseAllBtn, refreshBtn]) {
+  btn.addEventListener('click', (e: MouseEvent) => e.stopPropagation());
+}
+
 toggleTruncationBtn.addEventListener('click', () => {
   vscode.postMessage({ command: 'toggleTruncation', enabled: !currentTruncationEnabled });
 });
@@ -183,17 +198,35 @@ toggleStickyBtn.addEventListener('click', () => {
 refreshBtn.addEventListener('click', () => {
   vscode.postMessage({ command: 'refresh' });
 });
-legendHeader.addEventListener('click', () => {
+function toggleLegend() {
   legendCollapsed = !legendCollapsed;
   legendEl.style.display = legendCollapsed ? 'none' : '';
   legendChevron.style.transform = legendCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
-});
-searchHeaderEl.addEventListener('click', () => {
+  legendHeader.setAttribute('aria-expanded', String(!legendCollapsed));
+  updateLegendActiveAlert();
+}
+function toggleSearch() {
   searchCollapsed = !searchCollapsed;
   searchContentEl.style.display = searchCollapsed ? 'none' : '';
   searchChevronEl.style.transform = searchCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
+  searchHeaderEl.setAttribute('aria-expanded', String(!searchCollapsed));
   updateSearchActiveAlert();
-});
+}
+function toggleTree() {
+  treeCollapsed = !treeCollapsed;
+  root.style.display = treeCollapsed ? 'none' : '';
+  treeChevronEl.style.transform = treeCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
+  treeHeaderEl.setAttribute('aria-expanded', String(!treeCollapsed));
+}
+legendHeader.addEventListener('click', toggleLegend);
+searchHeaderEl.addEventListener('click', toggleSearch);
+treeHeaderEl.addEventListener('click', toggleTree);
+// Keyboard support: Enter/Space toggles sections
+for (const [el, fn] of [[legendHeader, toggleLegend], [searchHeaderEl, toggleSearch], [treeHeaderEl, toggleTree]] as const) {
+  el.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); }
+  });
+}
 legendDisplayToggle.addEventListener('click', (e: MouseEvent) => {
   e.stopPropagation(); // Don't collapse the legend section when clicking the toggle
   legendShowPct = !legendShowPct;
@@ -215,6 +248,7 @@ function toggleFilter(langName: string) {
   }
   vscode.postMessage({ command: 'filter', langs: [...state.activeFilters] });
   searchBar.updateFilterWarning(state.activeFilters.size);
+  updateLegendActiveAlert();
   state.rerender();
 }
 
@@ -222,6 +256,7 @@ function clearAllFilters() {
   state.activeFilters.clear();
   vscode.postMessage({ command: 'filter', langs: [] });
   searchBar.updateFilterWarning(0);
+  updateLegendActiveAlert();
   state.rerender();
 }
 
@@ -302,6 +337,11 @@ const sharedHandler = createMessageHandler(state, scanBar, root, {
 
 window.addEventListener('message', (event: MessageEvent) => {
   const message = event.data;
+  if (message.type === 'themeChanged') {
+    // Shiki theme changed — re-render to pick up new syntax highlight colors.
+    if (state.lastRoots) { state.rerender(); }
+    return;
+  }
   if (message.type === 'updateStickyHeaders') {
     currentStickyEnabled = message.enabled;
     updateStickyBtn();

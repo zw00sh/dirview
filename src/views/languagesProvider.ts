@@ -10,6 +10,7 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
   private lastPayload: ScanUpdatePayload | undefined;
   private activeFilters: string[] = [];
   private showPct: boolean = false;
+  private disposables: vscode.Disposable[] = [];
 
   onFilterChange: ((langs: string[]) => void) | undefined;
 
@@ -18,6 +19,7 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
+    this.disposeListeners();
     this.view = webviewView;
 
     webviewView.webview.options = {
@@ -29,20 +31,22 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this.getHtml(webviewView.webview);
 
-    webviewView.webview.onDidReceiveMessage((message: WebviewToBackendMessage) => {
-      if (message.command === 'filter') {
-        this.activeFilters = message.langs;
-        this.onFilterChange?.(this.activeFilters);
-      }
-    });
+    this.disposables.push(
+      webviewView.webview.onDidReceiveMessage((message: WebviewToBackendMessage) => {
+        if (message.command === 'filter') {
+          this.activeFilters = message.langs;
+          this.onFilterChange?.(this.activeFilters);
+        }
+      })
+    );
 
     // Languages panel sends stripped roots (stats + totalFiles only), which doesn't
     // conform to the shared BackendToWebviewMessage update shape — use raw postMessage.
-    webviewView.onDidChangeVisibility(() => {
+    this.disposables.push(webviewView.onDidChangeVisibility(() => {
       if (webviewView.visible && this.lastPayload) {
         webviewView.webview.postMessage({ type: 'update', roots: this.stripRoots(this.lastPayload.roots), activeFilters: this.activeFilters, showPct: this.showPct });
       }
-    });
+    }));
     if (this.lastPayload) {
       setTimeout(() => {
         if (this.lastPayload) {
@@ -80,6 +84,11 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
 
   showError(message: string): void {
     if (this.view) { post(this.view.webview, { type: 'error', message }); }
+  }
+
+  private disposeListeners(): void {
+    for (const d of this.disposables) { d.dispose(); }
+    this.disposables = [];
   }
 
   private getHtml(webview: vscode.Webview): string {

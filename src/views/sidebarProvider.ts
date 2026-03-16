@@ -9,6 +9,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private extensionUri: vscode.Uri;
   private lastUpdate: ScanUpdatePayload | undefined;
+  private disposables: vscode.Disposable[] = [];
   onRefresh?: () => void;
   onOpenDirInTab?: (dirPath: string) => void;
 
@@ -17,6 +18,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
+    this.disposeListeners();
     this.view = webviewView;
     // Default title; overridden below if scan data already arrived before this view was shown.
     this.view.title = 'Tree';
@@ -34,12 +36,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this.getHtml(webviewView.webview);
 
-    webviewView.webview.onDidReceiveMessage((message: WebviewToBackendMessage) => {
-      handleCommonMessage(message, {
-        onRefresh: this.onRefresh,
-        onOpenDirInTab: this.onOpenDirInTab,
-      });
-    });
+    this.disposables.push(
+      webviewView.webview.onDidReceiveMessage((message: WebviewToBackendMessage) => {
+        handleCommonMessage(message, {
+          onRefresh: this.onRefresh,
+          onOpenDirInTab: this.onOpenDirInTab,
+        });
+      })
+    );
 
     setupVisibilityReplay(webviewView, () => {
       if (!this.lastUpdate) { return undefined; }
@@ -96,6 +100,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   showError(message: string): void {
     if (this.view) { post(this.view.webview, { type: 'error', message }); }
+  }
+
+  private disposeListeners(): void {
+    for (const d of this.disposables) { d.dispose(); }
+    this.disposables = [];
   }
 
   private getHtml(webview: vscode.Webview): string {

@@ -39,7 +39,8 @@ export function setupStickyTracking(scrollRoot: HTMLElement): StickyTracking {
       const el = stickyEls[i];
       const rect = el.getBoundingClientRect();
       const depth = parseInt((el as HTMLElement).style.getPropertyValue('--depth')) || 0;
-      const stickyTop = containerTop + depth * 22;
+      const rowHeight = parseInt(getComputedStyle(document.body).getPropertyValue('--row-height')) || 22;
+      const stickyTop = containerTop + depth * rowHeight;
       const parentLi = el.parentElement;
       const liTop = parentLi ? parentLi.getBoundingClientRect().top : rect.top;
       const heldBySticky = liTop < rect.top - 1;
