@@ -58,7 +58,7 @@ export function flattenTree(
     const displayNode = compactedNode(node);
 
     // Check expanded state — mirrors renderDirNode logic.
-    const isExpanded = state.expanded.get(displayNode.path) ?? (isFiltered || depth === 0);
+    const isExpanded = state.expanded.get(displayNode.path) ?? isFiltered;
 
     const sortedChildren = sortDirs(displayNode.children, state.currentSortMode);
     const sortedFiles = sortFiles(displayNode.files || []);
@@ -240,8 +240,10 @@ export function flattenTree(
   // Mirrors renderRoots() logic.
 
   if (showRootNode) {
-    // Tab mode: each root is a visible depth-0 node
+    // Tab mode: each root is a visible depth-0 node, always expanded.
     for (const r of filteredRoots) {
+      const cn = compactedNode(r);
+      if (!state.expanded.has(cn.path)) { state.expanded.set(cn.path, true); }
       flattenDirNode(r, 0, []);
     }
   } else {

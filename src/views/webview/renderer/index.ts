@@ -233,12 +233,7 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     const li = h('li', { dataset: { nodePath: displayNode.path } });
 
     const isFiltered = !!state._isFiltered;
-    const isExpanded = state.expanded.get(displayNode.path) ?? (isFiltered || depth === 0);
-    // Record implicit depth-0 expansion so button state reflects reality after initial render.
-    // Skip during active filter to avoid recording ephemeral auto-expanded state.
-    if (!state.expanded.has(displayNode.path) && depth === 0 && !isFiltered) {
-      state.expanded.set(displayNode.path, true);
-    }
+    const isExpanded = state.expanded.get(displayNode.path) ?? isFiltered;
 
     const sortedChildren: DirNode[] = sortDirs(displayNode.children, state.currentSortMode);
     const sortedFiles: FileNode[] = sortFiles(displayNode.files || []);
@@ -400,7 +395,7 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     const hasChildren = entry.hasChildren;
 
     const isFiltered = !!state._isFiltered;
-    const isExpanded = state.expanded.get(displayNode.path) ?? (isFiltered || depth === 0);
+    const isExpanded = state.expanded.get(displayNode.path) ?? isFiltered;
 
     const sortedChildren: DirNode[] = sortDirs(displayNode.children, state.currentSortMode);
     const sortedFiles: FileNode[] = sortFiles(displayNode.files || []);

@@ -21,7 +21,8 @@ describe('dir hover action buttons', () => {
     const gc4 = makeDir('/r/b/q', 'q', { totalFiles: 2, stats: [] });
     const child2 = makeDir('/r/b', 'b', { children: [gc3, gc4], totalFiles: 3, stats: [] });
     const parent = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 8, stats: [] });
-    // child1 expanded, child2 not — so not all expandable children are expanded
+    // Root expanded; child1 expanded, child2 not — so not all expandable children are expanded
+    state.expanded.set('/r', true);
     state.expanded.set('/r/a', true);
 
     const renderer = makeRenderer(state);
@@ -54,7 +55,8 @@ describe('dir hover action buttons', () => {
       totalFiles: 1, stats: [],
     });
     const parent = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 6, stats: [] });
-    // child1 is expanded; child2 is a leaf so it can't be expanded
+    // Root and child1 expanded; child2 is a leaf so it can't be expanded
+    state.expanded.set('/r', true);
     state.expanded.set('/r/a', true);
 
     const renderer = makeRenderer(state);
@@ -77,7 +79,8 @@ describe('dir hover action buttons', () => {
     const child1 = makeDir('/r/a', 'a', { children: [gc1, gc2], totalFiles: 5, stats: [] });
     const child2 = makeDir('/r/b', 'b', { totalFiles: 3, stats: [] });
     const parent = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 8, stats: [] });
-    // Both direct children already expanded
+    // Root and both direct children already expanded
+    state.expanded.set('/r', true);
     state.expanded.set('/r/a', true);
     state.expanded.set('/r/b', true);
 
@@ -281,6 +284,8 @@ describe('dir hover action buttons', () => {
       totalFiles: 6,
       stats: [],
     });
+
+    state.expanded.set('/p', true);
 
     const renderer = makeRenderer(state);
     const li = renderer.renderDirNode(P, 0, 10, [], 300);

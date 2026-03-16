@@ -130,7 +130,6 @@ export function tieredCollapseAll(state: WebviewState, roots: DirNode[]): void {
     // Tier 3: nothing to collapse
     return;
   }
-
   const anyDeeperExpanded = topLevel.some(node => {
     const cn = compactedNode(node);
     return hasExpandedDescendant(state, cn, isFiltered);

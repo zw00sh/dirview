@@ -264,16 +264,15 @@ describe('delegated click handler', () => {
       expect(onExpandChanged).toHaveBeenCalled();
     });
 
-    it('does not toggle leaf dirs (no children)', () => {
+    it('does not toggle empty dirs (no children, no files)', () => {
       const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       const renderer = makeRenderer(state);
-      // Leaf dir: has files but no child dirs
+      // Truly empty dir: no files, no child dirs
       const root = makeDir('/r', 'r', {
-        files: [{ name: 'f.js', path: '/r/f.js', langName: 'JS', langColor: '#f1e05a', sizeBytes: 1 }],
-        totalFiles: 1,
-        stats: [{ name: 'JS', color: '#f1e05a', count: 1 }],
+        totalFiles: 0,
+        stats: [],
       });
 
       renderer.beforeRender();
@@ -282,7 +281,7 @@ describe('delegated click handler', () => {
 
       li.querySelector('.dir-row[data-path="/r"]').click();
 
-      // Should remain falsy — leaf dirs can't expand
+      // Should remain falsy — empty dirs can't expand
       expect(state.expanded.get('/r')).toBeFalsy();
     });
 
@@ -320,11 +319,12 @@ describe('delegated click handler', () => {
       state.render = vi.fn();
       state.lastRoots = [];
       state.searchResults = new Map([['/r/a/foo.ts', []]]);
+      state._isFiltered = true;
       const renderer = makeRenderer(state);
       const child1 = makeDir('/r/a', 'a', { totalFiles: 1, stats: [{ name: 'TS', color: '#3178c6', count: 1 }] });
       const child2 = makeDir('/r/b', 'b', { totalFiles: 1, stats: [{ name: 'TS', color: '#3178c6', count: 1 }] });
       const root = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 2, stats: [{ name: 'TS', color: '#3178c6', count: 2 }] });
-      // No explicit expanded entry — implicitly expanded due to searchResults
+      // No explicit expanded entry — implicitly expanded due to searchResults + _isFiltered
       renderer.beforeRender();
       const li = renderer.renderDirNode(root, 0, 2, [], 300);
       renderer._rootEl.appendChild(li);

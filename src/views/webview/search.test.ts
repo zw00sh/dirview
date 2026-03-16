@@ -328,6 +328,7 @@ describe('search rendering integration', () => {
     state.searchResults = new Map([
       ['/r/foo.ts', [{ line: 5, column: 0, matchLength: 3, lineText: 'abc def' }]],
     ]);
+    state._isFiltered = true;
     state.render = vi.fn();
     state.lastRoots = [];
     const file = makeFile('/r/foo.ts');
@@ -380,6 +381,7 @@ describe('search rendering integration', () => {
   it('auto-expands directories when searchResults is set', () => {
     const state = createState();
     state.searchResults = new Map([['/r/sub/file.ts', []]]);
+    state._isFiltered = true;
     state.render = vi.fn();
     state.lastRoots = [];
     const file = makeFile('/r/sub/file.ts');
@@ -403,6 +405,7 @@ describe('search rendering integration', () => {
       ['/r/b.ts', []],
       ['/r/c.ts', []],
     ]);
+    state._isFiltered = true;
     state.render = vi.fn();
     state.lastRoots = [];
     const files = [makeFile('/r/a.ts'), makeFile('/r/b.ts'), makeFile('/r/c.ts')];
@@ -421,6 +424,7 @@ describe('search rendering integration', () => {
     // Use non-contiguous lines so groups don't merge
     const matches = [10, 30, 50, 70, 90, 110, 130].map(line => ({ line, column: 0, matchLength: 1, lineText: 'x' }));
     state.searchResults = new Map([['/r/foo.ts', matches]]);
+    state._isFiltered = true;
     state.render = vi.fn();
     state.lastRoots = [];
     const file = makeFile('/r/foo.ts');
