@@ -12,13 +12,14 @@ export function escHtml(str: string): string {
     .replace(/"/g, '&quot;');
 }
 
-export type EmptyStateVariant = 'initializing' | 'scanning' | 'noWorkspace' | 'noData' | 'error';
+export type EmptyStateVariant = 'initializing' | 'scanning' | 'noWorkspace' | 'noData' | 'noResults' | 'error';
 
 const emptyStateConfig: Record<EmptyStateVariant, { icon: string; text: string; cls: string }> = {
   initializing: { icon: SVG_SYNC, text: 'Initializing\u2026', cls: 'scanning' },
   scanning:     { icon: SVG_SEARCH, text: 'Scanning workspace\u2026', cls: 'scanning' },
   noWorkspace:  { icon: SVG_FOLDER_OPENED, text: 'No workspace folder open.', cls: '' },
   noData:       { icon: SVG_INFO, text: 'No data yet.', cls: '' },
+  noResults:    { icon: SVG_SEARCH, text: 'No results found.', cls: '' },
   error:        { icon: SVG_WARNING, text: '', cls: 'error' },
 };
 

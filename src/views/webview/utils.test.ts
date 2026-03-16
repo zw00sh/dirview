@@ -255,3 +255,53 @@ describe('buildAncestorPaths', () => {
     expect(result).toEqual(new Set());
   });
 });
+
+// --- emptyState ---
+describe('emptyState', () => {
+  it('returns a div with class empty-state', () => {
+    const el = emptyState('noWorkspace');
+    expect(el.tagName).toBe('DIV');
+    expect(el.classList.contains('empty-state')).toBe(true);
+  });
+
+  it('contains icon and text children', () => {
+    const el = emptyState('noWorkspace');
+    const icon = el.querySelector('.empty-state-icon');
+    const text = el.querySelector('.empty-state-text');
+    expect(icon).not.toBeNull();
+    expect(text).not.toBeNull();
+    expect(icon!.querySelector('svg')).not.toBeNull();
+    expect(text!.textContent).toBe('No workspace folder open.');
+  });
+
+  it('adds scanning class for initializing variant', () => {
+    const el = emptyState('initializing');
+    expect(el.classList.contains('scanning')).toBe(true);
+    expect(el.querySelector('.empty-state-text')!.textContent).toBe('Initializing\u2026');
+  });
+
+  it('adds scanning class for scanning variant', () => {
+    const el = emptyState('scanning');
+    expect(el.classList.contains('scanning')).toBe(true);
+    expect(el.querySelector('.empty-state-text')!.textContent).toBe('Scanning workspace\u2026');
+  });
+
+  it('adds error class for error variant', () => {
+    const el = emptyState('error', 'Something broke');
+    expect(el.classList.contains('error')).toBe(true);
+    expect(el.querySelector('.empty-state-text')!.textContent).toBe('Error: Something broke');
+  });
+
+  it('uses textContent for error message (XSS safe)', () => {
+    const el = emptyState('error', '<script>alert(1)</script>');
+    const text = el.querySelector('.empty-state-text')!;
+    expect(text.textContent).toContain('<script>');
+    expect(text.innerHTML).not.toContain('<script>');
+  });
+
+  it('noData variant has no extra class', () => {
+    const el = emptyState('noData');
+    expect(el.className).toBe('empty-state');
+    expect(el.querySelector('.empty-state-text')!.textContent).toBe('No data yet.');
+  });
+});

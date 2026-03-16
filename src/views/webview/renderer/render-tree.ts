@@ -1,6 +1,6 @@
 // Tree rendering functions: renderRoots, renderTree.
 
-import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric } from '../utils';
+import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, emptyState } from '../utils';
 import { filterTree } from '../filter';
 import { patchTreeChildren } from './dom-patch';
 import { h } from '../h';
@@ -109,6 +109,9 @@ export function renderTree(
     (opts && opts.cssClass ? ' ' + opts.cssClass : '') +
     (state.currentSortMode === 'size' ? ' sort-size' : '');
 
+  // Check if filtered tree is completely empty (no matching files/dirs).
+  const filteredEmpty = filtered.isFiltered && filtered.roots.every(r => r.totalFiles === 0);
+
   const existingTree = rootEl.querySelector(':scope > ul.tree') as HTMLElement | null;
   if (existingTree) {
     // Incremental path: build the new tree off-screen, then reconcile with existing DOM.
@@ -121,6 +124,14 @@ export function renderTree(
     const treeEl = h('ul', { className: treeClass });
     renderRoots(renderer, state, treeEl, maxMetric, clientWidth, filtered.isFiltered, opts);
     rootEl.appendChild(treeEl);
+  }
+
+  // Show/hide "no results" empty state when filters produce an empty tree.
+  const existingNoResults = rootEl.querySelector(':scope > .empty-state');
+  if (filteredEmpty) {
+    if (!existingNoResults) { rootEl.appendChild(emptyState('noResults')); }
+  } else {
+    existingNoResults?.remove();
   }
 
   // Restore original roots so filter changes can recompute from the full tree.

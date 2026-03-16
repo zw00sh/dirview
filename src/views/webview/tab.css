@@ -20,7 +20,7 @@ body {
 }
 
 /* Fill available height when showing an empty state in the tab tree section */
-.tab-tree-section #root:has(> .empty-state:only-child) {
+.tab-tree-section #root:has(> .empty-state) {
   display: flex;
   flex-direction: column;
 }
