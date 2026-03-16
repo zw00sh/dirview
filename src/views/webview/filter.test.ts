@@ -268,6 +268,7 @@ describe('filterTree totalVisibleMatches with language filter', () => {
 });
 
 
+
 // --- file filter: search bar regex toggle ---
 describe('search bar file filter', () => {
   function makeSearchBarForFilter(standalone: boolean) {
