@@ -5,6 +5,7 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 USER_DATA_DIR="/tmp/vscode-cdp-debug"
+WORKSPACE="${1:-$PROJECT_DIR/test-repos/source}"
 
 # Build first
 npm --prefix "$PROJECT_DIR" run compile:dev
@@ -17,4 +18,4 @@ exec /Applications/Visual\ Studio\ Code.app/Contents/MacOS/Code \
   --extensionDevelopmentPath="$PROJECT_DIR" \
   --remote-debugging-port=9222 \
   --inspect-extensions=9223 \
-  "$PROJECT_DIR/test-repos/source"
+  "$WORKSPACE"

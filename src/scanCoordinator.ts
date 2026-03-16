@@ -6,12 +6,15 @@ import { SidebarProvider } from './views/sidebarProvider';
 import { LanguagesProvider } from './views/languagesProvider';
 import { TabProvider } from './views/tabProvider';
 import { FileWatcher } from './watcher/fileWatcher';
+import { ScanWorkerClient } from './scanner/scanWorkerClient';
 
 export class ScanCoordinator {
   private scanInProgress = false;
   private scanQueued = false;
   private abortController: AbortController | undefined;
   private watcher: FileWatcher | undefined;
+  private workerClient = new ScanWorkerClient();
+  isLocal = true;
 
   constructor(
     private config: Config,
@@ -39,9 +42,10 @@ export class ScanCoordinator {
       this.sidebar.showScanning();
       this.tab.showScanning();
       this.languages.showScanning();
-      const result = await scanWorkspace(this.config.showIgnored, this.abortController.signal);
+      const result = await scanWorkspace(this.config.showIgnored, this.abortController.signal, this.workerClient);
       // If the scan was cancelled, don't push stale partial data to the views.
       if (this.abortController.signal.aborted) { return; }
+      this.isLocal = result.isLocal;
       this.watcher?.updateAutoRescan(result.totalFiles);
       const autoRescanEnabled = this.watcher ? this.watcher.isAutoRescanEnabled : true;
       vscode.commands.executeCommand('setContext', 'dirview.autoRescanEnabled', autoRescanEnabled);
@@ -54,6 +58,7 @@ export class ScanCoordinator {
         showIgnored: this.config.showIgnored,
         sidebarStickyHeadersEnabled: this.config.sidebarStickyHeadersEnabled,
         tabStickyHeadersEnabled: this.config.tabStickyHeadersEnabled,
+        isLocal: result.isLocal,
       };
       this.sidebar.update(payload);
       this.languages.update(payload);
@@ -76,5 +81,9 @@ export class ScanCoordinator {
     this.watcher = new FileWatcher(() => this.scan());
     this.watcher.start();
     context.subscriptions.push({ dispose: () => this.watcher?.dispose() });
+  }
+
+  dispose(): void {
+    this.workerClient.dispose();
   }
 }

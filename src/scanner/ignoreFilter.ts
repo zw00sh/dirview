@@ -1,35 +1,44 @@
 import * as vscode from 'vscode';
 import ignore, { Ignore } from 'ignore';
-import { Minimatch } from 'minimatch';
-import { VCS_DIRS } from './constants';
+import { IgnoreFilterBase } from './ignoreFilterBase';
 
-export class IgnoreFilter {
-  private rootIgnore: Ignore;
-  private filesExcludePatterns: Minimatch[];
-  private showIgnored: boolean;
+/**
+ * VSCode-aware ignore filter for remote scans.
+ * Extends the pure IgnoreFilterBase with vscode.workspace.fs support.
+ */
+export class IgnoreFilter extends IgnoreFilterBase {
   private rootUri: vscode.Uri;
-  private dirIgnoreCache = new Map<string, Ignore>();
 
   constructor(rootUri: vscode.Uri, showIgnored: boolean) {
+    super();
     this.rootUri = rootUri;
     this.showIgnored = showIgnored;
-    this.rootIgnore = ignore();
-    this.filesExcludePatterns = [];
   }
 
+  /** Initialize by reading vscode config and root .gitignore. */
   async init(): Promise<void> {
-    this.rootIgnore = await this.loadGitignore(this.rootUri);
-
+    // Read files.exclude from vscode config
+    const excludePatterns: string[] = [];
     if (!this.showIgnored) {
       const config = vscode.workspace.getConfiguration('files', this.rootUri);
       const exclude = config.get<Record<string, boolean>>('exclude') ?? {};
-      this.filesExcludePatterns = Object.entries(exclude)
-        .filter(([, enabled]) => enabled)
-        .map(([pattern]) => new Minimatch(pattern, { dot: true, matchBase: true }));
+      for (const [pattern, enabled] of Object.entries(exclude)) {
+        if (enabled) { excludePatterns.push(pattern); }
+      }
+    }
+
+    if (this.rootUri.scheme === 'file') {
+      // Local: use fast fs-based init
+      await this.initFromPatterns(this.rootUri.fsPath, this.showIgnored, excludePatterns);
+    } else {
+      // Remote: use vscode.workspace.fs for root .gitignore
+      await this.initFromPatterns('', this.showIgnored, excludePatterns);
+      // Override rootIgnore with one loaded via vscode API
+      this.rootIgnore = await this.loadGitignoreVscode(this.rootUri);
     }
   }
 
-  private async loadGitignore(dirUri: vscode.Uri): Promise<Ignore> {
+  private async loadGitignoreVscode(dirUri: vscode.Uri): Promise<Ignore> {
     const ig = ignore();
     try {
       const bytes = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(dirUri, '.gitignore'));
@@ -40,36 +49,16 @@ export class IgnoreFilter {
     return ig;
   }
 
-  private async getLocalIgnore(parentUri: vscode.Uri): Promise<Ignore> {
-    const key = parentUri.fsPath;
+  /** Load local .gitignore via vscode API (for remote scans). */
+  async loadLocalIgnore(dirUri: vscode.Uri): Promise<Ignore> {
+    const key = dirUri.fsPath;
     if (!this.dirIgnoreCache.has(key)) {
-      this.dirIgnoreCache.set(key, await this.loadGitignore(parentUri));
+      if (this.rootUri.scheme === 'file') {
+        this.dirIgnoreCache.set(key, await this.loadGitignoreFromPath(dirUri.fsPath));
+      } else {
+        this.dirIgnoreCache.set(key, await this.loadGitignoreVscode(dirUri));
+      }
     }
     return this.dirIgnoreCache.get(key)!;
-  }
-
-  private isFilesExcluded(relPath: string): boolean {
-    return this.filesExcludePatterns.some(m => m.match(relPath));
-  }
-
-  async shouldExcludeDir(name: string, relPath: string, parentUri: vscode.Uri): Promise<boolean> {
-    if (VCS_DIRS.has(name)) { return true; }
-    if (this.showIgnored) { return false; }
-
-    if (this.isFilesExcluded(relPath + '/')) { return true; }
-    if (this.rootIgnore.ignores(relPath + '/') || this.rootIgnore.ignores(relPath)) { return true; }
-
-    const localIg = await this.getLocalIgnore(parentUri);
-    return localIg.ignores(name + '/') || localIg.ignores(name);
-  }
-
-  async shouldExcludeFile(name: string, relPath: string, parentUri: vscode.Uri): Promise<boolean> {
-    if (this.showIgnored) { return false; }
-
-    if (this.isFilesExcluded(relPath)) { return true; }
-    if (this.rootIgnore.ignores(relPath)) { return true; }
-
-    const localIg = await this.getLocalIgnore(parentUri);
-    return localIg.ignores(name);
   }
 }
