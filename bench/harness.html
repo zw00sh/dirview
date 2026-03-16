@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dirview Bench Harness</title>
+  <link href="/out/webview/style.css" rel="stylesheet">
+  <link href="/out/webview/languages.css" rel="stylesheet">
+  <link href="/out/webview/tab.css" rel="stylesheet">
+  <style>
+    /* VSCode Dark+ theme variable approximations */
+    :root {
+      --vscode-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      --vscode-font-size: 13px;
+      --vscode-foreground: #cccccc;
+      --vscode-descriptionForeground: #9d9d9d;
+      --vscode-editor-background: #1e1e1e;
+      --vscode-editor-foreground: #d4d4d4;
+      --vscode-sideBar-background: #252526;
+      --vscode-sideBar-border: #414141;
+      --vscode-input-background: #3c3c3c;
+      --vscode-input-foreground: #cccccc;
+      --vscode-input-border: #3c3c3c;
+      --vscode-input-placeholderForeground: #a6a6a6;
+      --vscode-focusBorder: #007fd4;
+      --vscode-list-hoverBackground: #2a2d2e;
+      --vscode-list-activeSelectionBackground: #094771;
+      --vscode-list-activeSelectionForeground: #ffffff;
+      --vscode-toolbar-hoverBackground: #5a5d5e50;
+      --vscode-button-background: #0e639c;
+      --vscode-button-foreground: #ffffff;
+      --vscode-button-hoverBackground: #1177bb;
+      --vscode-progressBar-background: #0e70c0;
+      --vscode-editorHoverWidget-background: #252526;
+      --vscode-editorHoverWidget-border: #454545;
+      --vscode-editorHoverWidget-foreground: #cccccc;
+      --vscode-widget-shadow: #00000029;
+      --vscode-editor-findMatchHighlightBackground: #ea5c0055;
+      --vscode-editorWarning-foreground: #cca700;
+      --vscode-inputOption-activeForeground: #ffffff;
+      --vscode-inputOption-activeBackground: #007fd466;
+      --vscode-inputOption-activeBorder: #007fd4;
+      --vscode-inputValidation-warningBackground: #352a05;
+      --vscode-inputValidation-warningBorder: #9b8500;
+      --vscode-inputValidation-warningForeground: #cca700;
+      --vscode-tree-indentGuidesStroke: #585858;
+      --vscode-tree-inactiveIndentGuidesStroke: #3a3a3a;
+      --vscode-icon-foreground: #c5c5c5;
+      --vscode-badge-background: #4d4d4d;
+      --vscode-badge-foreground: #ffffff;
+      --vscode-panel-border: #80808059;
+      --vscode-editor-font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+      --vscode-editorLineNumber-foreground: #858585;
+      color: var(--vscode-foreground);
+      font-family: var(--vscode-font-family);
+      font-size: var(--vscode-font-size);
+    }
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: var(--vscode-editor-background); }
+
+    /* ── Bench control panel ────────────────────────────────────── */
+    #bench-panel {
+      position: fixed; bottom: 12px; right: 12px; z-index: 10000;
+      background: #2d2d30; border: 1px solid #454545; border-radius: 6px;
+      padding: 10px 14px; min-width: 240px;
+      font-size: 12px; color: #ccc; box-shadow: 0 4px 12px #0006;
+    }
+    #bench-panel h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; }
+    #bench-panel button {
+      background: var(--vscode-button-background); color: var(--vscode-button-foreground);
+      border: none; border-radius: 3px; padding: 4px 10px; cursor: pointer; margin: 2px 4px 2px 0; font-size: 12px;
+    }
+    #bench-panel button:hover { background: var(--vscode-button-hoverBackground); }
+    #bench-panel .bench-row { margin: 4px 0; display: flex; align-items: center; gap: 8px; }
+    #bench-panel .bench-label { color: #888; min-width: 100px; }
+    #bench-panel .bench-value { color: #4ec9b0; font-family: var(--vscode-editor-font-family); }
+    #bench-panel .bench-status { color: #888; font-style: italic; margin: 6px 0; }
+    #bench-panel input[type="file"] { display: none; }
+  </style>
+  <script>
+    // ── Mock acquireVsCodeApi ──────────────────────────────────
+    // Must be defined before tab.js loads (it calls acquireVsCodeApi() at module scope).
+    window.__benchBridge = {
+      ws: null,
+      outgoing: [],
+      send(msg) {
+        this.outgoing.push(msg);
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify(msg));
+        }
+      }
+    };
+    window.acquireVsCodeApi = function() {
+      return {
+        postMessage(message) { window.__benchBridge.send(message); },
+        getState() { return null; },
+        setState() {}
+      };
+    };
+  </script>
+</head>
+<body class="tab-view">
+  <!-- Exact replica of tabProvider.ts bodyHtml -->
+  <div id="legend-section" class="tab-legend-section" style="display:none">
+    <div id="legend-header" class="tab-legend-header">
+      <span id="legend-chevron" class="tab-legend-header-chevron"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M6.146 3.146a.5.5 0 0 0 0 .707l4.146 4.146-4.146 4.146a.5.5 0 0 0 .707.707l4.5-4.5a.5.5 0 0 0 0-.707l-4.5-4.5a.5.5 0 0 0-.707 0Z"/></svg></span>
+      <span class="tab-legend-header-title">Languages</span>
+      <button id="legend-display-toggle" class="tab-action" style="margin-left:auto" title="Show percentages" aria-label="Show percentages"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><text x="8" y="12.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-weight="600" font-size="13" fill="currentColor">%</text></svg></button>
+    </div>
+    <div id="legend" class="tab-legend-wrap"></div>
+  </div>
+  <div id="search-section" class="tab-search-section">
+    <div id="search-header" class="tab-search-header">
+      <span id="search-chevron" class="tab-search-header-chevron"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M6.146 3.146a.5.5 0 0 0 0 .707l4.146 4.146-4.146 4.146a.5.5 0 0 0 .707.707l4.5-4.5a.5.5 0 0 0 0-.707l-4.5-4.5a.5.5 0 0 0-.707 0Z"/></svg></span>
+      <span class="tab-search-header-title">Search</span>
+      <span id="search-active-alert" class="tab-search-active-alert" title="Results are filtered by active search" style="display:none"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M7.56 1h.88l6.54 12.26-.44.74H1.44l-.42-.74L7.56 1zm.44 1.7L2.43 13H13.57L8 2.7zM8.5 11v1h-1v-1h1zm-1-1V6h1v4h-1z"/></svg></span>
+    </div>
+    <div id="search-content" class="tab-search-content"></div>
+  </div>
+  <div class="tab-tree-header">
+    <span class="tab-tree-header-title">Tree</span>
+    <div style="display:flex;align-items:center;gap:2px;margin-left:auto">
+      <button class="tab-action tab-refresh-btn" id="tab-refresh" title="Refresh" aria-label="Refresh" style="display:none"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M4.681 3.156a6 6 0 0 1 8.468 1.088l.47.616H11.5a.5.5 0 0 0 0 1h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-1 0v1.768l-.412-.54a7 7 0 1 0 1.374 5.107.5.5 0 1 0-.984.176A6 6 0 1 1 4.68 3.156z"/></svg></button>
+      <button class="tab-action" id="tab-sort" title="Sort: by file count" aria-label="Sort: by file count"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M3.684 1.01c.193.045.33.21.33.402v3.294a.42.42 0 0 1-.428.412.42.42 0 0 1-.428-.412V2.58a3.11 3.11 0 0 1-.664.435.436.436 0 0 1-.574-.184.405.405 0 0 1 .192-.552c.353-.17.629-.432.82-.661a2.884 2.884 0 0 0 .27-.388.44.44 0 0 1 .482-.22ZM7.5 3a.5.5 0 0 0 0 1h6a.5.5 0 0 0 0-1h-6Zm0 4a.5.5 0 0 0 0 1h6a.5.5 0 0 0 0-1h-6Zm0 4a.5.5 0 0 0 0 1h6a.5.5 0 0 0 0-1h-6Z"/></svg></button>
+      <button class="tab-action" id="tab-toggle-sticky" title="Disable Sticky Headers" aria-label="Disable Sticky Headers"></button>
+      <button class="tab-action" id="tab-toggle-truncation" title="Disable File Truncation" aria-label="Disable File Truncation"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M11.8536 3.35355L8.35355 6.85355C8.15829 7.04882 7.84171 7.04882 7.64645 6.85355L4.14645 3.35355C3.95118 3.15829 3.95118 2.84171 4.14645 2.64645C4.34171 2.45118 4.65829 2.45118 4.85355 2.64645L8 5.79289L11.1464 2.64645C11.3417 2.45118 11.6583 2.45118 11.8536 2.64645C12.0488 2.84171 12.0488 3.15829 11.8536 3.35355ZM11.8536 12.6464L8.35355 9.14645C8.15829 8.95118 7.84171 8.95118 7.64645 9.14645L4.14645 12.6464C3.95118 12.8417 3.95118 13.1583 4.14645 13.3536C4.34171 13.5488 4.65829 13.5488 4.85355 13.3536L8 10.2071L11.1464 13.3536C11.3417 13.5488 11.6583 13.5488 11.8536 13.3536C12.0488 13.1583 12.0488 12.8417 11.8536 12.6464Z"/></svg></button>
+      <button class="tab-action" id="tab-toggle-ignored" title="Show Ignored Files" aria-label="Show Ignored Files"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M2.984 8.625v.003a.5.5 0 0 1-.612.355c-.431-.114-.355-.611-.355-.611l.018-.062s.026-.084.047-.145a6.7 6.7 0 0 1 1.117-1.982C4.096 5.089 5.605 4 8 4s3.904 1.089 4.802 2.183a6.7 6.7 0 0 1 1.117 1.982 4.077 4.077 0 0 1 .06.187l.003.013v.004l.001.002a.5.5 0 0 1-.966.258l-.001-.004-.008-.025a4.872 4.872 0 0 0-.2-.52 5.696 5.696 0 0 0-.78-1.263C11.286 5.912 10.044 5 8 5c-2.044 0-3.285.912-4.028 1.817a5.7 5.7 0 0 0-.945 1.674 3.018 3.018 0 0 0-.035.109l-.008.025ZM8 7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5ZM6.5 9.5a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Z"/></svg></button>
+      <button class="tab-action" id="tab-expand-all" title="Expand All" aria-label="Expand All"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M15 6v5c0 2.21-1.79 4-4 4H6c-.74 0-1.38-.4-1.73-1H11c1.65 0 3-1.35 3-3V4.27c.6.35 1 .99 1 1.73Zm-4 7H4c-1.103 0-2-.897-2-2V4c0-1.103.897-2 2-2h7c1.103 0 2 .897 2 2v7c0 1.103-.897 2-2 2Zm-7-1h7c.551 0 1-.448 1-1V4c0-.551-.449-1-1-1H4c-.551 0-1 .449-1 1v7c0 .552.449 1 1 1Zm5.5-5H8V5.5a.5.5 0 0 0-1 0V7H5.5a.5.5 0 0 0 0 1H7v1.5a.5.5 0 0 0 1 0V8h1.5a.5.5 0 0 0 0-1Z"/></svg></button>
+      <button class="tab-action" id="tab-collapse-all" title="Collapse All" aria-label="Collapse All"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M14 4.27c.6.35 1 .99 1 1.73v5c0 2.21-1.79 4-4 4H6c-.74 0-1.38-.4-1.73-1H11c1.65 0 3-1.35 3-3V4.27ZM9.5 7a.5.5 0 0 1 0 1h-4a.5.5 0 0 1 0-1h4Z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M11 2c1.103 0 2 .897 2 2v7c0 1.103-.897 2-2 2H4c-1.103 0-2-.897-2-2V4c0-1.103.897-2 2-2h7ZM4 3c-.551 0-1 .449-1 1v7c0 .552.449 1 1 1h7c.551 0 1-.448 1-1V4c0-.551-.449-1-1-1H4Z"/></svg></button>
+    </div>
+  </div>
+  <div id="root"></div>
+
+  <!-- Load the unmodified tab.js IIFE bundle -->
+  <script src="/out/webview/tab.js"></script>
+
+  <!-- Bench harness controls (after tab.js so it doesn't interfere with init) -->
+  <script>
+    (function() {
+      'use strict';
+
+      // ── Bench panel UI ──────────────────────────────────────────
+      const panel = document.createElement('div');
+      panel.id = 'bench-panel';
+      panel.innerHTML = `
+        <h3>Bench Harness</h3>
+        <div class="bench-status" id="bench-status">No fixture loaded</div>
+        <div>
+          <button id="bench-load">Load Fixture</button>
+          <button id="bench-run" disabled>Run Benchmark</button>
+          <input type="file" id="bench-file" accept=".json">
+        </div>
+        <div id="bench-results" style="margin-top:8px"></div>
+      `;
+      document.body.appendChild(panel);
+
+      const statusEl = document.getElementById('bench-status');
+      const resultsEl = document.getElementById('bench-results');
+      const loadBtn = document.getElementById('bench-load');
+      const runBtn = document.getElementById('bench-run');
+      const fileInput = document.getElementById('bench-file');
+      let currentFixture = null;
+
+      // ── Send update message to the tab renderer ─────────────────
+      function sendUpdate(root) {
+        window.postMessage({
+          type: 'update',
+          roots: [root],
+          autoRescanEnabled: true,
+          sortMode: 'files',
+          truncateThreshold: 4,
+          stickyHeadersEnabled: true,
+          showIgnored: false,
+          dirPath: '',
+          workspaceFolderName: root.name,
+        }, '*');
+      }
+
+      // ── Fixture loading ─────────────────────────────────────────
+      function loadFixture(root) {
+        currentFixture = root;
+        statusEl.textContent = `Loaded: ${root.name} (${root.totalFiles} files)`;
+        runBtn.disabled = false;
+        sendUpdate(root);
+      }
+
+      loadBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', async () => {
+        const file = fileInput.files[0];
+        if (!file) return;
+        const text = await file.text();
+        loadFixture(JSON.parse(text));
+      });
+
+      // ── Auto-load from URL param ───────────────────────────────
+      const params = new URLSearchParams(location.search);
+      const fixturePath = params.get('fixture');
+      if (fixturePath) {
+        statusEl.textContent = `Loading ${fixturePath}...`;
+        fetch(fixturePath)
+          .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+          .then(loadFixture)
+          .catch(err => { statusEl.textContent = `Error: ${err.message}`; });
+      }
+
+      // ── WebSocket bridge ────────────────────────────────────────
+      const wsParam = params.get('ws');
+      if (wsParam) {
+        statusEl.textContent = `Connecting to ws://${wsParam}...`;
+        const ws = new WebSocket(`ws://${wsParam}`);
+        window.__benchBridge.ws = ws;
+        ws.onopen = () => { statusEl.textContent = `Connected to ws://${wsParam}`; };
+        ws.onmessage = (e) => {
+          const msg = JSON.parse(e.data);
+          window.postMessage(msg, '*');
+        };
+        ws.onclose = () => { statusEl.textContent = 'WebSocket disconnected'; };
+        ws.onerror = () => { statusEl.textContent = 'WebSocket error'; };
+      }
+
+      // ── Benchmark runner ────────────────────────────────────────
+      // Waits for the double-rAF render cycle to complete, then resolves.
+      function waitForRender() {
+        return new Promise(resolve => {
+          requestAnimationFrame(() => requestAnimationFrame(resolve));
+        });
+      }
+
+      async function runBenchmark() {
+        if (!currentFixture) return;
+        runBtn.disabled = true;
+        resultsEl.innerHTML = '';
+
+        const iterations = 5;
+        const results = { initial: [], rerender: [], expandChildren: [], expandDeep: [] };
+        const expandBtn = document.getElementById('tab-expand-all');
+        const collapseBtn = document.getElementById('tab-collapse-all');
+
+        for (let i = 0; i < iterations; i++) {
+          // Initial render (fresh update)
+          performance.mark('bench-initial-start');
+          sendUpdate(currentFixture);
+          await waitForRender();
+          performance.mark('bench-initial-end');
+          performance.measure('initial-render', 'bench-initial-start', 'bench-initial-end');
+
+          // Re-render (incremental DOM patching, same data)
+          performance.mark('bench-rerender-start');
+          sendUpdate(currentFixture);
+          await waitForRender();
+          performance.mark('bench-rerender-end');
+          performance.measure('rerender', 'bench-rerender-start', 'bench-rerender-end');
+
+          // Expand children (tier 1 — top-level only)
+          performance.mark('bench-expand-children-start');
+          expandBtn.click();
+          await waitForRender();
+          performance.mark('bench-expand-children-end');
+          performance.measure('expand-children', 'bench-expand-children-start', 'bench-expand-children-end');
+
+          // Expand deep (tier 2 — full recursive expand, second click)
+          performance.mark('bench-expand-deep-start');
+          expandBtn.click();
+          await waitForRender();
+          performance.mark('bench-expand-deep-end');
+          performance.measure('expand-deep', 'bench-expand-deep-start', 'bench-expand-deep-end');
+
+          // Collapse all (reset for next iteration)
+          collapseBtn.click();
+          await waitForRender();
+
+          // Collect measurements
+          const nameToKey = { 'initial-render': 'initial', 'rerender': 'rerender', 'expand-children': 'expandChildren', 'expand-deep': 'expandDeep' };
+          for (const m of performance.getEntriesByType('measure')) {
+            const key = nameToKey[m.name];
+            if (key) results[key].push(m.duration);
+          }
+          performance.clearMarks();
+          performance.clearMeasures();
+        }
+
+        // Display results
+        function stats(arr) {
+          const sorted = [...arr].sort((a, b) => a - b);
+          const median = sorted[Math.floor(sorted.length / 2)];
+          const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+          const min = sorted[0];
+          const max = sorted[sorted.length - 1];
+          return { median: median.toFixed(1), mean: mean.toFixed(1), min: min.toFixed(1), max: max.toFixed(1) };
+        }
+
+        let html = '';
+        for (const [label, values] of Object.entries(results)) {
+          const s = stats(values);
+          html += `<div class="bench-row"><span class="bench-label">${label}</span><span class="bench-value">${s.median}ms</span><span style="color:#888;font-size:11px">(mean ${s.mean}, min ${s.min}, max ${s.max})</span></div>`;
+        }
+        resultsEl.innerHTML = html;
+
+        // Expose results for automated runner
+        window.__benchResults = results;
+        runBtn.disabled = false;
+      }
+
+      runBtn.addEventListener('click', runBenchmark);
+
+      // Auto-run benchmark if ?autorun param is present (for bench.mjs)
+      if (params.has('autorun')) {
+        // Wait for fixture to load, then run
+        const checkReady = setInterval(() => {
+          if (currentFixture) {
+            clearInterval(checkReady);
+            runBenchmark();
+          }
+        }, 100);
+      }
+    })();
+  </script>
+</body>
+</html>

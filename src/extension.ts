@@ -6,6 +6,8 @@ import { Config } from './config';
 import { ScanCoordinator } from './scanCoordinator';
 import { registerCommands } from './commands';
 import { updateTheme } from './highlight/highlighter';
+import { setBridgeBroadcast } from './views/providerUtils';
+import type { Bridge } from './bench/wsbridge';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const config = new Config(context);
@@ -62,6 +64,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         tabProvider.updateTruncation(threshold);
       }
     })
+  );
+
+  // ── Bench WebSocket bridge (dev-only, not in package.json contributes) ──
+  let activeBridge: Bridge | null = null;
+  context.subscriptions.push(
+    vscode.commands.registerCommand('dirview.startBenchBridge', async (port?: number) => {
+      if (activeBridge) {
+        vscode.window.showInformationMessage(`Bench bridge already running on port ${activeBridge.port}`);
+        return;
+      }
+      const { startBridge } = await import('./bench/wsbridge');
+      activeBridge = startBridge(port ?? 9225);
+      setBridgeBroadcast(activeBridge.broadcast.bind(activeBridge));
+      vscode.window.showInformationMessage(`Bench bridge started on ws://localhost:${activeBridge.port}`);
+    }),
+    vscode.commands.registerCommand('dirview.stopBenchBridge', () => {
+      if (!activeBridge) { return; }
+      activeBridge.stop();
+      activeBridge = null;
+      setBridgeBroadcast(null);
+      vscode.window.showInformationMessage('Bench bridge stopped');
+    }),
   );
 
   await coordinator.scan();

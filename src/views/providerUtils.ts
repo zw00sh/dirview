@@ -5,9 +5,16 @@ import { getLangInfo } from '../language/languageMap';
 import { highlightLine, highlightLineMulti } from '../highlight/highlighter';
 import type { WebviewToBackendMessage, BackendToWebviewMessage } from './webview/types';
 
+/** Optional hook for the bench WebSocket bridge — receives a copy of every outgoing message. */
+let bridgeBroadcast: ((msg: BackendToWebviewMessage) => void) | null = null;
+export function setBridgeBroadcast(fn: ((msg: BackendToWebviewMessage) => void) | null): void {
+  bridgeBroadcast = fn;
+}
+
 /** Type-safe wrapper around webview.postMessage for outgoing backend→webview messages. */
 export function post(webview: vscode.Webview, msg: BackendToWebviewMessage): void {
   webview.postMessage(msg);
+  bridgeBroadcast?.(msg);
 }
 
 /** Handles messages that are common to both SidebarProvider and TabProvider.
