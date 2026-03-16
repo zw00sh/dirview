@@ -455,5 +455,6 @@ export function flattenTree(
     flatRows,
     totalHeight: cumY,
     totalVisibleFiles,
+    totalVisibleMatches: filtered.totalVisibleMatches,
   };
 }

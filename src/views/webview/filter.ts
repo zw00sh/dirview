@@ -8,7 +8,7 @@ export interface FilterInputs {
   activeFilters: Set<string>;
   searchResults: Map<string, SearchMatch[]> | null;
   searchAncestorPaths: Set<string> | null;
-  fileFilterFn: ((name: string) => boolean) | null;
+  fileFilterFn: ((relativePath: string) => boolean) | null;
   searchResultsVersion: number;
 }
 
@@ -17,6 +17,8 @@ export interface FilteredTree {
   isFiltered: boolean;
   /** Total number of files visible after filtering. */
   totalVisibleFiles: number;
+  /** Total search matches across visible files (0 when no search is active). */
+  totalVisibleMatches: number;
 }
 
 // ── Cache ────────────────────────────────────────────────────────────────────
@@ -57,7 +59,7 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
   if (!isFiltered) {
     let total = 0;
     for (const r of roots) total += r.totalFiles;
-    cachedResult = { roots, isFiltered: false, totalVisibleFiles: total };
+    cachedResult = { roots, isFiltered: false, totalVisibleFiles: total, totalVisibleMatches: 0 };
     cachedRoots = roots;
     cachedActiveFilters = activeFilters;
     cachedFileFilterFn = fileFilterFn;
@@ -75,10 +77,13 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
   const hasSearchFilter = searchResults !== null;
   const hasFileFilter = fileFilterFn !== null;
 
-  function fileVisible(f: FileNode): boolean {
+  function fileVisible(f: FileNode, parentPath: string): boolean {
     if (hasLangFilter && !activeFilters.has(f.langName)) return false;
     if (hasSearchFilter && !searchResults!.has(f.path)) return false;
-    if (hasFileFilter && !fileFilterFn!(f.name)) return false;
+    if (hasFileFilter) {
+      const relPath = parentPath ? parentPath + '/' + f.name : f.name;
+      if (!fileFilterFn!(relPath)) return false;
+    }
     return true;
   }
 
@@ -96,7 +101,7 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
     // Fast path: ancestor index says this dir has no matching descendants
     if (useAncestorIndex && !searchAncestorPaths!.has(node.path)) {
       // Still need to check if this node has direct file matches
-      const filteredFiles = (node.files || []).filter(fileVisible);
+      const filteredFiles = (node.files || []).filter(f => fileVisible(f, node.path));
       if (filteredFiles.length === 0) {
         memo.set(node, null);
         return null;
@@ -108,7 +113,7 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
     }
 
     // Filter files
-    const filteredFiles = (node.files || []).filter(fileVisible);
+    const filteredFiles = (node.files || []).filter(f => fileVisible(f, node.path));
 
     // Filter children recursively
     const filteredChildren: DirNode[] = [];
@@ -131,18 +136,25 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
 
   const filteredRoots: DirNode[] = [];
   let totalVisibleFiles = 0;
+  let totalVisibleMatches = 0;
   for (const root of roots) {
     const fr = filterNode(root);
     if (fr !== null) filteredRoots.push(fr);
   }
-  // Count visible files by walking the filtered tree.
+  // Count visible files and matches by walking the filtered tree.
   function countFiles(node: DirNode): void {
-    totalVisibleFiles += (node.files || []).length;
+    for (const f of (node.files || [])) {
+      totalVisibleFiles++;
+      if (hasSearchFilter) {
+        const m = searchResults!.get(f.path);
+        if (m) { totalVisibleMatches += m.filter(x => !x.isContext).length; }
+      }
+    }
     for (const c of node.children) countFiles(c);
   }
   for (const r of filteredRoots) countFiles(r);
 
-  const result: FilteredTree = { roots: filteredRoots, isFiltered: true, totalVisibleFiles };
+  const result: FilteredTree = { roots: filteredRoots, isFiltered: true, totalVisibleFiles, totalVisibleMatches };
 
   // Update cache
   cachedResult = result;
