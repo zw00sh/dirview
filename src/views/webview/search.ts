@@ -79,7 +79,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   const includeInput = h('input', {
     type: 'text',
     className: 'search-input search-filter-input',
-    placeholder: '',
+    placeholder: 'e.g. src/.*\\.ts',
     attr: { 'aria-label': 'Find or filter files' },
   });
 
@@ -342,6 +342,9 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   includeRegexBtn.addEventListener('click', () => {
     includeUseRegex = !includeUseRegex;
     includeRegexBtn.classList.toggle('active', includeUseRegex);
+    // Update placeholder to reflect the current mode (regex vs glob examples).
+    includeInput.placeholder = document.activeElement === includeInput
+      ? includeFocusPlaceholder() : includeBlurPlaceholder();
     if (mainInput.value.trim() || includeInput.value.trim()) { triggerSearch(); }
   });
 
@@ -424,11 +427,19 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     searchHistoryIdx = -1;
     mainInput.placeholder = 'Search Text';
   });
-  includeInput.addEventListener('focus', () => { includeInput.placeholder = 'e.g. api, *.ts (\u21C5 for history)'; });
+  function includeBlurPlaceholder(): string {
+    return includeUseRegex ? 'e.g. src/.*\\.ts' : 'e.g. *.ts, src/**';
+  }
+  function includeFocusPlaceholder(): string {
+    return includeUseRegex
+      ? 'e.g. src/.*\\.ts (\u21C5 for history)'
+      : 'e.g. *.ts, src/** (\u21C5 for history)';
+  }
+  includeInput.addEventListener('focus', () => { includeInput.placeholder = includeFocusPlaceholder(); });
   includeInput.addEventListener('blur', () => {
     commitToHistory(includeHistory, includeInput.value);
     includeHistoryIdx = -1;
-    includeInput.placeholder = 'Search Files';
+    includeInput.placeholder = includeBlurPlaceholder();
   });
 
   // Cmd+F / Ctrl+F — focus the search input from anywhere in the webview.
