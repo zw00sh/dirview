@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.0] — 2026-03-17
+
+### Added
+- **Virtual scrolling in the sidebar** — the sidebar now uses the same virtual scroller as the tab, with JS-driven sticky overlay for directory header pinning. Enables smooth performance on large repositories.
+- **Files to include / files to exclude** — the file filter now uses glob patterns (comma-separated) matching VS Code's native search include/exclude UI. The exclude input is hidden behind a "..." toggle button. Replaces the previous regex/glob dual-mode filter.
+- Legend stats now reflect search/include/exclude filters independently of language filters — toggling a language no longer zeroes out counts for unselected languages.
+
+### Changed
+- Sticky headers "off" icon changed from a pennant/flag to a pin with diagonal strikethrough, used consistently in both the tab toolbar and the sidebar title bar.
+- Deduplicated scanner, match grouping, and improved type safety across the codebase.
+
+### Fixed
+- "Error: Scan aborted" no longer flashes when rapidly toggling refresh or show hidden files. Aborted scans are silently suppressed while the queued scan completes.
+
 ## [1.2.1] — 2026-03-16
 
 ### Fixed
