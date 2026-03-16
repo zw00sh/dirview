@@ -208,11 +208,13 @@ export function setupDelegatedEvents(ctx: RendererContext): void {
       }
 
       const chevron = dirRow.querySelector('.chevron');
-      const childrenEl = dirRow.nextElementSibling;
+      // In nested DOM mode, the dir-row's parent <li> has a sibling <ul class="children">.
+      // In virtual scroll mode (flat rows), there's no children <ul> — always rerender.
+      const parentLi = dirRow.parentElement;
+      const childrenEl = parentLi?.querySelector(':scope > ul.children') as HTMLElement | null;
 
-      // Lazy rendering: if expanding and the children UL is empty (was rendered
-      // collapsed), we need a full rerender to populate the children DOM.
-      if (nowExpanded && childrenEl && !childrenEl.firstChild) {
+      // No children element (virtual scroll) or lazy-rendered empty children — full rerender.
+      if (!childrenEl || (nowExpanded && !childrenEl.firstChild)) {
         state.rerender();
         if (deps.onExpandChanged) {
           deps.onExpandChanged([...state.expanded.values()].some(v => v));
@@ -221,7 +223,7 @@ export function setupDelegatedEvents(ctx: RendererContext): void {
       }
 
       if (chevron) { chevron.className = 'chevron' + (nowExpanded ? ' open' : ''); }
-      if (childrenEl) { childrenEl.className = 'children' + (nowExpanded ? ' open' : ''); }
+      childrenEl.className = 'children' + (nowExpanded ? ' open' : '');
 
       if (deps.onExpandChanged) {
         deps.onExpandChanged([...state.expanded.values()].some(v => v));

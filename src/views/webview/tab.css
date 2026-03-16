@@ -25,6 +25,36 @@ body {
   flex-direction: column;
 }
 
+/* ── Sticky header overlay (tab only) ─────────────────────────────────── */
+.virtual-sticky-overlay {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  background: var(--vscode-editor-background);
+}
+
+.virtual-sticky-overlay:empty {
+  display: none;
+}
+
+.virtual-sticky-overlay .dir-row {
+  background: var(--vscode-editor-background);
+}
+
+.virtual-sticky-overlay .dir-row.is-stuck-bottom {
+  overflow: visible;
+}
+
+.virtual-sticky-overlay .dir-row.is-stuck-bottom::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  box-shadow: 0 6px 6px -6px rgba(0, 0, 0, 1) inset;
+}
+
 .tab-tree-header {
   height: 22px;
   padding: 0 8px 0 4px;

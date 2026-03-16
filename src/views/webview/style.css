@@ -832,16 +832,17 @@ li:not(.match-group) > .match-context-row:hover {
    --depth (set in renderDirNode) determines the stacking offset.
    Border is only shown on the bottommost stuck row (.is-stuck-bottom toggled by JS).
    A transparent border is always present to prevent layout shift when toggling. */
-.sticky-dir {
+/* Sticky headers — sidebar only (tab uses JS overlay via virtual scroller) */
+.sidebar .sticky-dir {
   position: sticky;
   top: calc(var(--depth) * var(--row-height));
   z-index: calc(100 - var(--depth));
   background: var(--vscode-sideBar-background);
 }
-.sticky-dir.is-stuck-bottom {
+.sidebar .sticky-dir.is-stuck-bottom {
   overflow: visible;
 }
-.sticky-dir.is-stuck-bottom::after {
+.sidebar .sticky-dir.is-stuck-bottom::after {
   content: '';
   position: absolute;
   bottom: -3px;

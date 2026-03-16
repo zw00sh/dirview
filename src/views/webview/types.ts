@@ -170,6 +170,7 @@ export interface Renderer {
   renderFileMatches(container: HTMLElement, file: FileNode, depth: number, ancestors: IndentAncestor[]): void;
   renderTruncatedRow(hiddenFiles: FileNode[], depth: number, ancestors: IndentAncestor[], dirPath: string, maxMetric: number, clientWidth: number): HTMLLIElement;
   renderEmptyGroupNode(nodes: DirNode[], depth: number, maxMetric: number, ancestors: IndentAncestor[]): HTMLLIElement;
+  renderDirRow(node: DirNode, depth: number, maxMetric: number, ancestors: IndentAncestor[], clientWidth: number): HTMLLIElement;
   renderDirNode(node: DirNode, depth: number, maxMetric: number, ancestors: IndentAncestor[], clientWidth: number): HTMLLIElement;
 }
 
