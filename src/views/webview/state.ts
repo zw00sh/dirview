@@ -34,6 +34,8 @@ export function createState(): WebviewState {
     _rerenderPending: false,
     _searchRenderTimer: null,
     searchResultsVersion: 0,
+    lastFilteredFileCount: 0,
+    onAfterRender: null,
     // Placeholder — assigned below
     rerender: null!,
   };
@@ -53,6 +55,7 @@ export function createState(): WebviewState {
           state.render(state.lastRoots!, state.lastAutoRescanEnabled, state.currentSortMode);
         }
         if (state.scanBar && !state.searchActive) { state.scanBar.show(false); }
+        if (state.onAfterRender) { state.onAfterRender(); }
       });
     });
   };

@@ -102,6 +102,7 @@ export function renderTree(
   state.lastRoots = filtered.roots;
   // Store isFiltered on state so the renderer can read it for auto-expand logic.
   (state as any)._isFiltered = filtered.isFiltered;
+  state.lastFilteredFileCount = filtered.totalVisibleFiles;
 
   const maxMetric = computeMaxMetric(filtered.roots, state.currentSortMode, false);
   const clientWidth = rootEl.clientWidth;
