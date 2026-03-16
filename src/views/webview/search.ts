@@ -286,25 +286,15 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   // updateStatus reads from state (used in non-standalone/tab mode where createMessageHandler
   // keeps state.searchActive / state.searchResults / etc. up to date).
   function updateStatus(): void {
-    // When a client-side file filter is active alongside a content search,
-    // the filtered counts (lastFilteredFileCount/lastFilteredMatchCount) are
-    // only correct AFTER the render completes — the render calls filterTree
-    // which computes them. Schedule a post-render refresh so the status shows
-    // the correct filtered counts once the render finishes.
-    if (state.fileFilterFn && state.searchResults && !state.searchActive) {
+    // When any client-side filter (file regex or language) reduces the visible
+    // results below the raw ripgrep totals, the accurate counts are only
+    // available AFTER the render (filterTree computes them). Schedule a
+    // post-render refresh to show the correct filtered counts.
+    const hasClientFilter = !!state.fileFilterFn || state.activeFilters.size > 0;
+    if (hasClientFilter && state.searchResults && !state.searchActive) {
       state.onAfterRender = () => {
         state.onAfterRender = null;
-        const { text, visible } = formatSearchStatus(
-          false,
-          true,
-          state.lastFilteredFileCount,
-          state.lastFilteredMatchCount,
-          state.lastFilteredFileCount,
-          state.searchTruncated,
-        );
-        statusEl.textContent = text;
-        statusEl.style.display = visible ? '' : 'none';
-        updateDebounceAnchor(state.lastFilteredFileCount);
+        updateFilteredStatus();
       };
     }
 
@@ -319,7 +309,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     );
     statusEl.textContent = text;
     statusEl.style.display = visible ? '' : 'none';
-    updateDebounceAnchor(state.fileFilterFn ? state.lastFilteredFileCount : state.searchFileCount);
+    updateDebounceAnchor(hasClientFilter ? state.lastFilteredFileCount : state.searchFileCount);
   }
 
   // setStatus is the externally-driven variant used by the standalone search fold.
@@ -658,7 +648,27 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     contextBtn.style.display = hidden ? 'none' : '';
   }
 
-  return { el, focus, clear: clearSearch, show, hide, updateStatus, setStatus, updateFilterWarning, setDirPill, triggerSearch, setHasRipgrep };
+  // Directly updates status with post-render filtered counts. Unlike updateStatus(),
+  // this does NOT defer via onAfterRender — it assumes the render has already completed
+  // and the filtered counts on state are current. Used by post-render callbacks.
+  function updateFilteredStatus(): void {
+    const hasResults = state.searchResults !== null || !!state.fileFilterFn;
+    const fileCount = state.lastFilteredFileCount;
+    const matchCount = state.lastFilteredMatchCount;
+    const { text, visible } = formatSearchStatus(
+      false,
+      hasResults,
+      fileCount,
+      matchCount,
+      fileCount,
+      state.searchTruncated,
+    );
+    statusEl.textContent = text;
+    statusEl.style.display = visible ? '' : 'none';
+    updateDebounceAnchor(fileCount);
+  }
+
+  return { el, focus, clear: clearSearch, show, hide, updateStatus, updateFilteredStatus, setStatus, updateFilterWarning, setDirPill, triggerSearch, setHasRipgrep };
 }
 
 // Updates search-result counters on state and triggers the search bar status display.

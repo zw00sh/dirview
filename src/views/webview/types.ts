@@ -206,6 +206,8 @@ export interface SearchBarResult {
   show: () => void;
   hide: () => void;
   updateStatus: () => void;
+  /** Directly applies post-render filtered counts to status. No defer. */
+  updateFilteredStatus: () => void;
   setStatus: (data: SearchStatusData) => void;
   updateFilterWarning: (count: number) => void;
   setDirPill: (dirPath: string) => void;

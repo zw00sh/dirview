@@ -228,6 +228,45 @@ describe('filterTree totalVisibleMatches', () => {
   });
 });
 
+// --- filterTree: totalVisibleMatches with language filter ---
+describe('filterTree totalVisibleMatches with language filter', () => {
+  function ft(roots: DirNode[], opts: Partial<Parameters<typeof filterTree>[1]> = {}) {
+    return filterTree(roots, {
+      activeFilters: opts.activeFilters ?? new Set(),
+      searchResults: opts.searchResults ?? null,
+      searchAncestorPaths: opts.searchAncestorPaths ?? null,
+      fileFilterFn: opts.fileFilterFn ?? null,
+      searchResultsVersion: opts.searchResultsVersion ?? Date.now(),
+    });
+  }
+
+  it('excludes matches from files hidden by language filter', () => {
+    const dir = makeDir('src', 'src', {
+      files: [
+        { name: 'api.ts', path: '/ws/src/api.ts', langName: 'TypeScript' },
+        { name: 'api.java', path: '/ws/src/api.java', langName: 'Java' },
+      ],
+    });
+    const searchResults = new Map([
+      ['/ws/src/api.ts', [
+        { line: 1, column: 0, matchLength: 3, lineText: 'import foo' },
+        { line: 2, column: 0, matchLength: 3, lineText: 'import bar' },
+      ]],
+      ['/ws/src/api.java', [
+        { line: 1, column: 0, matchLength: 3, lineText: 'import baz' },
+      ]],
+    ]);
+    // Language filter for TypeScript only — Java file's match should be excluded
+    const result = ft([dir], {
+      searchResults,
+      searchAncestorPaths: new Set(['src', '']),
+      activeFilters: new Set(['TypeScript']),
+    });
+    expect(result.totalVisibleMatches).toBe(2);
+    expect(result.totalVisibleFiles).toBe(1);
+  });
+});
+
 // --- file filter: search bar regex toggle ---
 describe('search bar file filter', () => {
   function makeSearchBarForFilter(standalone: boolean) {

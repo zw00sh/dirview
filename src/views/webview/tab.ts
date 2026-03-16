@@ -342,18 +342,32 @@ function toggleFilter(langName: string) {
   if (state.activeFilters.size > 0) {
     state.expanded.clear();
   }
+  state.searchResultsVersion++;
   vscode.postMessage({ command: 'filter', langs: [...state.activeFilters] });
   searchBar.updateFilterWarning(state.activeFilters.size);
   updateLegendActiveAlert();
+  schedulePostFilterStatusUpdate();
   state.rerender();
 }
 
 function clearAllFilters() {
   state.activeFilters.clear();
+  state.searchResultsVersion++;
   vscode.postMessage({ command: 'filter', langs: [] });
   searchBar.updateFilterWarning(0);
   updateLegendActiveAlert();
+  schedulePostFilterStatusUpdate();
   state.rerender();
+}
+
+// After a language filter change, the search status counts must be refreshed
+// post-render since filterTree recomputes totalVisibleFiles/Matches during render.
+function schedulePostFilterStatusUpdate() {
+  if (!state.searchResults && !state.fileFilterFn) { return; }
+  state.onAfterRender = () => {
+    state.onAfterRender = null;
+    searchBar.updateFilteredStatus();
+  };
 }
 
 function updateLegend(stats: LangStat[]) {
