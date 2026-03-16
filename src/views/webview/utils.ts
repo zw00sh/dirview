@@ -1,6 +1,8 @@
 // Shared utility functions for dirview webviews.
 
 import type { DirNode, FileNode, FileTypeStats, SortMode, WebviewState, ScanBar, LangStat, GroupedChild, RendererOptions } from './types';
+import { h } from './h';
+import { SVG_SYNC, SVG_SEARCH, SVG_FOLDER_OPENED, SVG_INFO, SVG_WARNING } from './icons';
 
 export function escHtml(str: string): string {
   return str
@@ -8,6 +10,25 @@ export function escHtml(str: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+export type EmptyStateVariant = 'initializing' | 'scanning' | 'noWorkspace' | 'noData' | 'error';
+
+const emptyStateConfig: Record<EmptyStateVariant, { icon: string; text: string; cls: string }> = {
+  initializing: { icon: SVG_SYNC, text: 'Initializing\u2026', cls: 'scanning' },
+  scanning:     { icon: SVG_SEARCH, text: 'Scanning workspace\u2026', cls: 'scanning' },
+  noWorkspace:  { icon: SVG_FOLDER_OPENED, text: 'No workspace folder open.', cls: '' },
+  noData:       { icon: SVG_INFO, text: 'No data yet.', cls: '' },
+  error:        { icon: SVG_WARNING, text: '', cls: 'error' },
+};
+
+export function emptyState(variant: EmptyStateVariant, errorMessage?: string): HTMLElement {
+  const { icon, text, cls } = emptyStateConfig[variant];
+  const msg = variant === 'error' ? `Error: ${errorMessage || 'Unknown error'}` : text;
+  return h('div', { className: `empty-state${cls ? ' ' + cls : ''}` },
+    h('div', { className: 'empty-state-icon', innerHTML: icon }),
+    h('div', { className: 'empty-state-text', textContent: msg }),
+  );
 }
 
 export function formatBytes(bytes: number): string {

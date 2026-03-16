@@ -19,6 +19,12 @@ body {
   border-bottom: 1px solid var(--vscode-sideBar-border, rgba(128,128,128,0.2));
 }
 
+/* Fill available height when showing an empty state in the tab tree section */
+.tab-tree-section #root:has(> .empty-state:only-child) {
+  display: flex;
+  flex-direction: column;
+}
+
 .tab-tree-header {
   height: 22px;
   padding: 0 8px 0 4px;

@@ -2,7 +2,7 @@ import {
   createScanBar,
   computeStats,
   renderLegend,
-  escHtml,
+  emptyState,
 } from './index';
 import type { LangStat } from './types';
 
@@ -17,10 +17,7 @@ let showPct = false;
 function render() {
   root.innerHTML = '';
   if (!currentStats || currentStats.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'empty';
-    empty.textContent = 'No data yet.';
-    root.appendChild(empty);
+    root.appendChild(emptyState('noData'));
     return;
   }
   renderLegend(root, currentStats, activeFilters, (langName: string) => {
@@ -55,8 +52,9 @@ window.addEventListener('message', (event: MessageEvent) => {
     render();
   } else if (message.type === 'error') {
     scanBar.show(false);
-    root.innerHTML = `<div class="empty">Error: ${escHtml(message.message)}</div>`;
+    root.innerHTML = '';
+    root.appendChild(emptyState('error', message.message));
   }
 });
 
-root.innerHTML = '<div class="empty">Initializing…</div>';
+root.appendChild(emptyState('initializing'));

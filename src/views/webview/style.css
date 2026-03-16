@@ -17,17 +17,63 @@ body {
   padding: 4px 0;
 }
 
-/* Loading state */
-.loading {
-  padding: 16px;
-  color: var(--vscode-descriptionForeground);
-  font-style: italic;
+/* ── Centered empty states ──────────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 16px;
+  flex: 1;
+  min-height: 120px;
+  text-align: center;
 }
 
-/* Error state */
-.error {
-  padding: 12px;
+.empty-state-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--vscode-descriptionForeground);
+  opacity: 0.6;
+}
+
+.empty-state-icon svg {
+  width: 32px;
+  height: 32px;
+}
+
+.empty-state-text {
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.empty-state.error .empty-state-icon {
   color: var(--vscode-errorForeground);
+  opacity: 0.8;
+}
+
+.empty-state.error .empty-state-text {
+  color: var(--vscode-errorForeground);
+  font-style: normal;
+}
+
+.empty-state.scanning .empty-state-icon {
+  animation: empty-state-pulse 2s ease-in-out infinite;
+}
+
+@keyframes empty-state-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 0.3; }
+}
+
+/* Fill viewport when empty state is the only child of #root */
+#root:has(> .empty-state:only-child) {
+  min-height: calc(100vh - 8px);
+  display: flex;
+  flex-direction: column;
 }
 
 /* Tree */
@@ -234,13 +280,6 @@ body {
   display: block;
 }
 
-/* Empty state */
-.empty {
-  padding: 16px 12px;
-  color: var(--vscode-descriptionForeground);
-  font-style: italic;
-  font-size: 12px;
-}
 
 
 /* Scan progress bar — uses transform on a pseudo-element so the animation
@@ -408,14 +447,12 @@ body {
   outline: 1px solid var(--vscode-focusBorder);
 }
 
-/* Invalid regex — red border matching VSCode's inputValidation.errorBorder */
+/* Invalid regex — red outline matching VSCode's inputValidation.errorBorder */
 .search-input-container.regex-error,
-.search-filter-container.regex-error {
-  border-color: var(--vscode-inputValidation-errorBorder, #be1100);
-}
+.search-filter-container.regex-error,
 .search-input-container.regex-error:focus-within,
 .search-filter-container.regex-error:focus-within {
-  outline-color: var(--vscode-inputValidation-errorBorder, #be1100);
+  outline: 1px solid var(--vscode-inputValidation-errorBorder, #be1100);
 }
 
 .search-main-input {

@@ -1,6 +1,6 @@
 // Message handler for backend → webview communication.
 
-import { escHtml } from './utils';
+import { emptyState } from './utils';
 import { tieredExpandAll, tieredCollapseAll } from './state';
 import { expandMatchedDirs, updateSearchStatus, scheduleSearchRender, expandBatchFiles, buildAncestorPaths } from './search';
 
@@ -25,7 +25,8 @@ export function createMessageHandler(
     },
     loading() {
       scanBar.show(false);
-      rootEl.innerHTML = '<div class="loading">Scanning workspace\u2026</div>';
+      rootEl.innerHTML = '';
+      rootEl.appendChild(emptyState('scanning'));
       if (deps.onLoading) { deps.onLoading(); }
     },
     update(message: BackendToWebviewMessage & { type: 'update' }) {
@@ -82,7 +83,8 @@ export function createMessageHandler(
     },
     error(message: BackendToWebviewMessage & { type: 'error' }) {
       scanBar.show(false);
-      rootEl.innerHTML = `<div class="error">Error: ${escHtml(message.message)}</div>`;
+      rootEl.innerHTML = '';
+      rootEl.appendChild(emptyState('error', message.message));
     },
     searchResults(message: BackendToWebviewMessage & { type: 'searchResults' }) {
       // Non-streaming fallback (used by searchFiles / clearSearch / errors).

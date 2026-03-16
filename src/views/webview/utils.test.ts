@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   escHtml, formatBytes, sortDirs, sortFiles, computeMaxMetric, groupEmptyDirs,
-  computeStats, buildAncestorPaths,
+  computeStats, buildAncestorPaths, emptyState,
 } from './index';
 
 import './test-helpers';
