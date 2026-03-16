@@ -222,26 +222,36 @@ describe('computeStats', () => {
 describe('buildAncestorPaths', () => {
   it('produces workspace-relative ancestors from absolute Unix paths', () => {
     const result = buildAncestorPaths(['/ws/src/lib/foo.ts'], ['/ws']);
-    expect(result).toEqual(new Set(['src', 'src/lib']));
+    expect(result).toEqual(new Set(['', 'src', 'src/lib']));
   });
 
   it('produces workspace-relative ancestors from absolute Windows paths', () => {
     const result = buildAncestorPaths(['C:\\ws\\src\\lib\\foo.ts'], ['C:\\ws']);
-    expect(result).toEqual(new Set(['src', 'src/lib']));
+    expect(result).toEqual(new Set(['', 'src', 'src/lib']));
   });
 
   it('handles mixed separators in Windows paths', () => {
     const result = buildAncestorPaths(['C:\\ws/src\\lib/foo.ts'], ['C:\\ws']);
-    expect(result).toEqual(new Set(['src', 'src/lib']));
+    expect(result).toEqual(new Set(['', 'src', 'src/lib']));
   });
 
   it('produces absolute ancestors when no rootPaths given', () => {
     const result = buildAncestorPaths(['/ws/src/foo.ts']);
-    expect(result).toEqual(new Set(['/ws', '/ws/src']));
+    expect(result).toEqual(new Set(['', '/ws', '/ws/src']));
   });
 
   it('deduplicates ancestors across multiple files', () => {
     const result = buildAncestorPaths(['/ws/src/a.ts', '/ws/src/lib/b.ts'], ['/ws']);
-    expect(result).toEqual(new Set(['src', 'src/lib']));
+    expect(result).toEqual(new Set(['', 'src', 'src/lib']));
+  });
+
+  it('includes root for file directly in workspace root', () => {
+    const result = buildAncestorPaths(['/ws/api.ts'], ['/ws']);
+    expect(result).toEqual(new Set(['']));
+  });
+
+  it('returns empty set when no files are provided', () => {
+    const result = buildAncestorPaths([], ['/ws']);
+    expect(result).toEqual(new Set());
   });
 });

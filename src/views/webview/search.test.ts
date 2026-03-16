@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   createState, createMessageHandler, expandMatchedDirs, expandBatchFiles,
   walkMatchingDirs, scheduleSearchRender, createSearchBar, filterTree,
+  buildAncestorPaths,
 } from './index';
 import { makeDir, makeRenderer, awaitRerender } from './test-helpers';
 
@@ -73,6 +74,42 @@ describe('filterTree search', () => {
     const root = makeDir('/a', 'a', { files: [], children: [] });
     const result = ft([root], { searchResults: new Map([['/a/other.ts', []]]) });
     expect(result.roots.length).toBe(0);
+  });
+
+  // --- ancestor index fast path (searchAncestorPaths) ---
+
+  it('keeps root with nested match when using ancestor index', () => {
+    // Regression: root node (path '') was missing from searchAncestorPaths,
+    // causing the ancestor fast path to prune the entire tree.
+    const nested = makeDir('src', 'src', { files: [{ path: '/ws/src/api.ts', name: 'api.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
+    const root = makeDir('', 'project', { children: [nested] });
+    const searchResults = new Map([['/ws/src/api.ts', []]]);
+    const searchAncestorPaths = buildAncestorPaths(searchResults.keys(), ['/ws']);
+    const result = ft([root], { searchResults, searchAncestorPaths });
+    expect(result.roots.length).toBe(1);
+    expect(result.roots[0].children.length).toBe(1);
+    expect(result.roots[0].children[0].files.length).toBe(1);
+  });
+
+  it('keeps root with direct file match when using ancestor index', () => {
+    const root = makeDir('', 'project', { files: [{ path: '/ws/api.ts', name: 'api.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
+    const searchResults = new Map([['/ws/api.ts', []]]);
+    const searchAncestorPaths = buildAncestorPaths(searchResults.keys(), ['/ws']);
+    const result = ft([root], { searchResults, searchAncestorPaths });
+    expect(result.roots.length).toBe(1);
+    expect(result.roots[0].files.length).toBe(1);
+  });
+
+  it('prunes non-matching sibling when using ancestor index', () => {
+    const matching = makeDir('src', 'src', { files: [{ path: '/ws/src/api.ts', name: 'api.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
+    const nonMatching = makeDir('docs', 'docs', { files: [{ path: '/ws/docs/readme.md', name: 'readme.md', langName: 'Markdown', langColor: '#083fa1', sizeBytes: 0 }] });
+    const root = makeDir('', 'project', { children: [matching, nonMatching] });
+    const searchResults = new Map([['/ws/src/api.ts', []]]);
+    const searchAncestorPaths = buildAncestorPaths(searchResults.keys(), ['/ws']);
+    const result = ft([root], { searchResults, searchAncestorPaths });
+    expect(result.roots.length).toBe(1);
+    expect(result.roots[0].children.length).toBe(1);
+    expect(result.roots[0].children[0].name).toBe('src');
   });
 });
 
