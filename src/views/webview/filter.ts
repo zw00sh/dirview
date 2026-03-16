@@ -147,7 +147,7 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
       totalVisibleFiles++;
       if (hasSearchFilter) {
         const m = searchResults!.get(f.path);
-        if (m) { totalVisibleMatches += m.filter(x => !x.isContext).length; }
+        if (m) { for (let i = 0; i < m.length; i++) { if (!m[i].isContext) totalVisibleMatches++; } }
       }
     }
     for (const c of node.children) countFiles(c);

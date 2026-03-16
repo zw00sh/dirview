@@ -286,18 +286,35 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   // updateStatus reads from state (used in non-standalone/tab mode where createMessageHandler
   // keeps state.searchActive / state.searchResults / etc. up to date).
   function updateStatus(): void {
-    // When a client-side file filter is active, use the filtered counts
-    // (which reflect only files/matches passing the regex filter) instead
-    // of the raw ripgrep totals.
-    const useFiltered = !!state.fileFilterFn && !state.searchActive;
-    const fileCount = useFiltered ? state.lastFilteredFileCount : state.searchFileCount;
-    const matchCount = useFiltered ? state.lastFilteredMatchCount : state.searchMatchCount;
+    // When a client-side file filter is active alongside a content search,
+    // the filtered counts (lastFilteredFileCount/lastFilteredMatchCount) are
+    // only correct AFTER the render completes — the render calls filterTree
+    // which computes them. Schedule a post-render refresh so the status shows
+    // the correct filtered counts once the render finishes.
+    if (state.fileFilterFn && state.searchResults && !state.searchActive) {
+      state.onAfterRender = () => {
+        state.onAfterRender = null;
+        const { text, visible } = formatSearchStatus(
+          false,
+          true,
+          state.lastFilteredFileCount,
+          state.lastFilteredMatchCount,
+          state.lastFilteredFileCount,
+          state.searchTruncated,
+        );
+        statusEl.textContent = text;
+        statusEl.style.display = visible ? '' : 'none';
+        updateDebounceAnchor(state.lastFilteredFileCount);
+      };
+    }
+
+    // Show immediate status (ripgrep totals or "Searching…").
     const { text, visible } = formatSearchStatus(
       state.searchActive,
       state.searchResults !== null || !!state.fileFilterFn,
-      useFiltered ? state.lastFilteredFileCount : (state.searchResults ? state.searchResults.size : 0),
-      matchCount,
-      fileCount,
+      state.searchResults ? state.searchResults.size : 0,
+      state.searchMatchCount,
+      state.searchFileCount,
       state.searchTruncated,
     );
     statusEl.textContent = text;
