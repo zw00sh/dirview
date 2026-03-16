@@ -30,14 +30,14 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   });
   let caseSensitive = false;
 
-  // Regex mode toggle
+  // Regex mode toggle — enabled by default
   const regexBtn = h('button', {
-    className: 'search-toggle',
+    className: 'search-toggle active',
     title: 'Use Regular Expression',
     innerHTML: Icons.SVG_REGEX,
     attr: { 'aria-label': 'Use Regular Expression' },
   });
-  let useRegex = false;
+  let useRegex = true;
 
   // Clear button — only visible when there's a query, sits inside the container border
   const clearBtn = h('button', {
@@ -128,6 +128,16 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   // Lang pill is inserted before the dir pill so it appears on the left.
   filterContainer.insertBefore(langPill, filterContainer.firstChild);
   filterContainer.appendChild(includeInput);
+
+  // Clear button for the file filter input — mirrors clearBtn for the main input.
+  const includeClearBtn = h('button', {
+    className: 'search-toggle',
+    title: 'Clear File Filter',
+    innerHTML: Icons.SVG_CLOSE,
+    style: { display: 'none' },
+    attr: { 'aria-label': 'Clear File Filter' },
+  });
+  filterContainer.appendChild(includeClearBtn);
 
   // Regex toggle for file filter — inside the bordered container, matching the main input style.
   // When active: client-side regex filtering. When inactive: glob passed to ripgrep as-is.
@@ -259,18 +269,43 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     state.searchBar_updateStatus = updateStatus;
   }
 
+  // Validates regex patterns and updates the input container's error styling.
+  // Returns false if the pattern is invalid (caller should abort the search).
+  function validateRegex(pattern: string, isRegex: boolean, container: HTMLElement): boolean {
+    if (!isRegex || !pattern) {
+      container.classList.remove('regex-error');
+      return true;
+    }
+    try {
+      new RegExp(pattern);
+      container.classList.remove('regex-error');
+      return true;
+    } catch (_) {
+      container.classList.add('regex-error');
+      return false;
+    }
+  }
+
   function triggerSearch(): void {
     const pattern = mainInput.value.trim();
     const fileFilter = includeInput.value.trim();
 
-    clearBtn.style.display = (pattern || fileFilter) ? '' : 'none';
+    clearBtn.style.display = pattern ? '' : 'none';
+    includeClearBtn.style.display = fileFilter ? '' : 'none';
 
     if (!pattern && !fileFilter) {
+      inputContainer.classList.remove('regex-error');
+      filterContainer.classList.remove('regex-error');
       state.fileFilterFn = null;
       state.searchResultsVersion++;
       vscode.postMessage({ command: 'clearSearch' });
       return;
     }
+
+    // Validate regex patterns — show error styling and abort if invalid.
+    const mainValid = validateRegex(pattern, useRegex, inputContainer);
+    const filterValid = validateRegex(fileFilter, includeUseRegex, filterContainer);
+    if (!mainValid || !filterValid) { return; }
 
     const contextLines = contextLinesEnabled ? (parseInt(contextInput.value, 10) || 0) : 0;
 
@@ -278,13 +313,8 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     state.searchResultsVersion++;
     if (includeUseRegex && fileFilter) {
       // Client-side regex filtering — don't send to ripgrep.
-      try {
-        const re = new RegExp(fileFilter, 'i');
-        state.fileFilterFn = (name: string) => re.test(name);
-      } catch (_) {
-        // Invalid regex — clear filter, don't error.
-        state.fileFilterFn = null;
-      }
+      const re = new RegExp(fileFilter, 'i');
+      state.fileFilterFn = (name: string) => re.test(name);
     } else {
       state.fileFilterFn = null;
     }
@@ -320,7 +350,10 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     mainInput.value = '';
     includeInput.value = '';
     clearBtn.style.display = 'none';
+    includeClearBtn.style.display = 'none';
     statusEl.style.display = 'none';
+    inputContainer.classList.remove('regex-error');
+    filterContainer.classList.remove('regex-error');
     state.fileFilterFn = null;
     state.searchResultsVersion++;
     vscode.postMessage({ command: 'clearSearch' });
@@ -337,14 +370,46 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   regexBtn.addEventListener('click', () => {
     useRegex = !useRegex;
     regexBtn.classList.toggle('active', useRegex);
+    if (!useRegex) { inputContainer.classList.remove('regex-error'); }
     if (mainInput.value.trim() || includeInput.value.trim()) { triggerSearch(); }
   });
 
-  clearBtn.addEventListener('click', clearSearch);
+  clearBtn.addEventListener('click', () => {
+    mainInput.value = '';
+    clearBtn.style.display = 'none';
+    inputContainer.classList.remove('regex-error');
+    if (debounceTimer) { clearTimeout(debounceTimer); }
+    if (!includeInput.value.trim()) {
+      // No filter either — full clear.
+      statusEl.style.display = 'none';
+      state.fileFilterFn = null;
+      state.searchResultsVersion++;
+      vscode.postMessage({ command: 'clearSearch' });
+    } else {
+      triggerSearch();
+    }
+  });
+
+  includeClearBtn.addEventListener('click', () => {
+    includeInput.value = '';
+    includeClearBtn.style.display = 'none';
+    filterContainer.classList.remove('regex-error');
+    if (debounceTimer) { clearTimeout(debounceTimer); }
+    state.fileFilterFn = null;
+    if (!mainInput.value.trim()) {
+      // No content query either — full clear.
+      statusEl.style.display = 'none';
+      state.searchResultsVersion++;
+      vscode.postMessage({ command: 'clearSearch' });
+    } else {
+      triggerSearch();
+    }
+  });
 
   includeRegexBtn.addEventListener('click', () => {
     includeUseRegex = !includeUseRegex;
     includeRegexBtn.classList.toggle('active', includeUseRegex);
+    if (!includeUseRegex) { filterContainer.classList.remove('regex-error'); }
     // Update placeholder to reflect the current mode (regex vs glob examples).
     includeInput.placeholder = document.activeElement === includeInput
       ? includeFocusPlaceholder() : includeBlurPlaceholder();
@@ -366,6 +431,8 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     if (debounceTimer) { clearTimeout(debounceTimer); }
     searchHistoryIdx = -1;
     clearBtn.style.display = mainInput.value ? '' : 'none';
+    // Validate regex immediately (no debounce) so the error border appears instantly.
+    validateRegex(mainInput.value.trim(), useRegex, inputContainer);
     if (!mainInput.value && !includeInput.value) {
       state.fileFilterFn = null;
       state.searchResultsVersion++;
@@ -378,6 +445,9 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   includeInput.addEventListener('input', () => {
     if (debounceTimer) { clearTimeout(debounceTimer); }
     includeHistoryIdx = -1;
+    includeClearBtn.style.display = includeInput.value ? '' : 'none';
+    // Validate regex immediately (no debounce) so the error border appears instantly.
+    validateRegex(includeInput.value.trim(), includeUseRegex, filterContainer);
     debounceTimer = setTimeout(triggerSearch, 300);
   });
 

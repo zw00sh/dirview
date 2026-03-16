@@ -1328,6 +1328,30 @@ describe('delegated click handler', () => {
       expect(state.expanded.get('/r')).toBe(true);
       expect(state.render).not.toHaveBeenCalled();
     });
+
+    it('collapses implicitly expanded dir on first click during search', () => {
+      // Regression: when search results are active, dirs without an explicit expanded
+      // entry are implicitly expanded (isFiltered=true). The first click must collapse
+      // the dir, not set it to true (which it visually already is).
+      const state = createState();
+      state.render = vi.fn();
+      state.lastRoots = [];
+      state.searchResults = new Map([['/r/a/foo.ts', []]]);
+      const renderer = makeRenderer(state);
+      const child1 = makeDir('/r/a', 'a', { totalFiles: 1, stats: [{ name: 'TS', color: '#3178c6', count: 1 }] });
+      const child2 = makeDir('/r/b', 'b', { totalFiles: 1, stats: [{ name: 'TS', color: '#3178c6', count: 1 }] });
+      const root = makeDir('/r', 'r', { children: [child1, child2], totalFiles: 2, stats: [{ name: 'TS', color: '#3178c6', count: 2 }] });
+      // No explicit expanded entry — implicitly expanded due to searchResults
+      renderer.beforeRender();
+      const li = renderer.renderDirNode(root, 0, 2, [], 300);
+      renderer._rootEl.appendChild(li);
+
+      const dirRow = li.querySelector('.dir-row[data-path="/r"]');
+      dirRow.querySelector('.dir-name').click();
+
+      // Should collapse on first click, not require a second click
+      expect(state.expanded.get('/r')).toBe(false);
+    });
   });
 
   // -- Collapse resets truncation --
@@ -2114,7 +2138,8 @@ describe('search rendering integration', () => {
   it('caps match lines at truncateThreshold per file and shows more-matches row', () => {
     const state = createState();
     state.truncateThreshold = 4; // default
-    const matches = [1, 2, 3, 4, 5, 6, 7].map(line => ({ line, column: 0, matchLength: 1, lineText: 'x' }));
+    // Use non-contiguous lines so groups don't merge
+    const matches = [10, 30, 50, 70, 90, 110, 130].map(line => ({ line, column: 0, matchLength: 1, lineText: 'x' }));
     state.searchResults = new Map([['/r/foo.ts', matches]]);
     state.render = vi.fn();
     state.lastRoots = [];
@@ -2768,8 +2793,9 @@ describe('renderFileMatches', () => {
     const container = document.createElement('ul');
     renderer._rootEl.appendChild(container);
     const file = makeFile('/ws/a.ts');
+    // Use non-contiguous lines so groups don't merge
     state.searchResults = new Map([['/ws/a.ts', [
-      makeMatch(1), makeMatch(2), makeMatch(3), makeMatch(4), makeMatch(5), makeMatch(6), makeMatch(7),
+      makeMatch(10), makeMatch(30), makeMatch(50), makeMatch(70), makeMatch(90), makeMatch(110), makeMatch(130),
     ]]]);
     renderer.renderFileMatches(container, file, 1, []);
     expect(container.querySelectorAll('.match-line-row').length).toBe(4);
@@ -2854,12 +2880,12 @@ describe('renderFileMatches — context grouping', () => {
     }
   });
 
-  it('splits shared context between two matches at midpoint', () => {
+  it('merges contiguous matches into one group with inter-match context', () => {
     const state = createState();
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
     renderer._rootEl.appendChild(container);
-    // Match at line 3, context lines 4-7, match at line 8
+    // Match at line 3, context lines 4-7, match at line 8 — contiguous, should merge
     state.searchResults = new Map([['/ws/a.ts', [
       makeMatch(3),
       makeContext(4), makeContext(5), makeContext(6), makeContext(7),
@@ -2868,20 +2894,42 @@ describe('renderFileMatches — context grouping', () => {
     const file = makeFile('/ws/a.ts');
     renderer.renderFileMatches(container, file, 1, []);
 
+    // Contiguous → merged into one group
+    const groups = container.querySelectorAll('.match-group');
+    expect(groups.length).toBe(1);
+
+    const g = groups[0];
+    expect(g.dataset.line).toBe('3');
+    expect(g.querySelectorAll('.match-line-row').length).toBe(2);
+    // All 4 context lines appear as inter-match context
+    expect(g.querySelectorAll('.match-context-row').length).toBe(4);
+  });
+
+  it('splits shared context between two non-contiguous matches at midpoint', () => {
+    const state = createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    // Match at line 3, context 4-5, gap, context 18-19, match at line 20
+    state.searchResults = new Map([['/ws/a.ts', [
+      makeMatch(3),
+      makeContext(4), makeContext(5),
+      makeContext(18), makeContext(19),
+      makeMatch(20),
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
     const groups = container.querySelectorAll('.match-group');
     expect(groups.length).toBe(2);
 
-    // First group: match(3) + contextAfter(4, 5) — midpoint ceil(4/2) = 2
     const g1 = groups[0];
     expect(g1.dataset.line).toBe('3');
-    const g1ctx = g1.querySelectorAll('.match-context-row');
-    expect(g1ctx.length).toBe(2);
+    expect(g1.querySelectorAll('.match-context-row').length).toBe(2);
 
-    // Second group: contextBefore(6, 7) + match(8)
     const g2 = groups[1];
-    expect(g2.dataset.line).toBe('8');
-    const g2ctx = g2.querySelectorAll('.match-context-row');
-    expect(g2ctx.length).toBe(2);
+    expect(g2.dataset.line).toBe('20');
+    expect(g2.querySelectorAll('.match-context-row').length).toBe(2);
   });
 
   it('adds gap-before class between non-contiguous groups', () => {
@@ -2902,20 +2950,23 @@ describe('renderFileMatches — context grouping', () => {
     expect(groups[1].classList.contains('gap-before')).toBe(true);
   });
 
-  it('no gap-before between contiguous groups', () => {
+  it('contiguous matches merge into one group (no gap-before)', () => {
     const state = createState();
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
     renderer._rootEl.appendChild(container);
-    // Match at 3, context at 4, match at 5 — contiguous
+    // Match at 3, context at 4, match at 5 — contiguous, merges into one group
     state.searchResults = new Map([['/ws/a.ts', [
       makeMatch(3), makeContext(4), makeMatch(5),
     ]]]);
     const file = makeFile('/ws/a.ts');
     renderer.renderFileMatches(container, file, 1, []);
 
-    const gapGroups = container.querySelectorAll('.match-group.gap-before');
-    expect(gapGroups.length).toBe(0);
+    const groups = container.querySelectorAll('.match-group');
+    expect(groups.length).toBe(1);
+    expect(groups[0].querySelectorAll('.match-line-row').length).toBe(2);
+    expect(groups[0].querySelectorAll('.match-context-row').length).toBe(1);
+    expect(container.querySelectorAll('.match-group.gap-before').length).toBe(0);
   });
 
   it('truncation counts match groups, not context lines', () => {
@@ -2924,10 +2975,11 @@ describe('renderFileMatches — context grouping', () => {
     const renderer = makeRenderer(state);
     const container = document.createElement('ul');
     renderer._rootEl.appendChild(container);
+    // Use non-contiguous matches (large gaps) so they don't merge
     state.searchResults = new Map([['/ws/a.ts', [
-      makeContext(1), makeMatch(2), makeContext(3),
-      makeContext(4), makeMatch(5), makeContext(6),
-      makeContext(7), makeMatch(8), makeContext(9),
+      makeContext(9), makeMatch(10), makeContext(11),
+      makeContext(29), makeMatch(30), makeContext(31),
+      makeContext(49), makeMatch(50), makeContext(51),
     ]]]);
     const file = makeFile('/ws/a.ts');
     renderer.renderFileMatches(container, file, 1, []);
@@ -2940,6 +2992,68 @@ describe('renderFileMatches — context grouping', () => {
     const moreRow = container.querySelector('.truncated-row');
     expect(moreRow).not.toBeNull();
     expect(moreRow.textContent).toContain('1 more match');
+  });
+
+  it('three consecutive matches all merge into one group', () => {
+    const state = createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    state.searchResults = new Map([['/ws/a.ts', [
+      { line: 5, column: 0, matchLength: 3, lineText: 'match1' },
+      { line: 6, column: 0, matchLength: 0, lineText: 'ctx6', isContext: true },
+      { line: 7, column: 0, matchLength: 3, lineText: 'match2' },
+      { line: 8, column: 0, matchLength: 0, lineText: 'ctx8', isContext: true },
+      { line: 9, column: 0, matchLength: 3, lineText: 'match3' },
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const groups = container.querySelectorAll('.match-group');
+    expect(groups.length).toBe(1);
+    expect(groups[0].querySelectorAll('.match-line-row').length).toBe(3);
+    expect(groups[0].querySelectorAll('.match-context-row').length).toBe(2);
+  });
+
+  it('copy text includes match lines and inter-match context, excludes leading/trailing context', () => {
+    const state = createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    state.searchResults = new Map([['/ws/a.ts', [
+      { line: 3, column: 0, matchLength: 0, lineText: 'leading-ctx', isContext: true },
+      { line: 4, column: 0, matchLength: 3, lineText: 'match1-text' },
+      { line: 5, column: 0, matchLength: 0, lineText: 'inter-ctx', isContext: true },
+      { line: 6, column: 0, matchLength: 3, lineText: 'match2-text' },
+      { line: 7, column: 0, matchLength: 0, lineText: 'trailing-ctx', isContext: true },
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const group = container.querySelector('.match-group');
+    const ctx = JSON.parse(group.getAttribute('data-vscode-context'));
+    // Should include match lines and inter-match context, but NOT leading-ctx or trailing-ctx
+    expect(ctx.lineText).toBe('match1-text\ninter-ctx\nmatch2-text');
+  });
+
+  it('recomputes dedent across merged group', () => {
+    const state = createState();
+    const renderer = makeRenderer(state);
+    const container = document.createElement('ul');
+    renderer._rootEl.appendChild(container);
+    state.searchResults = new Map([['/ws/a.ts', [
+      { line: 5, column: 4, matchLength: 3, lineText: '    match1' },
+      { line: 6, column: 2, matchLength: 3, lineText: '  match2' },
+    ]]]);
+    const file = makeFile('/ws/a.ts');
+    renderer.renderFileMatches(container, file, 1, []);
+
+    const groups = container.querySelectorAll('.match-group');
+    expect(groups.length).toBe(1);
+    // With dedent=2: "    match1" → "  match1", "  match2" → "match2"
+    const matchTexts = groups[0].querySelectorAll('.match-line-text');
+    expect(matchTexts[0].textContent).toBe('  match1');
+    expect(matchTexts[1].textContent).toBe('match2');
   });
 
   it('match without context produces a group with only the match div', () => {
@@ -3732,14 +3846,14 @@ describe('search bar file filter', () => {
   it('has a regex toggle button inside the filter container', () => {
     const { bar } = makeSearchBarForFilter(false);
     const container = bar.el.querySelector('.search-filter-container');
-    const regexBtns = container.querySelectorAll('.search-toggle');
-    expect(regexBtns.length).toBeGreaterThanOrEqual(1);
+    const regexBtn = container.querySelector('[aria-label="Use Regular Expression"]');
+    expect(regexBtn).not.toBeNull();
   });
 
   it('regex mode is active by default', () => {
     const { bar } = makeSearchBarForFilter(false);
     const container = bar.el.querySelector('.search-filter-container');
-    const regexBtn = container.querySelector('.search-toggle');
+    const regexBtn = container.querySelector('[aria-label="Use Regular Expression"]');
     expect(regexBtn.classList.contains('active')).toBe(true);
   });
 
@@ -3762,7 +3876,7 @@ describe('search bar file filter', () => {
     const { bar, vscode } = makeSearchBarForFilter(false);
     // Deactivate regex toggle (on by default)
     const container = bar.el.querySelector('.search-filter-container');
-    const regexBtn = container.querySelector('.search-toggle');
+    const regexBtn = container.querySelector('[aria-label="Use Regular Expression"]');
     regexBtn.click();
     const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
     includeInput.value = '*.ts';
@@ -3777,7 +3891,7 @@ describe('search bar file filter', () => {
     const { bar, vscode } = makeSearchBarForFilter(false);
     // Deactivate regex toggle
     const container = bar.el.querySelector('.search-filter-container');
-    const regexBtn = container.querySelector('.search-toggle');
+    const regexBtn = container.querySelector('[aria-label="Use Regular Expression"]');
     regexBtn.click();
     const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
     includeInput.value = 'api';
@@ -3788,7 +3902,7 @@ describe('search bar file filter', () => {
     vi.useRealTimers();
   });
 
-  it('clears fileFilterFn on clearSearch', () => {
+  it('clears fileFilterFn on filter clear button', () => {
     vi.useFakeTimers();
     const { bar, state } = makeSearchBarForFilter(false);
     const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
@@ -3796,9 +3910,9 @@ describe('search bar file filter', () => {
     includeInput.dispatchEvent(new Event('input'));
     vi.advanceTimersByTime(300);
     expect(state.fileFilterFn).toBeInstanceOf(Function);
-    // Clear
-    const clearBtn = bar.el.querySelector('.search-toggle[title="Clear Search (Escape)"]');
-    clearBtn.click();
+    // Clear via the filter's own clear button
+    const filterClearBtn = bar.el.querySelector('.search-filter-container .search-toggle[title="Clear File Filter"]');
+    filterClearBtn.click();
     expect(state.fileFilterFn).toBeNull();
     vi.useRealTimers();
   });
@@ -3827,6 +3941,9 @@ describe('search bar file filter', () => {
     vi.useFakeTimers();
     const { bar, vscode } = makeSearchBarForFilter(false);
     const mainInput = bar.el.querySelector('.search-main-input') as HTMLInputElement;
+    // Disable regex so glob-like patterns are sent as literal text to ripgrep.
+    const regexBtn = bar.el.querySelector('[aria-label="Use Regular Expression"]') as HTMLButtonElement;
+    regexBtn.click(); // toggle regex off (on by default)
     mainInput.value = '*.ts';
     mainInput.dispatchEvent(new Event('input'));
     vi.advanceTimersByTime(300);
@@ -3835,6 +3952,60 @@ describe('search bar file filter', () => {
       pattern: '*.ts',
     }));
     vi.useRealTimers();
+  });
+
+  it('shows regex-error on main input for invalid regex', () => {
+    vi.useFakeTimers();
+    const { bar, vscode } = makeSearchBarForFilter(false);
+    const mainInput = bar.el.querySelector('.search-main-input') as HTMLInputElement;
+    const inputContainer = bar.el.querySelector('.search-input-container') as HTMLElement;
+    // Regex is on by default; type an invalid regex
+    mainInput.value = '(unclosed';
+    mainInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    expect(inputContainer.classList.contains('regex-error')).toBe(true);
+    expect(vscode.postMessage).not.toHaveBeenCalledWith(expect.objectContaining({ command: 'search' }));
+    vi.useRealTimers();
+  });
+
+  it('clears regex-error when pattern becomes valid', () => {
+    vi.useFakeTimers();
+    const { bar } = makeSearchBarForFilter(false);
+    const mainInput = bar.el.querySelector('.search-main-input') as HTMLInputElement;
+    const inputContainer = bar.el.querySelector('.search-input-container') as HTMLElement;
+    mainInput.value = '(unclosed';
+    mainInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    expect(inputContainer.classList.contains('regex-error')).toBe(true);
+    mainInput.value = 'valid';
+    mainInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    expect(inputContainer.classList.contains('regex-error')).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it('clears regex-error when regex mode is toggled off', () => {
+    vi.useFakeTimers();
+    const { bar } = makeSearchBarForFilter(false);
+    const mainInput = bar.el.querySelector('.search-main-input') as HTMLInputElement;
+    const inputContainer = bar.el.querySelector('.search-input-container') as HTMLElement;
+    // Regex is on by default — enter invalid regex
+    mainInput.value = '[invalid';
+    mainInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    expect(inputContainer.classList.contains('regex-error')).toBe(true);
+    // Toggle regex off — error should clear
+    const regexBtns = bar.el.querySelectorAll('[aria-label="Use Regular Expression"]');
+    (regexBtns[0] as HTMLButtonElement).click();
+    expect(inputContainer.classList.contains('regex-error')).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it('content search regex is enabled by default', () => {
+    const { bar } = makeSearchBarForFilter(false);
+    const regexBtns = bar.el.querySelectorAll('[aria-label="Use Regular Expression"]');
+    // First regex button is for content search, should be active by default
+    expect(regexBtns[0].classList.contains('active')).toBe(true);
   });
 });
 

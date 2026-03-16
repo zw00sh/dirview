@@ -408,6 +408,16 @@ body {
   outline: 1px solid var(--vscode-focusBorder);
 }
 
+/* Invalid regex — red border matching VSCode's inputValidation.errorBorder */
+.search-input-container.regex-error,
+.search-filter-container.regex-error {
+  border-color: var(--vscode-inputValidation-errorBorder, #be1100);
+}
+.search-input-container.regex-error:focus-within,
+.search-filter-container.regex-error:focus-within {
+  outline-color: var(--vscode-inputValidation-errorBorder, #be1100);
+}
+
 .search-main-input {
   flex: 1;
   min-width: 0;

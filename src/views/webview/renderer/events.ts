@@ -193,7 +193,11 @@ export function setupDelegatedEvents(ctx: RendererContext): void {
       const entry = nodeMap.get(path);
       if (!entry || !entry.hasChildren) { return; }
 
-      const nowExpanded = !state.expanded.get(path);
+      // Account for filtered/search mode where dirs without an explicit expanded
+      // entry are implicitly expanded (matching the renderer's isExpanded logic).
+      const isFiltered = state.activeFilters.size > 0 || !!state.searchResults || !!state.fileFilterFn;
+      const currentlyExpanded = state.expanded.get(path) ?? isFiltered;
+      const nowExpanded = !currentlyExpanded;
       state.expanded.set(path, nowExpanded);
 
       // Reset truncation when collapsing so it re-truncates on next expand.

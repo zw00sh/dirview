@@ -228,14 +228,25 @@ export function renderFileMatches(ctx: RendererContext, container: HTMLElement, 
   // Context lines between two matches are split at the midpoint (nearest-match rule).
 
   interface MatchGroupEntry {
+    /** One or more match-line clusters, each with their match entries and inter-match context. */
+    matches: Array<{
+      matchGroup: SearchMatch[];     // Same-line matches
+      matchLine: number;             // Line number
+      contextBefore: SearchMatch[];  // Context lines before this match (inter-match context for non-first)
+    }>;
+    contextAfter: SearchMatch[];     // Trailing context after the last match
+    dedent: number;
+  }
+
+  // Intermediate single-match group used before merging.
+  interface SingleMatchGroup {
     matchGroup: SearchMatch[];
     matchLine: number;
     contextBefore: SearchMatch[];
     contextAfter: SearchMatch[];
-    dedent: number;
   }
 
-  const groups: MatchGroupEntry[] = [];
+  const singleGroups: SingleMatchGroup[] = [];
   let contextBuffer: SearchMatch[] = [];
 
   for (let i = 0; i < sorted.length; ) {
@@ -257,38 +268,79 @@ export function renderFileMatches(ctx: RendererContext, container: HTMLElement, 
 
     // Split buffered context between previous group's contextAfter and this group's contextBefore.
     if (contextBuffer.length > 0) {
-      if (groups.length === 0) {
+      if (singleGroups.length === 0) {
         // All buffered context belongs to this group as contextBefore.
-        groups.push({ matchGroup: sameLineGroup, matchLine: m.line, contextBefore: contextBuffer, contextAfter: [], dedent: 0 });
+        singleGroups.push({ matchGroup: sameLineGroup, matchLine: m.line, contextBefore: contextBuffer, contextAfter: [] });
       } else {
         const mid = Math.ceil(contextBuffer.length / 2);
-        groups[groups.length - 1].contextAfter = contextBuffer.slice(0, mid);
-        groups.push({ matchGroup: sameLineGroup, matchLine: m.line, contextBefore: contextBuffer.slice(mid), contextAfter: [], dedent: 0 });
+        singleGroups[singleGroups.length - 1].contextAfter = contextBuffer.slice(0, mid);
+        singleGroups.push({ matchGroup: sameLineGroup, matchLine: m.line, contextBefore: contextBuffer.slice(mid), contextAfter: [] });
       }
       contextBuffer = [];
     } else {
-      groups.push({ matchGroup: sameLineGroup, matchLine: m.line, contextBefore: [], contextAfter: [], dedent: 0 });
+      singleGroups.push({ matchGroup: sameLineGroup, matchLine: m.line, contextBefore: [], contextAfter: [] });
     }
 
     i = j;
   }
 
   // Trailing context goes to last group's contextAfter.
-  if (contextBuffer.length > 0 && groups.length > 0) {
-    groups[groups.length - 1].contextAfter = contextBuffer;
+  if (contextBuffer.length > 0 && singleGroups.length > 0) {
+    singleGroups[singleGroups.length - 1].contextAfter = contextBuffer;
   }
 
   // Trim empty/whitespace-only context lines from the edges of each group.
-  for (const g of groups) {
+  for (const g of singleGroups) {
     while (g.contextBefore.length > 0 && g.contextBefore[0].lineText.trim() === '') { g.contextBefore.shift(); }
     while (g.contextAfter.length > 0 && g.contextAfter[g.contextAfter.length - 1].lineText.trim() === '') { g.contextAfter.pop(); }
   }
 
-  // ── Phase 1.5: Compute per-group minimum indentation for dedent ────────
+  // ── Phase 1.5: Merge contiguous groups ─────────────────────────────────
+  // Two adjacent groups are contiguous when there is no gap between them,
+  // i.e. the last line of group A + 1 >= first line of group B.
+  // When merging, group B's contextBefore becomes inter-match context.
+  const groups: MatchGroupEntry[] = [];
+  for (const sg of singleGroups) {
+    const firstLine = sg.contextBefore.length > 0 ? sg.contextBefore[0].line : sg.matchLine;
+    if (groups.length > 0) {
+      const prev = groups[groups.length - 1];
+      const prevLastMatch = prev.matches[prev.matches.length - 1];
+      const prevLastLine = prev.contextAfter.length > 0
+        ? prev.contextAfter[prev.contextAfter.length - 1].line
+        : prevLastMatch.matchLine;
+      if (firstLine <= prevLastLine + 1) {
+        // Contiguous — merge: prev's contextAfter + sg's contextBefore become inter-match context
+        const interContext = [...prev.contextAfter, ...sg.contextBefore];
+        prev.contextAfter = sg.contextAfter;
+        prev.matches.push({
+          matchGroup: sg.matchGroup,
+          matchLine: sg.matchLine,
+          contextBefore: interContext,
+        });
+        continue;
+      }
+    }
+    // Not contiguous or first group — start a new merged group
+    groups.push({
+      matches: [{
+        matchGroup: sg.matchGroup,
+        matchLine: sg.matchLine,
+        contextBefore: sg.contextBefore,
+      }],
+      contextAfter: sg.contextAfter,
+      dedent: 0,
+    });
+  }
+
+  // ── Phase 1.75: Compute per-group minimum indentation for dedent ───────
   // Strips the shared leading whitespace from all lines in a group so that
   // relative indentation is preserved while the display is left-aligned.
   for (const g of groups) {
-    const allLines = [...g.contextBefore, ...g.matchGroup, ...g.contextAfter];
+    const allLines: SearchMatch[] = [];
+    for (const m of g.matches) {
+      allLines.push(...m.contextBefore, ...m.matchGroup);
+    }
+    allLines.push(...g.contextAfter);
     let minIndent = Infinity;
     for (const m of allLines) {
       const text = m.lineText || '';
@@ -310,23 +362,42 @@ export function renderFileMatches(ctx: RendererContext, container: HTMLElement, 
     if (shouldTruncateMatches && gi >= threshold) { break; }
 
     const g = groups[gi];
-    const firstLineInGroup = g.contextBefore.length > 0 ? g.contextBefore[0].line : g.matchLine;
+    const firstMatch = g.matches[0];
+    const firstLineInGroup = firstMatch.contextBefore.length > 0 ? firstMatch.contextBefore[0].line : firstMatch.matchLine;
 
-    // Create wrapper <li> that carries click/context-menu for the match line.
+    // Build lineText for copy context: text from first match line through last match line,
+    // including inter-match context but excluding leading contextBefore and trailing contextAfter.
+    let copyText: string;
+    if (g.matches.length === 1) {
+      copyText = firstMatch.matchGroup[0].lineText || '';
+    } else {
+      const copyLines: string[] = [];
+      for (let mi = 0; mi < g.matches.length; mi++) {
+        const me = g.matches[mi];
+        // Include inter-match context (contextBefore of non-first matches)
+        if (mi > 0) {
+          for (const ctx of me.contextBefore) { copyLines.push(ctx.lineText || ''); }
+        }
+        copyLines.push(me.matchGroup[0].lineText || '');
+      }
+      copyText = copyLines.join('\n');
+    }
+
+    // Create wrapper <li> that carries click/context-menu for the first match line.
     // Add gap-before class when there's a line discontinuity from the previous group.
     const hasGap = prevLastLine !== null && firstLineInGroup > prevLastLine + 1;
     const wrapper = h('li', {
       className: 'match-group' + (hasGap ? ' gap-before' : ''),
       dataset: {
-        nodePath: 'match:' + file.path + ':' + g.matchGroup[0].line,
+        nodePath: 'match:' + file.path + ':' + firstMatch.matchGroup[0].line,
         action: 'openFileAtLine',
         path: file.path,
-        line: String(g.matchGroup[0].line),
+        line: String(firstMatch.matchGroup[0].line),
       },
       attr: { 'data-vscode-context': JSON.stringify({
         webviewSection: 'matchLine',
         path: file.path,
-        lineText: g.matchGroup[0].lineText || '',
+        lineText: copyText,
         preventDefaultContextMenuItems: true,
       }) },
     });
@@ -336,21 +407,26 @@ export function renderFileMatches(ctx: RendererContext, container: HTMLElement, 
       wrapper.appendChild(h('div', { className: 'match-group-spacer' }, ctx.renderIndentGuides(depth, ancestors)));
     }
 
-    // Append context-before divs (no data-action — clicks bubble to wrapper).
-    for (const ctxMatch of g.contextBefore) {
-      const ctxLi = renderContextLine(ctx, file, ctxMatch, depth, ancestors, g.dedent);
-      const ctxDiv = ctxLi.firstElementChild as HTMLElement;
-      delete ctxDiv.dataset.action;
-      delete ctxDiv.dataset.path;
-      delete ctxDiv.dataset.line;
-      wrapper.appendChild(ctxDiv);
-    }
+    // Render each match cluster in the merged group.
+    for (let mi = 0; mi < g.matches.length; mi++) {
+      const me = g.matches[mi];
 
-    // Append match div.
-    const matchLi = renderMatchLine(ctx, file, g.matchGroup, depth, ancestors, g.dedent);
-    const matchDiv = matchLi.firstElementChild as HTMLElement;
-    matchDiv.removeAttribute('data-vscode-context');
-    wrapper.appendChild(matchDiv);
+      // Append context-before divs (no data-action — clicks bubble to wrapper).
+      for (const ctxMatch of me.contextBefore) {
+        const ctxLi = renderContextLine(ctx, file, ctxMatch, depth, ancestors, g.dedent);
+        const ctxDiv = ctxLi.firstElementChild as HTMLElement;
+        delete ctxDiv.dataset.action;
+        delete ctxDiv.dataset.path;
+        delete ctxDiv.dataset.line;
+        wrapper.appendChild(ctxDiv);
+      }
+
+      // Append match div.
+      const matchLi = renderMatchLine(ctx, file, me.matchGroup, depth, ancestors, g.dedent);
+      const matchDiv = matchLi.firstElementChild as HTMLElement;
+      matchDiv.removeAttribute('data-vscode-context');
+      wrapper.appendChild(matchDiv);
+    }
 
     // Append context-after divs.
     for (const ctxMatch of g.contextAfter) {
@@ -364,7 +440,8 @@ export function renderFileMatches(ctx: RendererContext, container: HTMLElement, 
 
     container.appendChild(wrapper);
 
-    const lastCtxAfter = g.contextAfter.length > 0 ? g.contextAfter[g.contextAfter.length - 1].line : g.matchLine;
+    const lastMatchEntry = g.matches[g.matches.length - 1];
+    const lastCtxAfter = g.contextAfter.length > 0 ? g.contextAfter[g.contextAfter.length - 1].line : lastMatchEntry.matchLine;
     prevLastLine = lastCtxAfter;
   }
 
