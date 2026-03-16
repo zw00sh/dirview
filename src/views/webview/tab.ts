@@ -249,6 +249,8 @@ function renderFlatRow(r: Renderer, row: FlatRow): HTMLElement {
 let currentFlatRows: FlatRow[] = [];
 /** Filtered roots from the last render — used for legend stats that reflect the filtered subset. */
 let lastFilteredRoots: DirNode[] | null = null;
+/** Per-language stats from search-only filtering (no language filter). Used by legendStats(). */
+let lastSearchFilteredStats: Array<{ name: string; color: string; count: number }> = [];
 
 const scroller = createVirtualScroller({
   container: root,
@@ -383,16 +385,23 @@ function schedulePostFilterStatusUpdate() {
   };
 }
 
-/** Compute legend stats: when language filters are active, merge filtered counts
- *  with the full original language list so deselected languages remain clickable. */
+/** Compute legend stats. When a search/include/exclude filter is active, use
+ *  search-only stats (not affected by language filters) so all languages remain
+ *  visible with accurate counts. Otherwise use the full unfiltered tree stats. */
 function legendStats(): LangStat[] {
-  if (!lastFilteredRoots || !state.lastRoots) { return []; }
-  const filtered = computeStats(lastFilteredRoots);
-  if (state.activeFilters.size === 0) { return filtered; }
-  // Merge: keep every language from the original set so users can toggle any language.
-  const original = computeStats(state.lastRoots);
-  const filteredMap = new Map(filtered.map(s => [s.name, s]));
-  return original.map(s => filteredMap.get(s.name) ?? { ...s, count: 0, pct: '0' });
+  if (!state.lastRoots) { return []; }
+  if (lastSearchFilteredStats.length > 0) {
+    // Search active — show stats scoped to search results, ignoring language filter.
+    const total = lastSearchFilteredStats.reduce((sum, s) => sum + s.count, 0);
+    return lastSearchFilteredStats.map(s => ({
+      name: s.name,
+      color: s.color,
+      count: s.count,
+      pct: total > 0 ? ((s.count / total) * 100).toFixed(1) : '0',
+    }));
+  }
+  // No search active — use original unfiltered tree stats.
+  return computeStats(state.lastRoots);
 }
 
 function updateLegend(stats?: LangStat[]) {
@@ -444,13 +453,14 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   state._isFiltered = state.activeFilters.size > 0 || state.searchResults !== null || state.fileFilterActive;
 
   // Build flat rows and update virtual scroller
-  const { flatRows, totalHeight, totalVisibleFiles, totalVisibleMatches, filteredRoots } = flattenTree(state, roots, {
+  const { flatRows, totalHeight, totalVisibleFiles, totalVisibleMatches, filteredRoots, searchFilteredStats } = flattenTree(state, roots, {
     showRootNode: true,
     clientWidth: root.clientWidth || 600,
   });
   state.lastFilteredFileCount = totalVisibleFiles;
   state.lastFilteredMatchCount = totalVisibleMatches;
   lastFilteredRoots = filteredRoots;
+  lastSearchFilteredStats = searchFilteredStats;
   updateLegend();
   currentFlatRows = flatRows;
 

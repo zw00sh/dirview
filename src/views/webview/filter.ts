@@ -18,6 +18,10 @@ export interface FilteredTree {
   totalVisibleFiles: number;
   /** Total search matches across visible files (0 when no search is active). */
   totalVisibleMatches: number;
+  /** Per-language stats reflecting search/include/exclude filters only (not language filters).
+   *  Used by the legend so all languages remain visible with accurate counts.
+   *  Empty when no search is active (caller should use original unfiltered stats). */
+  searchFilteredStats: Array<{ name: string; color: string; count: number }>;
 }
 
 // ── Cache ────────────────────────────────────────────────────────────────────
@@ -56,7 +60,7 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
   if (!isFiltered) {
     let total = 0;
     for (const r of roots) total += r.totalFiles;
-    cachedResult = { roots, isFiltered: false, totalVisibleFiles: total, totalVisibleMatches: 0 };
+    cachedResult = { roots, isFiltered: false, totalVisibleFiles: total, totalVisibleMatches: 0, searchFilteredStats: [] };
     cachedRoots = roots;
     cachedActiveFilters = activeFilters;
     cachedVersion = inputs.searchResultsVersion;
@@ -71,6 +75,23 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
   // Build file predicate
   const hasLangFilter = activeFilters.size > 0;
   const hasSearchFilter = searchResults !== null;
+
+  // Accumulate per-language stats from search-only filtering (before language filter).
+  // This gives the legend accurate counts for all languages in the search results,
+  // regardless of which languages are currently toggled.
+  const searchStats = new Map<string, { color: string; count: number }>();
+  if (hasSearchFilter) {
+    function accum(node: DirNode): void {
+      for (const f of (node.files || [])) {
+        if (searchResults!.has(f.path)) {
+          const ex = searchStats.get(f.langName);
+          if (ex) ex.count++; else searchStats.set(f.langName, { color: f.langColor, count: 1 });
+        }
+      }
+      for (const c of node.children) accum(c);
+    }
+    for (const r of roots) accum(r);
+  }
 
   function fileVisible(f: FileNode): boolean {
     if (hasLangFilter && !activeFilters.has(f.langName)) return false;
@@ -176,7 +197,11 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
   }
   for (const r of filteredRoots) countFiles(r);
 
-  const result: FilteredTree = { roots: filteredRoots, isFiltered: true, totalVisibleFiles, totalVisibleMatches };
+  const searchFilteredStats = Array.from(searchStats.entries())
+    .map(([name, { color, count }]) => ({ name, color, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const result: FilteredTree = { roots: filteredRoots, isFiltered: true, totalVisibleFiles, totalVisibleMatches, searchFilteredStats };
 
   // Update cache
   cachedResult = result;

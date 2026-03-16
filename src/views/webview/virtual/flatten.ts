@@ -345,5 +345,6 @@ export function flattenTree(
     totalVisibleFiles,
     totalVisibleMatches: filtered.totalVisibleMatches,
     filteredRoots,
+    searchFilteredStats: filtered.searchFilteredStats,
   };
 }

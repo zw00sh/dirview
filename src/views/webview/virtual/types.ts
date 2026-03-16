@@ -118,6 +118,8 @@ export interface FlattenResult {
   totalVisibleMatches: number;
   /** Roots after filterTree — stats/totalFiles/sizeBytes reflect the filtered subset. */
   filteredRoots: DirNode[];
+  /** Per-language stats reflecting search/include/exclude only (not language filters). */
+  searchFilteredStats: Array<{ name: string; color: string; count: number }>;
 }
 
 export interface FlattenOptions {

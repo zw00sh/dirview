@@ -304,6 +304,117 @@ describe('filterTree totalVisibleMatches with language filter', () => {
   });
 });
 
+// --- filterTree: searchFilteredStats (legend stats from search-only filtering) ---
+describe('filterTree searchFilteredStats', () => {
+  function ft(roots: DirNode[], opts: Partial<Parameters<typeof filterTree>[1]> = {}) {
+    return filterTree(roots, {
+      activeFilters: opts.activeFilters ?? new Set(),
+      searchResults: opts.searchResults ?? null,
+      searchAncestorPaths: opts.searchAncestorPaths ?? null,
+      searchResultsVersion: opts.searchResultsVersion ?? Date.now(),
+    });
+  }
+
+  it('returns empty when no filters active', () => {
+    const dir = makeDir('src', 'src', {
+      files: [{ name: 'a.ts', path: '/ws/src/a.ts', langName: 'TypeScript' }],
+    });
+    expect(ft([dir]).searchFilteredStats).toEqual([]);
+  });
+
+  it('returns empty when only language filter active (no search)', () => {
+    const dir = makeDir('src', 'src', {
+      files: [
+        { name: 'a.ts', path: '/ws/src/a.ts', langName: 'TypeScript' },
+        { name: 'b.js', path: '/ws/src/b.js', langName: 'JavaScript' },
+      ],
+    });
+    const result = ft([dir], { activeFilters: new Set(['TypeScript']) });
+    expect(result.searchFilteredStats).toEqual([]);
+  });
+
+  it('returns all languages in search results when search only', () => {
+    const dir = makeDir('src', 'src', {
+      files: [
+        { name: 'a.ts', path: '/ws/src/a.ts', langName: 'TypeScript', langColor: '#3178c6' },
+        { name: 'b.js', path: '/ws/src/b.js', langName: 'JavaScript', langColor: '#f1e05a' },
+        { name: 'c.py', path: '/ws/src/c.py', langName: 'Python', langColor: '#3572a5' },
+      ],
+    });
+    const searchResults = new Map([
+      ['/ws/src/a.ts', []],
+      ['/ws/src/b.js', []],
+    ]) as Map<string, any>;
+    const result = ft([dir], { searchResults, searchAncestorPaths: new Set(['src', '']) });
+    expect(result.searchFilteredStats).toHaveLength(2);
+    expect(result.searchFilteredStats).toContainEqual({ name: 'TypeScript', color: '#3178c6', count: 1 });
+    expect(result.searchFilteredStats).toContainEqual({ name: 'JavaScript', color: '#f1e05a', count: 1 });
+  });
+
+  it('returns all languages even when language filter hides some from tree', () => {
+    const dir = makeDir('src', 'src', {
+      files: [
+        { name: 'a.ts', path: '/ws/src/a.ts', langName: 'TypeScript', langColor: '#3178c6' },
+        { name: 'b.ts', path: '/ws/src/b.ts', langName: 'TypeScript', langColor: '#3178c6' },
+        { name: 'c.js', path: '/ws/src/c.js', langName: 'JavaScript', langColor: '#f1e05a' },
+      ],
+    });
+    const searchResults = new Map([
+      ['/ws/src/a.ts', []],
+      ['/ws/src/b.ts', []],
+      ['/ws/src/c.js', []],
+    ]) as Map<string, any>;
+    // Language filter selects only TypeScript — but searchFilteredStats should include JavaScript
+    const result = ft([dir], {
+      searchResults,
+      searchAncestorPaths: new Set(['src', '']),
+      activeFilters: new Set(['TypeScript']),
+    });
+    // Tree only has TypeScript files
+    expect(result.totalVisibleFiles).toBe(2);
+    // But search stats include all languages from search results
+    expect(result.searchFilteredStats).toEqual([
+      { name: 'TypeScript', color: '#3178c6', count: 2 },
+      { name: 'JavaScript', color: '#f1e05a', count: 1 },
+    ]);
+  });
+
+  it('accumulates stats from nested directories', () => {
+    const child = makeDir('src/api', 'api', {
+      files: [{ name: 'handler.ts', path: '/ws/src/api/handler.ts', langName: 'TypeScript', langColor: '#3178c6' }],
+    });
+    const parent = makeDir('src', 'src', {
+      children: [child],
+      files: [{ name: 'index.js', path: '/ws/src/index.js', langName: 'JavaScript', langColor: '#f1e05a' }],
+    });
+    const searchResults = new Map([
+      ['/ws/src/api/handler.ts', []],
+      ['/ws/src/index.js', []],
+    ]) as Map<string, any>;
+    const result = ft([parent], { searchResults, searchAncestorPaths: new Set(['src', 'src/api', '']) });
+    expect(result.searchFilteredStats).toHaveLength(2);
+    expect(result.searchFilteredStats).toContainEqual({ name: 'TypeScript', color: '#3178c6', count: 1 });
+    expect(result.searchFilteredStats).toContainEqual({ name: 'JavaScript', color: '#f1e05a', count: 1 });
+  });
+
+  it('excludes files not in search results from stats', () => {
+    const dir = makeDir('src', 'src', {
+      files: [
+        { name: 'a.ts', path: '/ws/src/a.ts', langName: 'TypeScript', langColor: '#3178c6' },
+        { name: 'b.py', path: '/ws/src/b.py', langName: 'Python', langColor: '#3572a5' },
+      ],
+    });
+    // Only a.ts in search results
+    const searchResults = new Map([['/ws/src/a.ts', []]]) as Map<string, any>;
+    const result = ft([dir], { searchResults, searchAncestorPaths: new Set(['src', '']) });
+    expect(result.searchFilteredStats).toEqual([
+      { name: 'TypeScript', color: '#3178c6', count: 1 },
+    ]);
+    // Python should NOT appear
+    expect(result.searchFilteredStats.find(s => s.name === 'Python')).toBeUndefined();
+  });
+});
+
 // --- search bar: glob-only file filter ---
 describe('search bar file filter (glob)', () => {
   function makeSearchBarForFilter(standalone: boolean) {
