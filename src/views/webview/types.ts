@@ -104,7 +104,7 @@ export interface WebviewState extends CoreWebviewState {
   searchTruncated: boolean;
   searchFileCount: number;
   searchMatchCount: number;
-  fileFilterFn: ((name: string) => boolean) | null;
+  fileFilterFn: ((relativePath: string) => boolean) | null;
   /** Precomputed set of directory paths that are ancestors of search result files.
    *  Enables O(1) dirMatchesSearch checks instead of recursive tree walks. */
   searchAncestorPaths: Set<string> | null;
@@ -118,6 +118,8 @@ export interface WebviewState extends CoreWebviewState {
   searchResultsVersion: number;
   /** Total visible file count from the most recent filterTree pass. */
   lastFilteredFileCount: number;
+  /** Total visible match count from the most recent filterTree pass (search + file filter). */
+  lastFilteredMatchCount: number;
   /** Optional callback invoked after each render completes (post-rAF). */
   onAfterRender: (() => void) | null;
 }

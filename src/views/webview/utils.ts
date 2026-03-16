@@ -242,12 +242,13 @@ export function getVisibleFiles(
   sortedFiles: FileNode[],
   activeFilters: Set<string>,
   searchResults: Map<string, unknown> | null,
-  fileFilterFn?: ((name: string) => boolean) | null,
+  fileFilterFn?: ((relativePath: string) => boolean) | null,
+  parentPath?: string,
 ): FileNode[] {
   let files = sortedFiles;
   if (activeFilters.size > 0) { files = files.filter(f => activeFilters.has(f.langName)); }
   if (searchResults) { files = files.filter(f => searchResults.has(f.path)); }
-  if (fileFilterFn) { files = files.filter(f => fileFilterFn(f.name)); }
+  if (fileFilterFn) { files = files.filter(f => fileFilterFn(parentPath ? parentPath + '/' + f.name : f.name)); }
   return files;
 }
 

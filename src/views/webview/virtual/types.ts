@@ -115,6 +115,7 @@ export interface FlattenResult {
   flatRows: FlatRow[];
   totalHeight: number;
   totalVisibleFiles: number;
+  totalVisibleMatches: number;
 }
 
 export interface FlattenOptions {

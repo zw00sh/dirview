@@ -403,11 +403,12 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   (state as any)._isFiltered = state.activeFilters.size > 0 || state.searchResults !== null || state.fileFilterFn !== null;
 
   // Build flat rows and update virtual scroller
-  const { flatRows, totalHeight, totalVisibleFiles } = flattenTree(state, roots, {
+  const { flatRows, totalHeight, totalVisibleFiles, totalVisibleMatches } = flattenTree(state, roots, {
     showRootNode: true,
     clientWidth: root.clientWidth || 600,
   });
   state.lastFilteredFileCount = totalVisibleFiles;
+  state.lastFilteredMatchCount = totalVisibleMatches;
   currentFlatRows = flatRows;
 
   // Check if filtered tree is empty (no matching files/dirs)

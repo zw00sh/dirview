@@ -35,6 +35,7 @@ export function createState(): WebviewState {
     _searchRenderTimer: null,
     searchResultsVersion: 0,
     lastFilteredFileCount: 0,
+    lastFilteredMatchCount: 0,
     onAfterRender: null,
     // Placeholder — assigned below
     rerender: null!,

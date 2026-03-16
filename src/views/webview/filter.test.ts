@@ -20,19 +20,19 @@ describe('getVisibleFiles with fileFilterFn', () => {
   });
 
   it('filters files by name with fileFilterFn', () => {
-    const fn = (name: string) => name.toLowerCase().includes('api');
+    const fn = (path: string) => path.toLowerCase().includes('api');
     const result = (getVisibleFiles as any)(files, new Set(), null, fn);
     expect(result).toEqual([files[0]]);
   });
 
   it('combines fileFilterFn with activeFilters', () => {
-    const fn = (name: string) => /\.ts$/.test(name);
+    const fn = (path: string) => /\.ts$/.test(path);
     const result = (getVisibleFiles as any)(files, new Set(['TypeScript']), null, fn);
     expect(result.map((f: any) => f.name)).toEqual(['apiHandler.ts', 'utils.ts']);
   });
 
   it('combines fileFilterFn with searchResults', () => {
-    const fn = (name: string) => name.includes('api') || name.includes('auth');
+    const fn = (path: string) => path.includes('api') || path.includes('auth');
     const searchResults = new Map([['/ws/apiHandler.ts', []]]);
     const result = (getVisibleFiles as any)(files, new Set(), searchResults, fn);
     // Must match BOTH searchResults and fileFilterFn
@@ -98,6 +98,133 @@ describe('filterTree fileFilter', () => {
     });
     const result = ft([dir], { fileFilterFn: (n: string) => n.includes('api'), activeFilters: new Set(['JavaScript']) });
     expect(result.roots.length).toBe(0);
+  });
+});
+
+// --- file filter matches against relative path, not just filename ---
+describe('filterTree fileFilter matches relative path', () => {
+  function ft(roots: DirNode[], opts: Partial<Parameters<typeof filterTree>[1]> = {}) {
+    return filterTree(roots, {
+      activeFilters: opts.activeFilters ?? new Set(),
+      searchResults: opts.searchResults ?? null,
+      searchAncestorPaths: opts.searchAncestorPaths ?? null,
+      fileFilterFn: opts.fileFilterFn ?? null,
+      searchResultsVersion: opts.searchResultsVersion ?? Date.now(),
+    });
+  }
+
+  it('matches files by directory name in their relative path', () => {
+    // Regex "api" should match files inside an "api" directory, not just files named "api*"
+    const apiDir = makeDir('src/api', 'api', {
+      files: [
+        { name: 'index.ts', path: '/ws/src/api/index.ts', langName: 'TypeScript' },
+        { name: 'utils.ts', path: '/ws/src/api/utils.ts', langName: 'TypeScript' },
+      ],
+    });
+    const libDir = makeDir('src/lib', 'lib', {
+      files: [{ name: 'helper.ts', path: '/ws/src/lib/helper.ts', langName: 'TypeScript' }],
+    });
+    const src = makeDir('src', 'src', { children: [apiDir, libDir] });
+    const result = ft([src], { fileFilterFn: (p: string) => /api/.test(p) });
+    expect(result.roots.length).toBe(1);
+    // src/api should be kept (both files match via dir path), src/lib should be pruned
+    expect(result.roots[0].children.length).toBe(1);
+    expect(result.roots[0].children[0].name).toBe('api');
+    expect(result.roots[0].children[0].files.length).toBe(2);
+  });
+
+  it('matches files by filename in relative path', () => {
+    const dir = makeDir('src', 'src', {
+      files: [
+        { name: 'api.ts', path: '/ws/src/api.ts', langName: 'TypeScript' },
+        { name: 'utils.ts', path: '/ws/src/utils.ts', langName: 'TypeScript' },
+      ],
+    });
+    const result = ft([dir], { fileFilterFn: (p: string) => /api/.test(p) });
+    expect(result.roots[0].files.length).toBe(1);
+    expect(result.roots[0].files[0].name).toBe('api.ts');
+  });
+});
+
+// --- filterTree: totalVisibleMatches ---
+describe('filterTree totalVisibleMatches', () => {
+  function ft(roots: DirNode[], opts: Partial<Parameters<typeof filterTree>[1]> = {}) {
+    return filterTree(roots, {
+      activeFilters: opts.activeFilters ?? new Set(),
+      searchResults: opts.searchResults ?? null,
+      searchAncestorPaths: opts.searchAncestorPaths ?? null,
+      fileFilterFn: opts.fileFilterFn ?? null,
+      searchResultsVersion: opts.searchResultsVersion ?? Date.now(),
+    });
+  }
+
+  it('returns 0 when no search is active', () => {
+    const dir = makeDir('src', 'src', {
+      files: [{ name: 'a.ts', path: '/ws/src/a.ts', langName: 'TypeScript' }],
+    });
+    expect(ft([dir]).totalVisibleMatches).toBe(0);
+  });
+
+  it('counts matches across all visible files', () => {
+    const dir = makeDir('src', 'src', {
+      files: [
+        { name: 'a.ts', path: '/ws/src/a.ts', langName: 'TypeScript' },
+        { name: 'b.ts', path: '/ws/src/b.ts', langName: 'TypeScript' },
+      ],
+    });
+    const searchResults = new Map([
+      ['/ws/src/a.ts', [
+        { line: 1, column: 0, matchLength: 3, lineText: 'import foo' },
+        { line: 5, column: 0, matchLength: 3, lineText: 'import bar' },
+      ]],
+      ['/ws/src/b.ts', [
+        { line: 2, column: 0, matchLength: 3, lineText: 'import baz' },
+      ]],
+    ]);
+    const result = ft([dir], { searchResults, searchAncestorPaths: new Set(['src', '']) });
+    expect(result.totalVisibleMatches).toBe(3);
+    expect(result.totalVisibleFiles).toBe(2);
+  });
+
+  it('excludes matches from files hidden by file filter', () => {
+    const dir = makeDir('src', 'src', {
+      files: [
+        { name: 'api.ts', path: '/ws/src/api.ts', langName: 'TypeScript' },
+        { name: 'utils.ts', path: '/ws/src/utils.ts', langName: 'TypeScript' },
+      ],
+    });
+    const searchResults = new Map([
+      ['/ws/src/api.ts', [
+        { line: 1, column: 0, matchLength: 3, lineText: 'import foo' },
+      ]],
+      ['/ws/src/utils.ts', [
+        { line: 1, column: 0, matchLength: 3, lineText: 'import bar' },
+        { line: 2, column: 0, matchLength: 3, lineText: 'import baz' },
+      ]],
+    ]);
+    // File filter "api" hides utils.ts, so only 1 match should be counted
+    const result = ft([dir], {
+      searchResults,
+      searchAncestorPaths: new Set(['src', '']),
+      fileFilterFn: (p: string) => /api/.test(p),
+    });
+    expect(result.totalVisibleMatches).toBe(1);
+    expect(result.totalVisibleFiles).toBe(1);
+  });
+
+  it('excludes context lines from match count', () => {
+    const dir = makeDir('src', 'src', {
+      files: [{ name: 'a.ts', path: '/ws/src/a.ts', langName: 'TypeScript' }],
+    });
+    const searchResults = new Map([
+      ['/ws/src/a.ts', [
+        { line: 1, column: 0, matchLength: 3, lineText: 'context before', isContext: true },
+        { line: 2, column: 0, matchLength: 3, lineText: 'import foo' },
+        { line: 3, column: 0, matchLength: 3, lineText: 'context after', isContext: true },
+      ]],
+    ]);
+    const result = ft([dir], { searchResults, searchAncestorPaths: new Set(['src', '']) });
+    expect(result.totalVisibleMatches).toBe(1);
   });
 });
 
