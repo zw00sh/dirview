@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.1.3] — 2026-03-16
+
+### Fixed
+- Expand/collapse all now correctly recognizes implicitly expanded nodes when a filter or search is active.
+- Filter clear button ordering now matches the main search input layout (regex toggle, then clear).
+- Search collapse bug: clicking an implicitly expanded dir during search now collapses on the first click.
+- File filter placeholder text now displays correctly on load.
+
+### Changed
+- Content search regex is enabled by default, with inline validation feedback for invalid regex patterns.
+- Separate clear buttons for content search and file filter inputs.
+- Tab title now uses the workspace name instead of hardcoded "Breakdown".
+- Filtering extracted into a pre-render `filterTree()` layer for cleaner architecture.
+- Split monolithic test file into 10 focused test modules for maintainability.
+
 ## [1.1.2] — 2026-03-16
 
 ### Fixed
