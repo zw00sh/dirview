@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.1.2] — 2026-03-16
+
+### Fixed
+- Search now works on all platforms: resolves VSCode's bundled ripgrep when the npm package is unavailable, with graceful fallback to `vscode.workspace.findFiles` for file-glob filtering when no ripgrep binary is found.
+- Windows path compatibility: search ancestor path expansion now normalizes backslashes to forward slashes.
+
+### Changed
+- File filter defaults to regex mode (plaintext acts as substring match). Glob mode passes filters to ripgrep as-is without `*text*` wrapping.
+- Regex toggle button moved inside the file filter input border, matching the main search input layout.
+- Tree fully auto-expands when any filter or search is active, so all matches are visible.
+
 ## [1.1.1] — 2026-03-16
 
 ### Changed
