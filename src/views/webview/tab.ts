@@ -1,5 +1,4 @@
 import {
-  h,
   createScanBar,
   createTooltip,
   createState,
@@ -21,6 +20,7 @@ import {
   SVG_SORT_SIZE,
   SVG_STICKY,
   SVG_STICKY_OFF,
+  emptyState,
 } from './index';
 import type { DirNode, SortMode, LangStat, BackendToWebviewMessage } from './types';
 
@@ -293,19 +293,19 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
 
   // Remove one-time placeholders (loading/initializing) without wiping the
   // whole container — preserves any existing tree for incremental patching.
-  root.querySelector('.loading')?.remove();
+  root.querySelector('.empty-state')?.remove();
 
   updateRefreshBtn(autoRescanEnabled);
 
   if (!roots || roots.length === 0) {
     root.querySelector('ul.tree')?.remove();
-    if (!root.querySelector('.empty')) {
-      root.appendChild(h('div', { className: 'empty', textContent: 'No workspace folder open.' }));
+    if (!root.querySelector('.empty-state')) {
+      root.appendChild(emptyState('noWorkspace'));
     }
     return;
   }
 
-  root.querySelector('.empty')?.remove();
+  root.querySelector('.empty-state')?.remove();
   renderTree(state, renderer, root, { showRootNode: true });
   _updateStuck();
   updateSearchActiveAlert();
@@ -375,5 +375,5 @@ window.addEventListener('message', (event: MessageEvent) => {
   sharedHandler(event);
 });
 
-root.innerHTML = '<div class="loading">Initializing…</div>';
+root.appendChild(emptyState('initializing'));
 scanBar.show(true);

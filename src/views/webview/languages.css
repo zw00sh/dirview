@@ -13,13 +13,6 @@ body {
   overflow-x: hidden;
 }
 
-.empty {
-  padding: 8px 4px;
-  color: var(--vscode-descriptionForeground);
-  font-style: italic;
-  font-size: 12px;
-}
-
 .legend-items {
   display: flex;
   flex-wrap: wrap;

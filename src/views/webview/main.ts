@@ -6,6 +6,7 @@ import {
   renderTree,
   createMessageHandler,
   setupStickyTracking,
+  emptyState,
 } from './index';
 import type { DirNode, SortMode, BackendToWebviewMessage } from './types';
 
@@ -40,20 +41,17 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
 
   // Remove one-time placeholders (loading/initializing) without wiping the
   // whole container — preserves any existing tree for incremental patching.
-  root.querySelector('.loading')?.remove();
+  root.querySelector('.empty-state')?.remove();
 
   if (!roots || roots.length === 0) {
     root.querySelector('ul.tree')?.remove();
-    if (!root.querySelector('.empty')) {
-      const empty = document.createElement('div');
-      empty.className = 'empty';
-      empty.textContent = 'No workspace folder open.';
-      root.appendChild(empty);
+    if (!root.querySelector('.empty-state')) {
+      root.appendChild(emptyState('noWorkspace'));
     }
     return;
   }
 
-  root.querySelector('.empty')?.remove();
+  root.querySelector('.empty-state')?.remove();
   renderTree(state, renderer, root, { cssClass: 'sidebar' });
   _updateStuck();
 }
@@ -86,5 +84,5 @@ window.addEventListener('message', (event: MessageEvent) => {
   sharedMsgHandler(event);
 });
 
-root.innerHTML = '<div class="loading">Initializing…</div>';
+root.appendChild(emptyState('initializing'));
 scanBar.show(true);
