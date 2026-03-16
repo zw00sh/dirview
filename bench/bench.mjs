@@ -20,12 +20,12 @@ try {
 }
 
 const fixturePath = process.argv[2] || 'fixtures/source.json';
-const harnessFile = path.resolve(__dirname, 'harness.html');
-const harnessUrl = `file://${harnessFile}?fixture=${fixturePath}&autorun`;
+const serverPort = process.argv[3] || '8787';
+const harnessUrl = `http://localhost:${serverPort}/bench/harness.html?fixture=${fixturePath}&autorun`;
 
 console.log(`Launching Chromium...`);
 const chrome = await launch({
-  chromeFlags: ['--headless=new', '--disable-gpu', '--no-sandbox', '--window-size=1280,900'],
+  chromeFlags: ['--headless=new', '--disable-gpu', '--no-sandbox', '--window-size=1280,900', '--allow-file-access-from-files'],
 });
 
 console.log(`Connecting to CDP on port ${chrome.port}...`);
@@ -35,6 +35,16 @@ const { Page, Runtime } = client;
 await Page.enable();
 await Runtime.enable();
 
+// Log console messages from the page for debugging
+Runtime.consoleAPICalled(({ type, args }) => {
+  const text = args.map(a => a.value ?? a.description ?? '').join(' ');
+  if (type === 'error' || type === 'warn') { console.log(`  [${type}] ${text}`); }
+});
+Runtime.exceptionThrown(({ exceptionDetails }) => {
+  const desc = exceptionDetails.exception?.description || exceptionDetails.text;
+  console.log(`  [exception] ${desc}`);
+});
+
 console.log(`Navigating to harness (fixture: ${fixturePath})...`);
 await Page.navigate({ url: harnessUrl });
 await Page.loadEventFired();
@@ -42,7 +52,7 @@ await Page.loadEventFired();
 // Wait for benchmark to complete (polls window.__benchResults)
 console.log('Waiting for benchmark to complete...');
 let results = null;
-for (let i = 0; i < 300; i++) { // 30 second timeout
+for (let i = 0; i < 1200; i++) { // 120 second timeout
   await new Promise(r => setTimeout(r, 100));
   const { result } = await Runtime.evaluate({
     expression: 'window.__benchResults ? JSON.stringify(window.__benchResults) : null',
