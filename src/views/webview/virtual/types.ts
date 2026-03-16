@@ -116,6 +116,8 @@ export interface FlattenResult {
   totalHeight: number;
   totalVisibleFiles: number;
   totalVisibleMatches: number;
+  /** Roots after filterTree — stats/totalFiles/sizeBytes reflect the filtered subset. */
+  filteredRoots: DirNode[];
 }
 
 export interface FlattenOptions {

@@ -228,13 +228,10 @@ export function getVisibleChildren(
   matchFn: (node: DirNode) => boolean,
   searchResults: Map<string, unknown> | null,
   searchMatchFn?: (node: DirNode) => boolean,
-  fileFilterFn?: ((name: string) => boolean) | null,
-  fileFilterDirMatchFn?: (node: DirNode) => boolean,
 ): DirNode[] {
   let dirs = sortedChildren;
   if (activeFilters.size > 0) { dirs = dirs.filter(matchFn); }
   if (searchResults && searchMatchFn) { dirs = dirs.filter(searchMatchFn); }
-  if (fileFilterFn && fileFilterDirMatchFn) { dirs = dirs.filter(fileFilterDirMatchFn); }
   return dirs;
 }
 
@@ -242,13 +239,10 @@ export function getVisibleFiles(
   sortedFiles: FileNode[],
   activeFilters: Set<string>,
   searchResults: Map<string, unknown> | null,
-  fileFilterFn?: ((relativePath: string) => boolean) | null,
-  parentPath?: string,
 ): FileNode[] {
   let files = sortedFiles;
   if (activeFilters.size > 0) { files = files.filter(f => activeFilters.has(f.langName)); }
   if (searchResults) { files = files.filter(f => searchResults.has(f.path)); }
-  if (fileFilterFn) { files = files.filter(f => fileFilterFn(parentPath ? parentPath + '/' + f.name : f.name)); }
   return files;
 }
 

@@ -37,8 +37,6 @@ export function flattenTree(
     activeFilters: state.activeFilters,
     searchResults: state.searchResults,
     searchAncestorPaths: state.searchAncestorPaths,
-    fileFilterFn: state.fileFilterFn,
-    fileFilterPattern: state.fileFilterPattern,
     searchResultsVersion: state.searchResultsVersion,
   });
   const isFiltered = filtered.isFiltered;
@@ -346,5 +344,6 @@ export function flattenTree(
     totalHeight: cumY,
     totalVisibleFiles,
     totalVisibleMatches: filtered.totalVisibleMatches,
+    filteredRoots,
   };
 }

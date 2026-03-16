@@ -25,8 +25,7 @@ export function createState(): WebviewState {
     searchTruncated: false,
     searchFileCount: 0,
     searchMatchCount: 0,
-    fileFilterFn: null,
-    fileFilterPattern: null,
+    fileFilterActive: false,
     searchAncestorPaths: null,
     searchRootPaths: [],
     searchBar_updateStatus: null,
@@ -90,7 +89,7 @@ export function tieredExpandAll(state: WebviewState, roots: DirNode[]): void {
 
   // When filters are active, dirs are implicitly expanded by the renderer.
   // Use isFiltered as fallback so tier checks recognize implicitly expanded nodes.
-  const isFiltered = state.activeFilters.size > 0 || !!state.searchResults || !!state.fileFilterFn;
+  const isFiltered = state.activeFilters.size > 0 || !!state.searchResults || state.fileFilterActive;
 
   const allTopExpanded = topLevel.every(node => {
     const cn = compactedNode(node);
@@ -123,7 +122,7 @@ export function tieredCollapseAll(state: WebviewState, roots: DirNode[]): void {
 
   // When filters are active, dirs are implicitly expanded by the renderer.
   // Use isFiltered as fallback so tier checks recognize implicitly expanded nodes.
-  const isFiltered = state.activeFilters.size > 0 || !!state.searchResults || !!state.fileFilterFn;
+  const isFiltered = state.activeFilters.size > 0 || !!state.searchResults || state.fileFilterActive;
   const isNodeExpanded = (node: DirNode) => state.expanded.get(compactedPath(node)) ?? isFiltered;
 
   const anyTopExpanded = topLevel.some(isNodeExpanded);

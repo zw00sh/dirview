@@ -79,8 +79,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   const includeInput = h('input', {
     type: 'text',
     className: 'search-input search-filter-input',
-    placeholder: 'e.g. src/.*\\.ts',
-    attr: { 'aria-label': 'Find or filter files' },
+    attr: { 'aria-label': 'files to include' },
   });
 
   // Language-filter pill — shown when legend filters are active, alerting the user that
@@ -129,17 +128,6 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   filterContainer.insertBefore(langPill, filterContainer.firstChild);
   filterContainer.appendChild(includeInput);
 
-  // Regex toggle for file filter — inside the bordered container, matching the main input style.
-  // When active: client-side regex filtering. When inactive: glob passed to ripgrep as-is.
-  const includeRegexBtn = h('button', {
-    className: 'search-toggle active',
-    title: 'Use Regular Expression',
-    innerHTML: Icons.SVG_REGEX,
-    attr: { 'aria-label': 'Use Regular Expression' },
-  });
-  let includeUseRegex = true;
-  filterContainer.appendChild(includeRegexBtn);
-
   // Clear button for the file filter input — last in the container, matching clearBtn order.
   const includeClearBtn = h('button', {
     className: 'search-toggle',
@@ -150,16 +138,57 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   });
   filterContainer.appendChild(includeClearBtn);
 
+  // ── Toggle details button — reveals the exclude input, matching VSCode's "..." ──
+  const detailsToggle = h('button', {
+    className: 'search-toggle search-details-toggle',
+    title: 'Toggle Search Details',
+    innerHTML: Icons.SVG_ELLIPSIS,
+    attr: { 'aria-label': 'Toggle Search Details' },
+  });
+  let detailsOpen = false;
+
+  // ── Files to exclude — hidden until "..." is toggled ──────────────────
+  const excludeInput = h('input', {
+    type: 'text',
+    className: 'search-input search-filter-input',
+    attr: { 'aria-label': 'files to exclude' },
+  });
+  const excludeContainer = h('div', { className: 'search-filter-container' }, excludeInput);
+  const excludeClearBtn = h('button', {
+    className: 'search-toggle',
+    title: 'Clear Exclude Filter',
+    innerHTML: Icons.SVG_CLOSE,
+    style: { display: 'none' },
+    attr: { 'aria-label': 'Clear Exclude Filter' },
+  });
+  excludeContainer.appendChild(excludeClearBtn);
+
   const includeSection = h('div', { className: 'search-filter-section' },
-    h('label', { className: 'search-filter-label', textContent: 'find or filter files' }),
+    h('label', { className: 'search-filter-label', textContent: 'files to include' }),
     h('div', { className: 'search-filter-input-row' }, filterContainer),
+  );
+
+  const excludeSection = h('div', { className: 'search-exclude-section' },
+    h('label', { className: 'search-filter-label', textContent: 'files to exclude' }),
+    h('div', { className: 'search-filter-input-row' }, excludeContainer),
+  );
+
+  // ── Search details: "..." toggle + include/exclude fields ─────────────
+  // Matches VS Code's layout: toggle sits below the search row, both
+  // include and exclude are shown/hidden together when toggled.
+  const detailsSection = h('div', { className: 'search-details', style: { display: 'none' } },
+    includeSection, excludeSection,
   );
 
   // ── Status line ────────────────────────────────────────────────────────
   const statusEl = h('div', { className: 'search-status', style: { display: 'none' } });
 
+  const queryDetails = h('div', { className: 'search-query-details' },
+    detailsToggle, detailsSection,
+  );
+
   const el = h('div', { className: 'search-bar' },
-    inputRow, includeSection, statusEl,
+    inputRow, queryDetails, statusEl,
   );
 
   // ── State ──────────────────────────────────────────────────────────────
@@ -195,11 +224,6 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
 
 
   function computeDebounce(): number {
-    // Client-side regex file filter (no content search) is cheap enough
-    // to run without any debounce — flattenTree + virtual scroller render
-    // completes in < 16ms even on 28k-file trees.
-    if (!mainInput.value.trim() && includeUseRegex) { return 0; }
-
     if (anchorMainQuery === null) { return 300; }
     if (state.searchActive) { return 300; }
     const newMain = mainInput.value.trim();
@@ -286,12 +310,12 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   // updateStatus reads from state (used in non-standalone/tab mode where createMessageHandler
   // keeps state.searchActive / state.searchResults / etc. up to date).
   function updateStatus(): void {
-    // When any client-side filter (file regex or language) reduces the visible
-    // results below the raw ripgrep totals, the accurate counts are only
-    // available AFTER the render (filterTree computes them). Schedule a
-    // post-render refresh to show the correct filtered counts.
-    const hasClientFilter = !!state.fileFilterFn || state.activeFilters.size > 0;
-    if (hasClientFilter && state.searchResults && !state.searchActive) {
+    // The accurate visible file/match counts are only available AFTER the
+    // render pass (filterTree recomputes stats bottom-up from the filtered
+    // tree). Schedule a post-render refresh whenever search results are
+    // present — ripgrep may report files not in the scan tree (e.g. files in
+    // ignored directories), so the tree count can differ from ripgrep's count.
+    if (state.searchResults && !state.searchActive) {
       state.onAfterRender = () => {
         state.onAfterRender = null;
         updateFilteredStatus();
@@ -301,7 +325,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     // Show immediate status (ripgrep totals or "Searching…").
     const { text, visible } = formatSearchStatus(
       state.searchActive,
-      state.searchResults !== null || !!state.fileFilterFn,
+      state.searchResults !== null || state.fileFilterActive,
       state.searchResults ? state.searchResults.size : 0,
       state.searchMatchCount,
       state.searchFileCount,
@@ -309,7 +333,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     );
     statusEl.textContent = text;
     statusEl.style.display = visible ? '' : 'none';
-    updateDebounceAnchor(hasClientFilter ? state.lastFilteredFileCount : state.searchFileCount);
+    updateDebounceAnchor(state.searchResults ? state.lastFilteredFileCount : state.searchFileCount);
   }
 
   // setStatus is the externally-driven variant used by the standalone search fold.
@@ -352,79 +376,52 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   function triggerSearch(): void {
     const pattern = mainInput.value.trim();
     const fileFilter = includeInput.value.trim();
+    const excludeFilter = excludeInput.value.trim();
     lastTriggeredMain = pattern;
     lastTriggeredInclude = fileFilter;
 
     clearBtn.style.display = pattern ? '' : 'none';
     includeClearBtn.style.display = fileFilter ? '' : 'none';
+    excludeClearBtn.style.display = excludeFilter ? '' : 'none';
 
-    if (!pattern && !fileFilter) {
+    if (!pattern && !fileFilter && !excludeFilter) {
       inputContainer.classList.remove('regex-error');
-      filterContainer.classList.remove('regex-error');
-      state.fileFilterFn = null;
-      state.fileFilterPattern = null;
+      state.fileFilterActive = false;
       state.searchResultsVersion++;
       vscode.postMessage({ command: 'clearSearch' });
       return;
     }
 
-    // Validate regex patterns — show error styling and abort if invalid.
+    // Validate regex for content search pattern only (file filters are always glob).
     const mainValid = validateRegex(pattern, useRegex, inputContainer);
-    const filterValid = validateRegex(fileFilter, includeUseRegex, filterContainer);
-    if (!mainValid || !filterValid) { return; }
+    if (!mainValid) { return; }
 
     const contextLines = contextLinesEnabled ? (parseInt(contextInput.value, 10) || 0) : 0;
 
-    // File filter: regex mode uses client-side filtering; glob mode passes to ripgrep as-is.
     state.searchResultsVersion++;
-    if (includeUseRegex && fileFilter) {
-      // Client-side regex filtering — don't send to ripgrep.
-      const re = new RegExp(fileFilter, 'i');
-      state.fileFilterFn = (name: string) => re.test(name);
-      state.fileFilterPattern = fileFilter;
-    } else {
-      state.fileFilterFn = null;
-      state.fileFilterPattern = null;
-      state.fileFilterPattern = null;
-    }
-
-    // Glob mode: pass the filter to ripgrep as-is (no normalization).
-    const glob = (!includeUseRegex && fileFilter) ? fileFilter : undefined;
+    state.fileFilterActive = !!(fileFilter || excludeFilter);
 
     if (!pattern) {
-      if (includeUseRegex) {
-        // Regex file filter with no content query — client-side only, rerender tree.
-        // Update status and debounce anchor after the async render completes
-        // (rerender uses double rAF, so lastFilteredFileCount isn't set yet).
-        state.onAfterRender = () => {
-          state.onAfterRender = null;
-          const visibleFiles = state.lastFilteredFileCount;
-          updateDebounceAnchor(visibleFiles);
-          if (fileFilter) {
-            const { text, visible } = formatSearchStatus(false, true, visibleFiles, 0, visibleFiles, false);
-            statusEl.textContent = text;
-            statusEl.style.display = visible ? '' : 'none';
-          } else {
-            statusEl.style.display = 'none';
-          }
-        };
-        state.rerender();
-      } else if (fileFilter) {
+      if (fileFilter || excludeFilter) {
         // Glob file filter with no content query → ripgrep filename search.
-        vscode.postMessage({ command: 'searchFiles', glob: glob! });
+        // When only exclude is set, use a wildcard include to get all files minus excluded.
+        vscode.postMessage({
+          command: 'searchFiles',
+          glob: fileFilter || '*',
+          exclude: excludeFilter || undefined,
+        });
       }
     } else {
-      // Content search, optionally scoped by file filter glob.
+      // Content search, optionally scoped by include/exclude globs.
       vscode.postMessage({
         command: 'search',
         pattern,
         caseSensitive,
         useRegex,
-        include: glob,
+        include: fileFilter || undefined,
+        exclude: excludeFilter || undefined,
         contextLines: contextLines || undefined,
       });
-      // If regex file filter is also active, rerender will apply it client-side
-      // after search results arrive (via fileFilterFn in getVisibleFiles).
     }
   }
 
@@ -432,14 +429,15 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     if (debounceTimer) { clearTimeout(debounceTimer); }
     mainInput.value = '';
     includeInput.value = '';
+    excludeInput.value = '';
     anchorMainQuery = null;
     anchorIncludeQuery = null;
     clearBtn.style.display = 'none';
     includeClearBtn.style.display = 'none';
+    excludeClearBtn.style.display = 'none';
     statusEl.style.display = 'none';
     inputContainer.classList.remove('regex-error');
-    filterContainer.classList.remove('regex-error');
-    state.fileFilterFn = null;
+    state.fileFilterActive = false;
     state.searchResultsVersion++;
     vscode.postMessage({ command: 'clearSearch' });
   }
@@ -464,11 +462,10 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     clearBtn.style.display = 'none';
     inputContainer.classList.remove('regex-error');
     if (debounceTimer) { clearTimeout(debounceTimer); }
-    if (!includeInput.value.trim()) {
+    if (!includeInput.value.trim() && !excludeInput.value.trim()) {
       // No filter either — full clear.
       statusEl.style.display = 'none';
-      state.fileFilterFn = null;
-      state.fileFilterPattern = null;
+      state.fileFilterActive = false;
       state.searchResultsVersion++;
       vscode.postMessage({ command: 'clearSearch' });
     } else {
@@ -479,12 +476,11 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   includeClearBtn.addEventListener('click', () => {
     includeInput.value = '';
     includeClearBtn.style.display = 'none';
-    filterContainer.classList.remove('regex-error');
     if (debounceTimer) { clearTimeout(debounceTimer); }
-    state.fileFilterFn = null;
-    if (!mainInput.value.trim()) {
-      // No content query either — full clear.
+    if (!mainInput.value.trim() && !excludeInput.value.trim()) {
+      // No content query or exclude either — full clear.
       statusEl.style.display = 'none';
+      state.fileFilterActive = false;
       state.searchResultsVersion++;
       vscode.postMessage({ command: 'clearSearch' });
     } else {
@@ -492,14 +488,31 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     }
   });
 
-  includeRegexBtn.addEventListener('click', () => {
-    includeUseRegex = !includeUseRegex;
-    includeRegexBtn.classList.toggle('active', includeUseRegex);
-    if (!includeUseRegex) { filterContainer.classList.remove('regex-error'); }
-    // Update placeholder to reflect the current mode (regex vs glob examples).
-    includeInput.placeholder = document.activeElement === includeInput
-      ? includeFocusPlaceholder() : includeBlurPlaceholder();
-    if (mainInput.value.trim() || includeInput.value.trim()) { triggerSearch(); }
+  excludeClearBtn.addEventListener('click', () => {
+    excludeInput.value = '';
+    excludeClearBtn.style.display = 'none';
+    if (debounceTimer) { clearTimeout(debounceTimer); }
+    if (!mainInput.value.trim() && !includeInput.value.trim()) {
+      statusEl.style.display = 'none';
+      state.fileFilterActive = false;
+      state.searchResultsVersion++;
+      vscode.postMessage({ command: 'clearSearch' });
+    } else {
+      triggerSearch();
+    }
+  });
+
+  detailsToggle.addEventListener('click', () => {
+    detailsOpen = !detailsOpen;
+    detailsSection.style.display = detailsOpen ? '' : 'none';
+    // If include/exclude had values and are being hidden, clear and re-trigger
+    if (!detailsOpen && (includeInput.value.trim() || excludeInput.value.trim())) {
+      includeInput.value = '';
+      excludeInput.value = '';
+      includeClearBtn.style.display = 'none';
+      excludeClearBtn.style.display = 'none';
+      triggerSearch();
+    }
   });
 
   contextBtn.addEventListener('click', () => {
@@ -519,11 +532,10 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     clearBtn.style.display = mainInput.value ? '' : 'none';
     // Validate regex immediately (no debounce) so the error border appears instantly.
     validateRegex(mainInput.value.trim(), useRegex, inputContainer);
-    if (!mainInput.value && !includeInput.value) {
+    if (!mainInput.value && !includeInput.value && !excludeInput.value) {
       anchorMainQuery = null;
       anchorIncludeQuery = null;
-      state.fileFilterFn = null;
-      state.fileFilterPattern = null;
+      state.fileFilterActive = false;
       state.searchResultsVersion++;
       vscode.postMessage({ command: 'clearSearch' });
       return;
@@ -537,8 +549,14 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     if (debounceTimer) { clearTimeout(debounceTimer); }
     includeHistoryIdx = -1;
     includeClearBtn.style.display = includeInput.value ? '' : 'none';
-    // Validate regex immediately (no debounce) so the error border appears instantly.
-    validateRegex(includeInput.value.trim(), includeUseRegex, filterContainer);
+    const delay = computeDebounce();
+    if (delay === 0) { triggerSearch(); }
+    else { debounceTimer = setTimeout(triggerSearch, delay); }
+  });
+
+  excludeInput.addEventListener('input', () => {
+    if (debounceTimer) { clearTimeout(debounceTimer); }
+    excludeClearBtn.style.display = excludeInput.value ? '' : 'none';
     const delay = computeDebounce();
     if (delay === 0) { triggerSearch(); }
     else { debounceTimer = setTimeout(triggerSearch, delay); }
@@ -594,20 +612,44 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     searchHistoryIdx = -1;
     mainInput.placeholder = 'Search Text';
   });
-  function includeBlurPlaceholder(): string {
-    return includeUseRegex ? 'e.g. src/.*\\.ts' : 'e.g. *.ts, src/**';
-  }
-  function includeFocusPlaceholder(): string {
-    return includeUseRegex
-      ? 'e.g. src/.*\\.ts (\u21C5 for history)'
-      : 'e.g. *.ts, src/** (\u21C5 for history)';
-  }
-  includeInput.addEventListener('focus', () => { includeInput.placeholder = includeFocusPlaceholder(); });
+  includeInput.addEventListener('focus', () => { includeInput.placeholder = 'e.g. *.ts, src/**'; });
   includeInput.addEventListener('blur', () => {
     commitToHistory(includeHistory, includeInput.value);
     includeHistoryIdx = -1;
-    includeInput.placeholder = includeBlurPlaceholder();
+    includeInput.placeholder = '';
   });
+
+  const excludeHistory: string[] = [];
+  let excludeHistoryIdx = -1;
+  let excludeSavedInput = '';
+
+  excludeInput.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      excludeInput.blur();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      commitToHistory(excludeHistory, excludeInput.value);
+      excludeHistoryIdx = -1;
+      if (debounceTimer) { clearTimeout(debounceTimer); }
+      triggerSearch();
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const r = navigateHistory(excludeHistory, excludeHistoryIdx, excludeSavedInput, excludeInput, e.key === 'ArrowUp' ? 'up' : 'down');
+      excludeHistoryIdx = r.index;
+      excludeSavedInput = r.saved;
+      if (debounceTimer) { clearTimeout(debounceTimer); }
+      debounceTimer = setTimeout(triggerSearch, 300);
+    }
+  });
+
+  excludeInput.addEventListener('focus', () => { excludeInput.placeholder = 'e.g. test/**, node_modules'; });
+  excludeInput.addEventListener('blur', () => {
+    commitToHistory(excludeHistory, excludeInput.value);
+    excludeHistoryIdx = -1;
+    excludeInput.placeholder = '';
+  });
+
 
   // Cmd+F / Ctrl+F — focus the search input from anywhere in the webview.
   // Not wired in standalone mode: the fold is focused via searchProvider.focusInput().
@@ -623,7 +665,12 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
 
   function focus(): void { mainInput.focus(); mainInput.select(); }
   function show(): void { mainInput.focus(); }
-  function hide(): void { clearSearch(); }
+  function hide(): void {
+    clearSearch();
+    // Also close the details section
+    detailsOpen = false;
+    detailsSection.style.display = 'none';
+  }
 
   function updateFilterWarning(count: number): void {
     if (!count) {
@@ -658,7 +705,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   // this does NOT defer via onAfterRender — it assumes the render has already completed
   // and the filtered counts on state are current. Used by post-render callbacks.
   function updateFilteredStatus(): void {
-    const hasResults = state.searchResults !== null || !!state.fileFilterFn;
+    const hasResults = state.searchResults !== null || state.fileFilterActive;
     const fileCount = state.lastFilteredFileCount;
     const matchCount = state.lastFilteredMatchCount;
     const { text, visible } = formatSearchStatus(

@@ -6,54 +6,50 @@ import {
 import { makeDir, makeRenderer } from './test-helpers';
 import type { DirNode } from './types';
 
-// --- file filter: getVisibleFiles with fileFilterFn ---
-describe('getVisibleFiles with fileFilterFn', () => {
+// --- getVisibleFiles (no file filter fn — purely lang + search filters) ---
+describe('getVisibleFiles', () => {
   const files = [
     { name: 'apiHandler.ts', path: '/ws/apiHandler.ts', langName: 'TypeScript' },
     { name: 'utils.ts', path: '/ws/utils.ts', langName: 'TypeScript' },
     { name: 'auth.js', path: '/ws/auth.js', langName: 'JavaScript' },
   ] as any[];
 
-  it('returns all files when fileFilterFn is null', () => {
-    const result = (getVisibleFiles as any)(files, new Set(), null, null);
+  it('returns all files when no filters active', () => {
+    const result = (getVisibleFiles as any)(files, new Set(), null);
     expect(result).toEqual(files);
   });
 
-  it('filters files by name with fileFilterFn', () => {
-    const fn = (path: string) => path.toLowerCase().includes('api');
-    const result = (getVisibleFiles as any)(files, new Set(), null, fn);
-    expect(result).toEqual([files[0]]);
-  });
-
-  it('combines fileFilterFn with activeFilters', () => {
-    const fn = (path: string) => /\.ts$/.test(path);
-    const result = (getVisibleFiles as any)(files, new Set(['TypeScript']), null, fn);
+  it('filters by activeFilters (language)', () => {
+    const result = (getVisibleFiles as any)(files, new Set(['TypeScript']), null);
     expect(result.map((f: any) => f.name)).toEqual(['apiHandler.ts', 'utils.ts']);
   });
 
-  it('combines fileFilterFn with searchResults', () => {
-    const fn = (path: string) => path.includes('api') || path.includes('auth');
+  it('filters by searchResults', () => {
     const searchResults = new Map([['/ws/apiHandler.ts', []]]);
-    const result = (getVisibleFiles as any)(files, new Set(), searchResults, fn);
-    // Must match BOTH searchResults and fileFilterFn
+    const result = (getVisibleFiles as any)(files, new Set(), searchResults);
+    expect(result.map((f: any) => f.name)).toEqual(['apiHandler.ts']);
+  });
+
+  it('combines activeFilters and searchResults', () => {
+    const searchResults = new Map([['/ws/apiHandler.ts', []], ['/ws/auth.js', []]]);
+    const result = (getVisibleFiles as any)(files, new Set(['TypeScript']), searchResults);
+    // Must match BOTH activeFilters (TypeScript) and searchResults
     expect(result.map((f: any) => f.name)).toEqual(['apiHandler.ts']);
   });
 });
 
-// --- filterTree: file filter ---
-describe('filterTree fileFilter', () => {
+// --- filterTree: search results filter ---
+describe('filterTree with searchResults', () => {
   function ft(roots: DirNode[], opts: Partial<Parameters<typeof filterTree>[1]> = {}) {
     return filterTree(roots, {
       activeFilters: opts.activeFilters ?? new Set(),
       searchResults: opts.searchResults ?? null,
       searchAncestorPaths: opts.searchAncestorPaths ?? null,
-      fileFilterFn: opts.fileFilterFn ?? null,
-      fileFilterPattern: null,
       searchResultsVersion: opts.searchResultsVersion ?? 0,
     });
   }
 
-  it('returns original roots when fileFilterFn is null', () => {
+  it('returns original roots when no filters active', () => {
     const dir = makeDir('/ws/src', 'src', {
       files: [{ name: 'index.ts', path: '/ws/src/index.ts', langName: 'TypeScript' }],
     });
@@ -62,89 +58,156 @@ describe('filterTree fileFilter', () => {
     expect(result.roots[0].files.length).toBe(1);
   });
 
-  it('keeps dir with direct file match', () => {
+  it('keeps dir with direct file match in searchResults', () => {
     const dir = makeDir('/ws/src', 'src', {
       files: [
         { name: 'apiHandler.ts', path: '/ws/src/apiHandler.ts', langName: 'TypeScript' },
         { name: 'utils.ts', path: '/ws/src/utils.ts', langName: 'TypeScript' },
       ],
     });
-    const result = ft([dir], { fileFilterFn: (n: string) => n.includes('api') });
+    const searchResults = new Map([['/ws/src/apiHandler.ts', []]]) as Map<string, any>;
+    const result = ft([dir], { searchResults, searchAncestorPaths: new Set(['/ws/src', '']) });
     expect(result.roots.length).toBe(1);
     expect(result.roots[0].files.length).toBe(1);
     expect(result.roots[0].files[0].name).toBe('apiHandler.ts');
   });
 
-  it('prunes dir when no file matches', () => {
+  it('prunes dir when no file matches searchResults', () => {
     const dir = makeDir('/ws/src', 'src', {
       files: [{ name: 'utils.ts', path: '/ws/src/utils.ts', langName: 'TypeScript' }],
     });
-    const result = ft([dir], { fileFilterFn: (n: string) => n.includes('api') });
+    const searchResults = new Map([['/ws/other/foo.ts', []]]) as Map<string, any>;
+    const result = ft([dir], { searchResults, searchAncestorPaths: new Set(['']) });
     expect(result.roots.length).toBe(0);
   });
 
-  it('keeps dir when descendant file matches', () => {
+  it('keeps dir when descendant file matches searchResults', () => {
     const child = makeDir('/ws/src/handlers', 'handlers', {
       files: [{ name: 'apiHandler.ts', path: '/ws/src/handlers/apiHandler.ts', langName: 'TypeScript' }],
     });
     const dir = makeDir('/ws/src', 'src', { children: [child] });
-    const result = ft([dir], { fileFilterFn: (n: string) => n.includes('api') });
+    const searchResults = new Map([['/ws/src/handlers/apiHandler.ts', []]]) as Map<string, any>;
+    const result = ft([dir], { searchResults, searchAncestorPaths: new Set(['/ws/src', '/ws/src/handlers', '']) });
     expect(result.roots.length).toBe(1);
     expect(result.roots[0].children.length).toBe(1);
   });
 
-  it('respects activeFilters intersection', () => {
+  it('respects activeFilters intersection with searchResults', () => {
     const dir = makeDir('/ws/src', 'src', {
       files: [{ name: 'apiHandler.ts', path: '/ws/src/apiHandler.ts', langName: 'TypeScript' }],
     });
-    const result = ft([dir], { fileFilterFn: (n: string) => n.includes('api'), activeFilters: new Set(['JavaScript']) });
+    const searchResults = new Map([['/ws/src/apiHandler.ts', []]]) as Map<string, any>;
+    // Language filter requires JavaScript, but file is TypeScript → pruned
+    const result = ft([dir], { searchResults, searchAncestorPaths: new Set(['', '/ws/src']), activeFilters: new Set(['JavaScript']) });
     expect(result.roots.length).toBe(0);
   });
 });
 
-// --- file filter matches against relative path, not just filename ---
-describe('filterTree fileFilter matches relative path', () => {
+// --- filterTree: stats/totalFiles/sizeBytes recomputation ---
+describe('filterTree recomputes stats on filtered nodes', () => {
   function ft(roots: DirNode[], opts: Partial<Parameters<typeof filterTree>[1]> = {}) {
     return filterTree(roots, {
       activeFilters: opts.activeFilters ?? new Set(),
       searchResults: opts.searchResults ?? null,
       searchAncestorPaths: opts.searchAncestorPaths ?? null,
-      fileFilterFn: opts.fileFilterFn ?? null,
-      fileFilterPattern: null,
       searchResultsVersion: opts.searchResultsVersion ?? Date.now(),
     });
   }
 
-  it('matches files by directory name in their relative path', () => {
-    // Regex "api" should match files inside an "api" directory, not just files named "api*"
-    const apiDir = makeDir('src/api', 'api', {
+  it('recomputes totalFiles to reflect only filtered files', () => {
+    const dir = makeDir('src', 'src', {
+      totalFiles: 3,
+      sizeBytes: 300,
+      stats: [
+        { name: 'TypeScript', color: '#3178c6', count: 2 },
+        { name: 'JavaScript', color: '#f1e05a', count: 1 },
+      ],
       files: [
-        { name: 'index.ts', path: '/ws/src/api/index.ts', langName: 'TypeScript' },
-        { name: 'utils.ts', path: '/ws/src/api/utils.ts', langName: 'TypeScript' },
+        { name: 'api.ts', path: '/ws/src/api.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 100 },
+        { name: 'utils.ts', path: '/ws/src/utils.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 100 },
+        { name: 'auth.js', path: '/ws/src/auth.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 100 },
       ],
     });
-    const libDir = makeDir('src/lib', 'lib', {
-      files: [{ name: 'helper.ts', path: '/ws/src/lib/helper.ts', langName: 'TypeScript' }],
-    });
-    const src = makeDir('src', 'src', { children: [apiDir, libDir] });
-    const result = ft([src], { fileFilterFn: (p: string) => /api/.test(p) });
-    expect(result.roots.length).toBe(1);
-    // src/api should be kept (both files match via dir path), src/lib should be pruned
-    expect(result.roots[0].children.length).toBe(1);
-    expect(result.roots[0].children[0].name).toBe('api');
-    expect(result.roots[0].children[0].files.length).toBe(2);
+    // Filter to TypeScript only via language filter
+    const result = ft([dir], { activeFilters: new Set(['TypeScript']) });
+    expect(result.roots[0].totalFiles).toBe(2);
+    expect(result.roots[0].sizeBytes).toBe(200);
+    expect(result.roots[0].stats).toEqual([
+      { name: 'TypeScript', color: '#3178c6', count: 2 },
+    ]);
   });
 
-  it('matches files by filename in relative path', () => {
-    const dir = makeDir('src', 'src', {
+  it('recomputes stats from filtered children recursively', () => {
+    const child = makeDir('src/api', 'api', {
+      totalFiles: 2,
+      sizeBytes: 200,
+      stats: [
+        { name: 'TypeScript', color: '#3178c6', count: 1 },
+        { name: 'JavaScript', color: '#f1e05a', count: 1 },
+      ],
       files: [
-        { name: 'api.ts', path: '/ws/src/api.ts', langName: 'TypeScript' },
-        { name: 'utils.ts', path: '/ws/src/utils.ts', langName: 'TypeScript' },
+        { name: 'handler.ts', path: '/ws/src/api/handler.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 100 },
+        { name: 'config.js', path: '/ws/src/api/config.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 100 },
       ],
     });
-    const result = ft([dir], { fileFilterFn: (p: string) => /api/.test(p) });
-    expect(result.roots[0].files.length).toBe(1);
-    expect(result.roots[0].files[0].name).toBe('api.ts');
+    const parent = makeDir('src', 'src', {
+      totalFiles: 3,
+      sizeBytes: 350,
+      stats: [
+        { name: 'TypeScript', color: '#3178c6', count: 2 },
+        { name: 'JavaScript', color: '#f1e05a', count: 1 },
+      ],
+      children: [child],
+      files: [
+        { name: 'index.ts', path: '/ws/src/index.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 150 },
+      ],
+    });
+    // Filter to TypeScript only
+    const result = ft([parent], { activeFilters: new Set(['TypeScript']) });
+    expect(result.roots[0].totalFiles).toBe(2); // index.ts + handler.ts
+    expect(result.roots[0].sizeBytes).toBe(250);
+    expect(result.roots[0].stats).toEqual([
+      { name: 'TypeScript', color: '#3178c6', count: 2 },
+    ]);
+    expect(result.roots[0].children[0].totalFiles).toBe(1);
+    expect(result.roots[0].children[0].sizeBytes).toBe(100);
+  });
+
+  it('preserves original stats when no filter is active', () => {
+    const dir = makeDir('src', 'src', {
+      totalFiles: 5,
+      sizeBytes: 500,
+      stats: [{ name: 'TypeScript', color: '#3178c6', count: 5 }],
+      files: [
+        { name: 'a.ts', path: '/ws/src/a.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 100 },
+      ],
+    });
+    const result = ft([dir]);
+    // Original node returned, stats unchanged
+    expect(result.roots[0].totalFiles).toBe(5);
+    expect(result.roots[0].sizeBytes).toBe(500);
+  });
+
+  it('recomputes stats with language filter', () => {
+    const dir = makeDir('src', 'src', {
+      totalFiles: 3,
+      sizeBytes: 300,
+      stats: [
+        { name: 'TypeScript', color: '#3178c6', count: 2 },
+        { name: 'Python', color: '#3572a5', count: 1 },
+      ],
+      files: [
+        { name: 'a.ts', path: '/ws/src/a.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 100 },
+        { name: 'b.ts', path: '/ws/src/b.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 100 },
+        { name: 'c.py', path: '/ws/src/c.py', langName: 'Python', langColor: '#3572a5', sizeBytes: 100 },
+      ],
+    });
+    const result = ft([dir], { activeFilters: new Set(['TypeScript']) });
+    expect(result.roots[0].totalFiles).toBe(2);
+    expect(result.roots[0].sizeBytes).toBe(200);
+    expect(result.roots[0].stats).toEqual([
+      { name: 'TypeScript', color: '#3178c6', count: 2 },
+    ]);
   });
 });
 
@@ -155,8 +218,6 @@ describe('filterTree totalVisibleMatches', () => {
       activeFilters: opts.activeFilters ?? new Set(),
       searchResults: opts.searchResults ?? null,
       searchAncestorPaths: opts.searchAncestorPaths ?? null,
-      fileFilterFn: opts.fileFilterFn ?? null,
-      fileFilterPattern: null,
       searchResultsVersion: opts.searchResultsVersion ?? Date.now(),
     });
   }
@@ -189,32 +250,6 @@ describe('filterTree totalVisibleMatches', () => {
     expect(result.totalVisibleFiles).toBe(2);
   });
 
-  it('excludes matches from files hidden by file filter', () => {
-    const dir = makeDir('src', 'src', {
-      files: [
-        { name: 'api.ts', path: '/ws/src/api.ts', langName: 'TypeScript' },
-        { name: 'utils.ts', path: '/ws/src/utils.ts', langName: 'TypeScript' },
-      ],
-    });
-    const searchResults = new Map([
-      ['/ws/src/api.ts', [
-        { line: 1, column: 0, matchLength: 3, lineText: 'import foo' },
-      ]],
-      ['/ws/src/utils.ts', [
-        { line: 1, column: 0, matchLength: 3, lineText: 'import bar' },
-        { line: 2, column: 0, matchLength: 3, lineText: 'import baz' },
-      ]],
-    ]);
-    // File filter "api" hides utils.ts, so only 1 match should be counted
-    const result = ft([dir], {
-      searchResults,
-      searchAncestorPaths: new Set(['src', '']),
-      fileFilterFn: (p: string) => /api/.test(p),
-    });
-    expect(result.totalVisibleMatches).toBe(1);
-    expect(result.totalVisibleFiles).toBe(1);
-  });
-
   it('excludes context lines from match count', () => {
     const dir = makeDir('src', 'src', {
       files: [{ name: 'a.ts', path: '/ws/src/a.ts', langName: 'TypeScript' }],
@@ -238,8 +273,6 @@ describe('filterTree totalVisibleMatches with language filter', () => {
       activeFilters: opts.activeFilters ?? new Set(),
       searchResults: opts.searchResults ?? null,
       searchAncestorPaths: opts.searchAncestorPaths ?? null,
-      fileFilterFn: opts.fileFilterFn ?? null,
-      fileFilterPattern: null,
       searchResultsVersion: opts.searchResultsVersion ?? Date.now(),
     });
   }
@@ -271,10 +304,8 @@ describe('filterTree totalVisibleMatches with language filter', () => {
   });
 });
 
-
-
-// --- file filter: search bar regex toggle ---
-describe('search bar file filter', () => {
+// --- search bar: glob-only file filter ---
+describe('search bar file filter (glob)', () => {
   function makeSearchBarForFilter(standalone: boolean) {
     const state = createState();
     state.render = vi.fn();
@@ -287,113 +318,63 @@ describe('search bar file filter', () => {
     return { bar, state, vscode };
   }
 
-  it('has a regex toggle button inside the filter container', () => {
+  it('has no regex toggle button inside the filter container', () => {
     const { bar } = makeSearchBarForFilter(false);
     const container = bar.el.querySelector('.search-filter-container');
     const regexBtn = container.querySelector('[aria-label="Use Regular Expression"]');
-    expect(regexBtn).not.toBeNull();
+    expect(regexBtn).toBeNull();
   });
 
-  it('regex mode is active by default', () => {
-    const { bar } = makeSearchBarForFilter(false);
-    const container = bar.el.querySelector('.search-filter-container');
-    const regexBtn = container.querySelector('[aria-label="Use Regular Expression"]');
-    expect(regexBtn.classList.contains('active')).toBe(true);
-  });
-
-  it('sets fileFilterFn and rerenders with regex by default (no toggle needed)', () => {
-    vi.useFakeTimers();
-    const { bar, state } = makeSearchBarForFilter(false);
-    const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
-    includeInput.value = 'api|auth';
-    includeInput.dispatchEvent(new Event('input'));
-    vi.advanceTimersByTime(300);
-    expect(state.fileFilterFn).toBeInstanceOf(Function);
-    expect(state.fileFilterFn!('apiHandler.ts')).toBe(true);
-    expect(state.fileFilterFn!('authService.js')).toBe(true);
-    expect(state.fileFilterFn!('utils.ts')).toBe(false);
-    vi.useRealTimers();
-  });
-
-  it('posts searchFiles with glob as-is when regex is toggled off', () => {
+  it('posts searchFiles with glob when include has a pattern and no content search', () => {
     vi.useFakeTimers();
     const { bar, vscode } = makeSearchBarForFilter(false);
-    // Deactivate regex toggle (on by default)
-    const container = bar.el.querySelector('.search-filter-container');
-    const regexBtn = container.querySelector('[aria-label="Use Regular Expression"]');
-    regexBtn.click();
     const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
     includeInput.value = '*.ts';
     includeInput.dispatchEvent(new Event('input'));
     vi.advanceTimersByTime(300);
-    expect(vscode.postMessage).toHaveBeenCalledWith({ command: 'searchFiles', glob: '*.ts' });
+    expect(vscode.postMessage).toHaveBeenCalledWith({ command: 'searchFiles', glob: '*.ts', exclude: undefined });
     vi.useRealTimers();
   });
 
-  it('passes glob to ripgrep without normalization (no *text* wrapping)', () => {
+  it('passes glob to ripgrep without normalization', () => {
     vi.useFakeTimers();
     const { bar, vscode } = makeSearchBarForFilter(false);
-    // Deactivate regex toggle
-    const container = bar.el.querySelector('.search-filter-container');
-    const regexBtn = container.querySelector('[aria-label="Use Regular Expression"]');
-    regexBtn.click();
     const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
     includeInput.value = 'api';
     includeInput.dispatchEvent(new Event('input'));
     vi.advanceTimersByTime(300);
-    // Should pass 'api' as-is, not '*api*'
-    expect(vscode.postMessage).toHaveBeenCalledWith({ command: 'searchFiles', glob: 'api' });
+    expect(vscode.postMessage).toHaveBeenCalledWith({ command: 'searchFiles', glob: 'api', exclude: undefined });
     vi.useRealTimers();
   });
 
-  it('clears fileFilterFn on filter clear button', () => {
+  it('sets fileFilterActive and clears on filter clear button', () => {
     vi.useFakeTimers();
     const { bar, state } = makeSearchBarForFilter(false);
     const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
-    includeInput.value = 'api';
+    includeInput.value = '*.ts';
     includeInput.dispatchEvent(new Event('input'));
     vi.advanceTimersByTime(300);
-    expect(state.fileFilterFn).toBeInstanceOf(Function);
+    expect(state.fileFilterActive).toBe(true);
     // Clear via the filter's own clear button
     const filterClearBtn = bar.el.querySelector('.search-filter-container .search-toggle[title="Clear File Filter"]');
     filterClearBtn.click();
-    expect(state.fileFilterFn).toBeNull();
+    expect(state.fileFilterActive).toBe(false);
     vi.useRealTimers();
   });
 
-  it('does not send glob to ripgrep when regex is on with content search', () => {
-    vi.useFakeTimers();
-    const { bar, vscode, state } = makeSearchBarForFilter(false);
-    // Regex is on by default — type in both inputs
-    const mainInput = bar.el.querySelector('.search-main-input') as HTMLInputElement;
-    const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
-    includeInput.value = 'api|auth';
-    mainInput.value = 'fetchUser';
-    mainInput.dispatchEvent(new Event('input'));
-    vi.advanceTimersByTime(300);
-    // Should send content search WITHOUT include (regex is client-side)
-    expect(vscode.postMessage).toHaveBeenCalledWith(expect.objectContaining({
-      command: 'search',
-      pattern: 'fetchUser',
-      include: undefined,
-    }));
-    expect(state.fileFilterFn).toBeInstanceOf(Function);
-    vi.useRealTimers();
-  });
-
-  it('main input always does content search even with glob chars', () => {
+  it('passes include glob to ripgrep with content search', () => {
     vi.useFakeTimers();
     const { bar, vscode } = makeSearchBarForFilter(false);
     const mainInput = bar.el.querySelector('.search-main-input') as HTMLInputElement;
-    // Disable regex so glob-like patterns are sent as literal text to ripgrep.
-    const regexBtn = bar.el.querySelector('[aria-label="Use Regular Expression"]') as HTMLButtonElement;
-    regexBtn.click(); // toggle regex off (on by default)
-    mainInput.value = '*.ts';
+    const includeInput = bar.el.querySelector('.search-filter-input') as HTMLInputElement;
+    includeInput.value = '*.ts';
+    mainInput.value = 'fetchUser';
     mainInput.dispatchEvent(new Event('input'));
     vi.advanceTimersByTime(300);
     expect(vscode.postMessage).toHaveBeenCalledWith(expect.objectContaining({
       command: 'search',
-      pattern: '*.ts',
+      pattern: 'fetchUser',
+      include: '*.ts',
     }));
     vi.useRealTimers();
   });
@@ -403,7 +384,6 @@ describe('search bar file filter', () => {
     const { bar, vscode } = makeSearchBarForFilter(false);
     const mainInput = bar.el.querySelector('.search-main-input') as HTMLInputElement;
     const inputContainer = bar.el.querySelector('.search-input-container') as HTMLElement;
-    // Regex is on by default; type an invalid regex
     mainInput.value = '(unclosed';
     mainInput.dispatchEvent(new Event('input'));
     vi.advanceTimersByTime(300);
@@ -428,27 +408,82 @@ describe('search bar file filter', () => {
     vi.useRealTimers();
   });
 
-  it('clears regex-error when regex mode is toggled off', () => {
-    vi.useFakeTimers();
+  it('content search regex is enabled by default', () => {
     const { bar } = makeSearchBarForFilter(false);
-    const mainInput = bar.el.querySelector('.search-main-input') as HTMLInputElement;
-    const inputContainer = bar.el.querySelector('.search-input-container') as HTMLElement;
-    // Regex is on by default — enter invalid regex
-    mainInput.value = '[invalid';
-    mainInput.dispatchEvent(new Event('input'));
+    const regexBtn = bar.el.querySelector('.search-input-container [aria-label="Use Regular Expression"]');
+    expect(regexBtn!.classList.contains('active')).toBe(true);
+  });
+
+  it('has a details toggle button', () => {
+    const { bar } = makeSearchBarForFilter(false);
+    const toggle = bar.el.querySelector('[aria-label="Toggle Search Details"]');
+    expect(toggle).not.toBeNull();
+  });
+
+  it('toggles details section (include + exclude) visibility', () => {
+    const { bar } = makeSearchBarForFilter(false);
+    const toggle = bar.el.querySelector('[aria-label="Toggle Search Details"]') as HTMLButtonElement;
+    const detailsSection = bar.el.querySelector('.search-details') as HTMLElement;
+    expect(detailsSection.style.display).toBe('none');
+    toggle.click();
+    expect(detailsSection.style.display).toBe('');
+    toggle.click();
+    expect(detailsSection.style.display).toBe('none');
+  });
+
+  it('passes exclude glob to searchFiles', () => {
+    vi.useFakeTimers();
+    const { bar, vscode } = makeSearchBarForFilter(false);
+    // Open details
+    const toggle = bar.el.querySelector('[aria-label="Toggle Search Details"]') as HTMLButtonElement;
+    toggle.click();
+    const includeInput = bar.el.querySelector('[aria-label="files to include"]') as HTMLInputElement;
+    const excludeInput = bar.el.querySelector('[aria-label="files to exclude"]') as HTMLInputElement;
+    includeInput.value = '*.ts';
+    excludeInput.value = 'test/**';
+    includeInput.dispatchEvent(new Event('input'));
     vi.advanceTimersByTime(300);
-    expect(inputContainer.classList.contains('regex-error')).toBe(true);
-    // Toggle regex off — error should clear
-    const regexBtns = bar.el.querySelectorAll('[aria-label="Use Regular Expression"]');
-    (regexBtns[0] as HTMLButtonElement).click();
-    expect(inputContainer.classList.contains('regex-error')).toBe(false);
+    expect(vscode.postMessage).toHaveBeenCalledWith({
+      command: 'searchFiles',
+      glob: '*.ts',
+      exclude: 'test/**',
+    });
     vi.useRealTimers();
   });
 
-  it('content search regex is enabled by default', () => {
-    const { bar } = makeSearchBarForFilter(false);
-    const regexBtns = bar.el.querySelectorAll('[aria-label="Use Regular Expression"]');
-    // First regex button is for content search, should be active by default
-    expect(regexBtns[0].classList.contains('active')).toBe(true);
+  it('passes exclude glob to content search', () => {
+    vi.useFakeTimers();
+    const { bar, vscode } = makeSearchBarForFilter(false);
+    const toggle = bar.el.querySelector('[aria-label="Toggle Search Details"]') as HTMLButtonElement;
+    toggle.click();
+    const mainInput = bar.el.querySelector('.search-main-input') as HTMLInputElement;
+    const excludeInput = bar.el.querySelector('[aria-label="files to exclude"]') as HTMLInputElement;
+    mainInput.value = 'import';
+    excludeInput.value = 'node_modules';
+    mainInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    expect(vscode.postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      command: 'search',
+      pattern: 'import',
+      exclude: 'node_modules',
+    }));
+    vi.useRealTimers();
+  });
+
+  it('sends exclude-only filter with wildcard include', () => {
+    vi.useFakeTimers();
+    const { bar, vscode } = makeSearchBarForFilter(false);
+    const toggle = bar.el.querySelector('[aria-label="Toggle Search Details"]') as HTMLButtonElement;
+    toggle.click();
+    const excludeInput = bar.el.querySelector('[aria-label="files to exclude"]') as HTMLInputElement;
+    excludeInput.value = 'test/**';
+    excludeInput.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    expect(vscode.postMessage).toHaveBeenCalledWith({
+      command: 'searchFiles',
+      glob: '*',
+      exclude: 'test/**',
+    });
+    vi.useRealTimers();
   });
 });

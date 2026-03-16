@@ -24,6 +24,7 @@ export interface SearchOptions {
   caseSensitive?: boolean;
   useRegex?: boolean;
   include?: string;
+  exclude?: string;
   /** Number of context lines to show before and after each match (-C N passed to ripgrep). */
   contextLines?: number;
   /** Called with partial results as they arrive. Batches are flushed every BATCH_FLUSH_FILES
@@ -94,7 +95,12 @@ export class SearchService {
     const args: string[] = ['--json', '--max-filesize', '1M', '-e', pattern];
     if (!options.caseSensitive) { args.push('-i'); }
     if (!options.useRegex) { args.push('--fixed-strings'); }
-    if (options.include) { args.push('--iglob', options.include); }
+    if (options.include) {
+      for (const g of options.include.split(',')) { const t = g.trim(); if (t) args.push('--iglob', t); }
+    }
+    if (options.exclude) {
+      for (const g of options.exclude.split(',')) { const t = g.trim(); if (t) args.push('--iglob', '!' + t); }
+    }
     if (options.contextLines && options.contextLines > 0) { args.push('-C', String(options.contextLines)); }
     args.push(...rootPaths);
 
@@ -253,12 +259,19 @@ export class SearchService {
 
   searchFiles(
     glob: string,
-    rootPaths: string[]
+    rootPaths: string[],
+    exclude?: string,
   ): { result: Promise<SearchResult>; cancel: () => void } {
     this.cancel();
     const generation = this.generation;
 
-    const args: string[] = ['--files', '--iglob', glob, ...rootPaths];
+    const args: string[] = ['--files'];
+    // Support comma-separated include globs
+    for (const g of glob.split(',')) { const t = g.trim(); if (t) args.push('--iglob', t); }
+    if (exclude) {
+      for (const g of exclude.split(',')) { const t = g.trim(); if (t) args.push('--iglob', '!' + t); }
+    }
+    args.push(...rootPaths);
     const proc = child_process.spawn(this.rgPath, args);
     this.currentProcess = proc;
 

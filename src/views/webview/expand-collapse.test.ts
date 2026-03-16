@@ -485,7 +485,7 @@ describe('tieredExpandAll with filters', () => {
   it('tier 1: recognizes implicitly expanded top-level and expands children', () => {
     const { ws } = makeWorkspace();
     const state = createState();
-    state.fileFilterFn = () => true; // filter active, no explicit expanded entries
+    state.fileFilterActive = true; // filter active, no explicit expanded entries
     // All top-level implicitly expanded → tier 2: deep expand
     tieredExpandAll(state, [ws]);
     expect(state.expanded.get('/ws/a/x')).toBe(true);
@@ -495,7 +495,7 @@ describe('tieredExpandAll with filters', () => {
   it('tier 1: expands explicitly collapsed top-level items back', () => {
     const { ws } = makeWorkspace();
     const state = createState();
-    state.fileFilterFn = () => true;
+    state.fileFilterActive = true;
     state.expanded.set('/ws/a', false); // explicitly collapsed during filter
     // Not all top-level expanded → tier 1
     tieredExpandAll(state, [ws]);

@@ -209,7 +209,7 @@ export function handleSearchMessage(
       message.pattern,
       rootPaths,
       {
-        caseSensitive: message.caseSensitive, useRegex: message.useRegex, include: message.include,
+        caseSensitive: message.caseSensitive, useRegex: message.useRegex, include: message.include, exclude: message.exclude,
         contextLines: message.contextLines,
         onBatch: (batch, totals) => {
           // Send plain-text batch immediately — no waiting for syntax highlighting.
@@ -246,7 +246,7 @@ export function handleSearchMessage(
   if (message.command === 'searchFiles' && message.glob !== undefined) {
     postMessage({ type: 'searchProgress', rootPaths: wsRoots });
     if (hasRipgrep) {
-      const { result } = searchService.searchFiles(message.glob, rootPaths);
+      const { result } = searchService.searchFiles(message.glob, rootPaths, message.exclude);
       result.then((r) => {
         const matchesObj: Record<string, []> = {};
         for (const p of r.matches.keys()) { matchesObj[p] = []; }

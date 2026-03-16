@@ -557,13 +557,14 @@ describe('flattenTree — filters', () => {
     expect(truncRows.length).toBe(0);
   });
 
-  it('file filter (regex) active → only matching files', () => {
+  it('search results filter active → only matching files', () => {
     const tsFile = makeFile('app.ts', { path: '/ws/app.ts' });
     const mdFile = makeFile('readme.md', { path: '/ws/readme.md' });
     const root = makeDir('src', { files: [tsFile, mdFile], totalFiles: 2 });
 
     const state = makeState();
-    state.fileFilterFn = (name: string) => name.endsWith('.ts');
+    state.searchResults = new Map([['/ws/app.ts', []]]) as any;
+    state.searchAncestorPaths = new Set(['src', '']);
     state.searchResultsVersion = 1;
     const result = flattenTree(state, [root], { showRootNode: true });
 

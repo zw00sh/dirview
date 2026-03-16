@@ -54,8 +54,8 @@ export type WebviewToBackendMessage =
   | { command: 'toggleIgnored'; show: boolean }
   | { command: 'toggleTruncation'; enabled: boolean }
   | { command: 'toggleStickyHeaders'; enabled: boolean }
-  | { command: 'search'; pattern: string; caseSensitive?: boolean; useRegex?: boolean; include?: string; contextLines?: number }
-  | { command: 'searchFiles'; glob: string }
+  | { command: 'search'; pattern: string; caseSensitive?: boolean; useRegex?: boolean; include?: string; exclude?: string; contextLines?: number }
+  | { command: 'searchFiles'; glob: string; exclude?: string }
   | { command: 'clearSearch' };
 
 // ── VsCode API ────────────────────────────────────────────────────────────────
@@ -105,10 +105,9 @@ export interface WebviewState extends CoreWebviewState {
   searchTruncated: boolean;
   searchFileCount: number;
   searchMatchCount: number;
-  fileFilterFn: ((relativePath: string) => boolean) | null;
-  /** Source pattern string for the file filter — used for cache key comparison
-   *  since fileFilterFn is a new closure on every search. */
-  fileFilterPattern: string | null;
+  /** Whether a glob file filter (include or exclude) is active. Used to track
+   *  that filtering is happening even before ripgrep results arrive. */
+  fileFilterActive: boolean;
   /** Precomputed set of directory paths that are ancestors of search result files.
    *  Enables O(1) dirMatchesSearch checks instead of recursive tree walks. */
   searchAncestorPaths: Set<string> | null;

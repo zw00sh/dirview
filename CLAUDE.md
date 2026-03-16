@@ -248,7 +248,7 @@ Note: `test-repos/` contains sample repositories used for visual testing of the 
 | Toggle Ignored button | Posts `toggleIgnored` → host dispatches `dirview.toggleIgnored[Off]` → `doScan()` | Full rescan. Tab updates eye icon on `update` response. |
 | Toggle Truncation button | Posts `toggleTruncation` → host computes threshold → posts `updateTruncation` back | Re-renders with new threshold. Updates fold/unfold icon. |
 | Expand/Collapse All button | Local only: `tieredExpandAll`/`tieredCollapseAll` + `render()` | 3-tier expand/collapse (same as per-dir hover buttons, applied at workspace root level). On collapse, clears truncation/empty-group state. |
-| Search/file filter | Local regex or glob filter applied client-side. Dynamic debounce based on tree size. | Filters tree to matching files. Status bar shows "N of M files". Clears expand state so matching dirs auto-expand. Regex mode is default; glob mode available via toggle. |
+| Files to include/exclude | Glob filter fields (comma-separated patterns) sent to ripgrep. "files to exclude" hidden behind "..." toggle. Dynamic debounce based on tree size. | Filters tree to matching files. Status bar shows "N of M files". Clears expand state so matching dirs auto-expand. |
 | Legend language click | Toggles language in `activeFilters`, posts `filter` to host (no-op), re-renders locally | When filters activate: clears expand state (all dirs auto-expand to show matches). Only matching files/dirs shown. Legend items get active/inactive styling. |
 | Legend header click | Local toggle | Shows/hides the legend items, rotates chevron. |
 
@@ -276,7 +276,7 @@ Note: `test-repos/` contains sample repositories used for visual testing of the 
 - **Virtual scrolling**: Tab view uses virtual scrolling (renders only visible rows + buffer) for large tree performance. Sidebar does not use virtual scrolling.
 - **Pre-render filtering**: `filter.ts` produces a shallow-cloned tree with only visible nodes before rendering, so the renderer has no filtering logic.
 - **Language filter behavior**: When filters activate, `expanded` map is cleared so all dirs auto-expand (any dir matching the filter shows its contents). `dirMatchesFilter` checks if any of a dir's stats match an active filter.
-- **File filter (search bar)**: Tab supports regex and glob file filter modes. Regex is the default. Uses hybrid search: resolves VSCode's bundled ripgrep for content search, falls back to `findFiles` API. File count status shows filtered vs total counts.
+- **File filter (search bar)**: Tab supports "files to include" and "files to exclude" glob fields (comma-separated). Exclude is hidden behind a "..." toggle matching VS Code's native search details. All glob filtering is handled by ripgrep (`--iglob` / `--iglob !`). Falls back to `findFiles` API when ripgrep is unavailable. File count status shows filtered vs total counts.
 - **Empty states**: Centered `emptyState()` component with icons for loading, no results, and error states across all views.
 - **Context menus**: Dir and file rows set `data-vscode-context` for right-click menus (copy path, reveal in explorer, open file, open in terminal, copy line text).
 

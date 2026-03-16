@@ -8,8 +8,6 @@ export interface FilterInputs {
   activeFilters: Set<string>;
   searchResults: Map<string, SearchMatch[]> | null;
   searchAncestorPaths: Set<string> | null;
-  fileFilterFn: ((relativePath: string) => boolean) | null;
-  fileFilterPattern: string | null;
   searchResultsVersion: number;
 }
 
@@ -26,7 +24,6 @@ export interface FilteredTree {
 
 let cachedRoots: DirNode[] | null = null;
 let cachedActiveFilters: Set<string> | null = null;
-let cachedFileFilterPattern: string | null = null;
 let cachedVersion = -1;
 let cachedResult: FilteredTree | null = null;
 
@@ -35,7 +32,6 @@ function cacheValid(roots: DirNode[], inputs: FilterInputs): boolean {
     cachedResult !== null &&
     cachedRoots === roots &&
     cachedActiveFilters === inputs.activeFilters &&
-    cachedFileFilterPattern === inputs.fileFilterPattern &&
     cachedVersion === inputs.searchResultsVersion
   );
 }
@@ -52,9 +48,9 @@ function cacheValid(roots: DirNode[], inputs: FilterInputs): boolean {
  * - stats/totalFiles/sizeBytes/path/name: unchanged (shared by reference)
  */
 export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree {
-  const { activeFilters, searchResults, searchAncestorPaths, fileFilterFn } = inputs;
+  const { activeFilters, searchResults, searchAncestorPaths } = inputs;
 
-  const isFiltered = activeFilters.size > 0 || searchResults !== null || fileFilterFn !== null;
+  const isFiltered = activeFilters.size > 0 || searchResults !== null;
 
   // No filters active — return originals
   if (!isFiltered) {
@@ -63,7 +59,6 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
     cachedResult = { roots, isFiltered: false, totalVisibleFiles: total, totalVisibleMatches: 0 };
     cachedRoots = roots;
     cachedActiveFilters = activeFilters;
-    cachedFileFilterPattern = inputs.fileFilterPattern;
     cachedVersion = inputs.searchResultsVersion;
     return cachedResult;
   }
@@ -76,21 +71,45 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
   // Build file predicate
   const hasLangFilter = activeFilters.size > 0;
   const hasSearchFilter = searchResults !== null;
-  const hasFileFilter = fileFilterFn !== null;
 
-  function fileVisible(f: FileNode, parentPath: string): boolean {
+  function fileVisible(f: FileNode): boolean {
     if (hasLangFilter && !activeFilters.has(f.langName)) return false;
     if (hasSearchFilter && !searchResults!.has(f.path)) return false;
-    if (hasFileFilter) {
-      const relPath = parentPath ? parentPath + '/' + f.name : f.name;
-      if (!fileFilterFn!(relPath)) return false;
-    }
     return true;
   }
 
-  // Fast path: when only search is active (no lang/file filter), use ancestor
+  // Fast path: when only search is active (no lang filter), use ancestor
   // path index for O(1) directory checks instead of recursive tree walks.
-  const useAncestorIndex = hasSearchFilter && !hasLangFilter && !hasFileFilter && searchAncestorPaths !== null;
+  const useAncestorIndex = hasSearchFilter && !hasLangFilter && searchAncestorPaths !== null;
+
+  // Recompute stats/totalFiles/sizeBytes on a filtered clone from its
+  // filtered files + already-recomputed children (bottom-up).
+  function recomputeNodeStats(clone: DirNode): void {
+    const counts = new Map<string, { color: string; count: number }>();
+    let totalFiles = 0;
+    let sizeBytes = 0;
+
+    for (const f of clone.files || []) {
+      const ex = counts.get(f.langName);
+      if (ex) { ex.count++; } else { counts.set(f.langName, { color: f.langColor, count: 1 }); }
+      totalFiles++;
+      sizeBytes += f.sizeBytes || 0;
+    }
+    for (const c of clone.children) {
+      for (const s of c.stats) {
+        const ex = counts.get(s.name);
+        if (ex) { ex.count += s.count; } else { counts.set(s.name, { color: s.color, count: s.count }); }
+      }
+      totalFiles += c.totalFiles;
+      sizeBytes += c.sizeBytes;
+    }
+
+    clone.stats = Array.from(counts.entries())
+      .map(([name, { color, count }]) => ({ name, color, count }))
+      .sort((a, b) => b.count - a.count);
+    clone.totalFiles = totalFiles;
+    clone.sizeBytes = sizeBytes;
+  }
 
   // Memoize per-node results for this filterTree call
   const memo = new WeakMap<DirNode, DirNode | null>();
@@ -102,19 +121,20 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
     // Fast path: ancestor index says this dir has no matching descendants
     if (useAncestorIndex && !searchAncestorPaths!.has(node.path)) {
       // Still need to check if this node has direct file matches
-      const filteredFiles = (node.files || []).filter(f => fileVisible(f, node.path));
+      const filteredFiles = (node.files || []).filter(f => fileVisible(f));
       if (filteredFiles.length === 0) {
         memo.set(node, null);
         return null;
       }
       // Has file matches but no child matches — shallow clone with no children
       const clone = { ...node, children: [], files: filteredFiles };
+      recomputeNodeStats(clone);
       memo.set(node, clone);
       return clone;
     }
 
     // Filter files
-    const filteredFiles = (node.files || []).filter(f => fileVisible(f, node.path));
+    const filteredFiles = (node.files || []).filter(f => fileVisible(f));
 
     // Filter children recursively
     const filteredChildren: DirNode[] = [];
@@ -129,8 +149,9 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
       return null;
     }
 
-    // Shallow clone with filtered arrays
+    // Shallow clone with filtered arrays and recomputed stats
     const clone = { ...node, children: filteredChildren, files: filteredFiles };
+    recomputeNodeStats(clone);
     memo.set(node, clone);
     return clone;
   }
@@ -161,7 +182,6 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
   cachedResult = result;
   cachedRoots = roots;
   cachedActiveFilters = activeFilters;
-  cachedFileFilterPattern = inputs.fileFilterPattern;
   cachedVersion = inputs.searchResultsVersion;
 
   return result;

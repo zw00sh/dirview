@@ -93,8 +93,6 @@ export function renderTree(
     activeFilters: state.activeFilters,
     searchResults: state.searchResults,
     searchAncestorPaths: state.searchAncestorPaths,
-    fileFilterFn: state.fileFilterFn,
-    fileFilterPattern: state.fileFilterPattern,
     searchResultsVersion: state.searchResultsVersion,
   });
   // Swap in filtered roots for this render pass. The original roots stay in state.lastRoots

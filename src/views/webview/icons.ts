@@ -29,6 +29,8 @@ export const SVG_INFO = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="
 // Search bar icons
 export const SVG_REGEX = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><text x="1" y="13" font-family="monospace" font-size="12" fill="currentColor">.*</text></svg>';
 export const SVG_CLOSE = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z"/></svg>';
+// Search details toggle icon — matches codicon search-details glyph geometry exactly
+export const SVG_ELLIPSIS = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><circle cx="3.75" cy="7.75" r="1.13"/><circle cx="7.75" cy="7.75" r="1.13"/><circle cx="11.88" cy="7.75" r="1.13"/></svg>';
 
 // Context lines toggle icon: VS Code's list-selection codicon (same icon used by
 // the native Search Editor's "Show Context Lines" toggle — search-show-context = R.listSelection).

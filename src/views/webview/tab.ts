@@ -247,6 +247,8 @@ function renderFlatRow(r: Renderer, row: FlatRow): HTMLElement {
 }
 
 let currentFlatRows: FlatRow[] = [];
+/** Filtered roots from the last render — used for legend stats that reflect the filtered subset. */
+let lastFilteredRoots: DirNode[] | null = null;
 
 const scroller = createVirtualScroller({
   container: root,
@@ -342,9 +344,7 @@ legendDisplayToggle.addEventListener('click', (e: MouseEvent) => {
   legendDisplayToggle.innerHTML = tabUI.legendShowPct ? SVG_HASH : SVG_PCT;
   legendDisplayToggle.title = tabUI.legendShowPct ? 'Show counts' : 'Show percentages';
   legendDisplayToggle.setAttribute('aria-label', legendDisplayToggle.title);
-  if (state.lastRoots) {
-    updateLegend(computeStats(state.lastRoots));
-  }
+  updateLegend();
 });
 
 // ── Legend ──────────────────────────────────────────────────────────────
@@ -376,21 +376,34 @@ function clearAllFilters() {
 // After a language filter change, the search status counts must be refreshed
 // post-render since filterTree recomputes totalVisibleFiles/Matches during render.
 function schedulePostFilterStatusUpdate() {
-  if (!state.searchResults && !state.fileFilterFn) { return; }
+  if (!state.searchResults && !state.fileFilterActive) { return; }
   state.onAfterRender = () => {
     state.onAfterRender = null;
     searchBar.updateFilteredStatus();
   };
 }
 
-function updateLegend(stats: LangStat[]) {
-  if (!stats || stats.length === 0) {
+/** Compute legend stats: when language filters are active, merge filtered counts
+ *  with the full original language list so deselected languages remain clickable. */
+function legendStats(): LangStat[] {
+  if (!lastFilteredRoots || !state.lastRoots) { return []; }
+  const filtered = computeStats(lastFilteredRoots);
+  if (state.activeFilters.size === 0) { return filtered; }
+  // Merge: keep every language from the original set so users can toggle any language.
+  const original = computeStats(state.lastRoots);
+  const filteredMap = new Map(filtered.map(s => [s.name, s]));
+  return original.map(s => filteredMap.get(s.name) ?? { ...s, count: 0, pct: '0' });
+}
+
+function updateLegend(stats?: LangStat[]) {
+  const s = stats ?? legendStats();
+  if (!s || s.length === 0) {
     legendSection.style.display = 'none';
     return;
   }
   legendSection.style.display = '';
   legendEl.style.display = tabUI.legendCollapsed ? 'none' : '';
-  renderLegend(legendEl, stats, state.activeFilters, toggleFilter, tabUI.legendShowPct);
+  renderLegend(legendEl, s, state.activeFilters, toggleFilter, tabUI.legendShowPct);
 }
 
 // ── Tree ────────────────────────────────────────────────────────────────
@@ -404,7 +417,7 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   sortBtn.setAttribute('aria-label', sortBtn.title);
   sortBtn.innerHTML = ({ files: SVG_SORT_FILES, name: SVG_SORT_NAME, size: SVG_SORT_SIZE } as Record<SortMode, string>)[state.currentSortMode] || SVG_SORT_FILES;
 
-  updateLegend(roots ? computeStats(state.lastRoots!) : []);
+  // Legend stats are updated after flattenTree (below) so they reflect filtered roots.
   searchBar.updateFilterWarning(state.activeFilters.size);
 
   root.querySelector('.empty-state')?.remove();
@@ -413,6 +426,8 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
 
   if (!roots || roots.length === 0) {
     currentFlatRows = [];
+    lastFilteredRoots = null;
+    updateLegend([]);
     scroller.update([], 0);
     if (!root.querySelector('.empty-state')) {
       root.appendChild(emptyState('noWorkspace'));
@@ -426,19 +441,21 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   renderer.beforeRender();
 
   // Set _isFiltered on state so the renderer's renderDirRow can read it for chevron/expand logic.
-  state._isFiltered = state.activeFilters.size > 0 || state.searchResults !== null || state.fileFilterFn !== null;
+  state._isFiltered = state.activeFilters.size > 0 || state.searchResults !== null || state.fileFilterActive;
 
   // Build flat rows and update virtual scroller
-  const { flatRows, totalHeight, totalVisibleFiles, totalVisibleMatches } = flattenTree(state, roots, {
+  const { flatRows, totalHeight, totalVisibleFiles, totalVisibleMatches, filteredRoots } = flattenTree(state, roots, {
     showRootNode: true,
     clientWidth: root.clientWidth || 600,
   });
   state.lastFilteredFileCount = totalVisibleFiles;
   state.lastFilteredMatchCount = totalVisibleMatches;
+  lastFilteredRoots = filteredRoots;
+  updateLegend();
   currentFlatRows = flatRows;
 
   // Check if filtered tree is empty (no matching files/dirs)
-  const isFiltered = state.activeFilters.size > 0 || state.searchResults !== null || state.fileFilterFn !== null;
+  const isFiltered = state.activeFilters.size > 0 || state.searchResults !== null || state.fileFilterActive;
   const filteredEmpty = isFiltered && flatRows.length === 0;
 
   scroller.setTreeClass(state.currentSortMode === 'size' ? 'sort-size' : '');

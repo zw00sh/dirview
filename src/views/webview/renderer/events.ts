@@ -74,7 +74,7 @@ export function setupDelegatedEvents(ctx: RendererContext): void {
         const entry = nodeMap.get(path!);
         if (!entry) { return; }
         const node = entry.node as DirNode;
-        const isFiltered = state.activeFilters.size > 0 || !!state.searchResults || !!state.fileFilterFn;
+        const isFiltered = state.activeFilters.size > 0 || !!state.searchResults || state.fileFilterActive;
         const isExp = state.expanded.get(node.path) ?? isFiltered;
         if (!isExp) {
           state.expanded.set(node.path, true);
@@ -99,7 +99,7 @@ export function setupDelegatedEvents(ctx: RendererContext): void {
         const entry = nodeMap.get(path!);
         if (!entry) { return; }
         const node = entry.node as DirNode;
-        const isFiltered = state.activeFilters.size > 0 || !!state.searchResults || !!state.fileFilterFn;
+        const isFiltered = state.activeFilters.size > 0 || !!state.searchResults || state.fileFilterActive;
         if (!(state.expanded.get(node.path) ?? isFiltered)) { return; }
         const anyChildExpanded = node.children.some((child: DirNode) => state.expanded.get(compactedPath(child)) ?? isFiltered);
         if (anyChildExpanded) {
@@ -195,7 +195,7 @@ export function setupDelegatedEvents(ctx: RendererContext): void {
 
       // Account for filtered/search mode where dirs without an explicit expanded
       // entry are implicitly expanded (matching the renderer's isExpanded logic).
-      const isFiltered = state.activeFilters.size > 0 || !!state.searchResults || !!state.fileFilterFn;
+      const isFiltered = state.activeFilters.size > 0 || !!state.searchResults || state.fileFilterActive;
       const currentlyExpanded = state.expanded.get(path) ?? isFiltered;
       const nowExpanded = !currentlyExpanded;
       state.expanded.set(path, nowExpanded);

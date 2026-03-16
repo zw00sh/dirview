@@ -15,8 +15,6 @@ describe('filterTree search', () => {
       activeFilters: opts.activeFilters ?? new Set(),
       searchResults: opts.searchResults ?? null,
       searchAncestorPaths: opts.searchAncestorPaths ?? null,
-      fileFilterFn: opts.fileFilterFn ?? null,
-      fileFilterPattern: null,
       searchResultsVersion: opts.searchResultsVersion ?? 0,
     });
   }
@@ -368,8 +366,6 @@ describe('search rendering integration', () => {
       activeFilters: state.activeFilters,
       searchResults: state.searchResults,
       searchAncestorPaths: null,
-      fileFilterFn: null,
-      fileFilterPattern: null,
       searchResultsVersion: 0,
     });
     const renderer = makeRenderer(state);

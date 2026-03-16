@@ -61,6 +61,7 @@ Toggling the ignored state triggers a full rescan affecting all views.
 - Bar width is proportional to `metric / maxMetric`, where `maxMetric` is the largest value among non-root nodes.
 - The **tab** uses square-root scaling (`sqrt(pct) * maxBarWidth`); the **sidebar** uses linear scaling.
 - Root nodes are excluded from maxMetric calculation so they always render at full width.
+- When a filter is active (file filter, content search, or language filter), bars, file counts, and legend counts recalculate to reflect only the filtered files. Directory `stats`, `totalFiles`, and `sizeBytes` are recomputed bottom-up from the filtered tree.
 
 ### File Rows
 
@@ -169,6 +170,7 @@ Collapse All also clears truncation-expanded and empty-group-expanded state. Whe
 - Clicking a language in the tab legend toggles a view-local filter.
 - When filters activate, the expand state is cleared and all directories auto-expand to show matching files.
 - Only files and directories matching at least one active filter are displayed.
+- Legend counts and percentages update to reflect the currently filtered file set (e.g., when a file filter is active, counts reflect only matching files). When a language filter is active, the full language list from the unfiltered scan is preserved so all languages remain toggleable.
 - The legend section is collapsible via its header.
 
 ### Display Mode Toggle
@@ -186,7 +188,8 @@ Search is available in the inline **Search section** in the editor tab.
 - Typing a query in the search input triggers a content search using ripgrep (`@vscode/ripgrep`).
 - Search is debounced at 300ms.
 - Options: case sensitivity toggle (Aa), regex mode toggle (.*).
-- A "files to include" field supports glob patterns to narrow the search scope (e.g. `src/**/*.ts`).
+- A "files to include" field supports glob patterns (comma-separated) to narrow the search scope (e.g. `*.ts, src/**`).
+- A "files to exclude" field supports glob patterns (comma-separated) to exclude files from results (e.g. `test/**, node_modules`). Hidden by default, revealed via a "..." toggle button matching VS Code's native search details toggle.
 - Results are delivered progressively (batched every 50 files or 200ms) and rendered incrementally.
 - Syntax highlighting is applied to match lines via Shiki, patched in after the initial plain-text render.
 - Match lines show: line number, trimmed line text with the match highlighted, and context-windowed truncation for long lines (max 120 visible characters, centered on the match).
@@ -199,7 +202,8 @@ Search is available in the inline **Search section** in the editor tab.
 
 ### Filename Search
 
-- If the main input contains glob characters (`*`, `?`, `/`) or the "files to include" field has a pattern with no content query, a filename-only search is performed.
+- When the "files to include" or "files to exclude" fields have patterns but no content query, a filename-only search is performed (via ripgrep `--files --iglob`). When only exclude is set, a wildcard include (`*`) is used.
+- The "files to include" field uses glob patterns only (no regex mode). All glob filtering is handled by ripgrep.
 - Filename search lists matching file paths without inline match lines.
 
 ### Search Limits
