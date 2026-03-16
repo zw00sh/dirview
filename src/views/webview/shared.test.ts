@@ -10,7 +10,7 @@ import {
   patchTreeChildren, patchDirLi,
   getVisibleChildren, getVisibleFiles,
   createSearchBar,
-  scheduleSearchRender, updateSearchStatus, expandBatchFiles, buildAncestorPaths,
+  scheduleSearchRender, updateSearchStatus, expandBatchFiles, buildAncestorPaths, filterTree,
   SVG_CHEVRON, SVG_EYE, SVG_FOLD, SVG_UNFOLD, SVG_SORT_FILES, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL,
 } from './index';
 import type { DirNode, FileNode, WebviewState, Renderer, LangStat } from './types';
@@ -1677,115 +1677,73 @@ describe('delegated click handler', () => {
   });
 });
 
-// --- search: dirMatchesSearch ---
+// --- filterTree: search filtering ---
 
-describe('dirMatchesSearch', () => {
-  it('returns true when searchResults is null', () => {
-    const state = createState();
-    const renderer = makeRenderer(state);
-    renderer.beforeRender();
-    const node = makeDir('/a', 'a', { files: [{ path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
-    expect(renderer.dirMatchesSearch(node)).toBe(true);
-  });
-
-  it('returns true when a direct file is in searchResults', () => {
-    const state = createState();
-    state.searchResults = new Map([['/a/foo.ts', []]]);
-    const renderer = makeRenderer(state);
-    renderer.beforeRender();
-    const node = makeDir('/a', 'a', { files: [{ path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
-    expect(renderer.dirMatchesSearch(node)).toBe(true);
-  });
-
-  it('returns false when no file matches', () => {
-    const state = createState();
-    state.searchResults = new Map([['/other/file.ts', []]]);
-    const renderer = makeRenderer(state);
-    renderer.beforeRender();
-    const node = makeDir('/a', 'a', { files: [{ path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
-    expect(renderer.dirMatchesSearch(node)).toBe(false);
-  });
-
-  it('returns true when a descendant file matches', () => {
-    const state = createState();
-    state.searchResults = new Map([['/a/b/nested.ts', []]]);
-    const renderer = makeRenderer(state);
-    renderer.beforeRender();
-    const nested = makeDir('/a/b', 'b', { files: [{ path: '/a/b/nested.ts', name: 'nested.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
-    const node = makeDir('/a', 'a', { children: [nested] });
-    expect(renderer.dirMatchesSearch(node)).toBe(true);
-  });
-
-  it('caches results: returns same value on repeated calls', () => {
-    const state = createState();
-    state.searchResults = new Map([['/a/foo.ts', []]]);
-    const renderer = makeRenderer(state);
-    renderer.beforeRender();
-    const node = makeDir('/a', 'a', { files: [{ path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
-    expect(renderer.dirMatchesSearch(node)).toBe(true);
-    expect(renderer.dirMatchesSearch(node)).toBe(true); // from cache
-  });
-
-  it('cache is reset by beforeRender', () => {
-    const state = createState();
-    state.searchResults = new Map([['/a/foo.ts', []]]);
-    const renderer = makeRenderer(state);
-    renderer.beforeRender();
-    const file = { path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 };
-    const node = makeDir('/a', 'a', { files: [file] });
-    expect(renderer.dirMatchesSearch(node)).toBe(true);
-    // Change search results and reset cache
-    state.searchResults = new Map([['/other.ts', []]]);
-    renderer.beforeRender();
-    expect(renderer.dirMatchesSearch(node)).toBe(false);
-  });
-
-  it('ignores activeFilters when they are empty (existing behavior preserved)', () => {
-    const state = createState();
-    state.searchResults = new Map([['/a/foo.ts', []]]);
-    // No active filters — should behave as before
-    const renderer = makeRenderer(state);
-    renderer.beforeRender();
-    const node = makeDir('/a', 'a', { files: [{ path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
-    expect(renderer.dirMatchesSearch(node)).toBe(true);
-  });
-
-  it('returns false when file matches search but not active language filter', () => {
-    const state = createState();
-    state.searchResults = new Map([['/a/foo.ts', []]]);
-    state.activeFilters = new Set(['YAML']);
-    const renderer = makeRenderer(state);
-    renderer.beforeRender();
-    // foo.ts is TypeScript (in searchResults) but filter wants YAML → no match
-    const node = makeDir('/a', 'a', { files: [{ path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
-    expect(renderer.dirMatchesSearch(node)).toBe(false);
-  });
-
-  it('returns true when file matches both search and active language filter', () => {
-    const state = createState();
-    state.searchResults = new Map([['/a/config.yaml', []]]);
-    state.activeFilters = new Set(['YAML']);
-    const renderer = makeRenderer(state);
-    renderer.beforeRender();
-    const node = makeDir('/a', 'a', { files: [{ path: '/a/config.yaml', name: 'config.yaml', langName: 'YAML', langColor: '#cb171e', sizeBytes: 0 }] });
-    expect(renderer.dirMatchesSearch(node)).toBe(true);
-  });
-
-  it('returns false for the exact bug scenario: dir has YAML (matches filter, not search) + TypeScript (in search, not filter)', () => {
-    const state = createState();
-    // Search found a TypeScript file; filter wants only YAML
-    state.searchResults = new Map([['/a/app.ts', []]]);
-    state.activeFilters = new Set(['YAML']);
-    const renderer = makeRenderer(state);
-    renderer.beforeRender();
-    const node = makeDir('/a', 'a', {
-      files: [
-        { path: '/a/config.yaml', name: 'config.yaml', langName: 'YAML', langColor: '#cb171e', sizeBytes: 0 },
-        { path: '/a/app.ts', name: 'app.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 },
-      ],
+describe('filterTree search', () => {
+  function ft(roots: DirNode[], opts: Partial<Parameters<typeof filterTree>[1]> = {}) {
+    return filterTree(roots, {
+      activeFilters: opts.activeFilters ?? new Set(),
+      searchResults: opts.searchResults ?? null,
+      searchAncestorPaths: opts.searchAncestorPaths ?? null,
+      fileFilterFn: opts.fileFilterFn ?? null,
+      searchResultsVersion: opts.searchResultsVersion ?? 0,
     });
-    // app.ts passes search but not filter; config.yaml passes filter but not search → dir = false
-    expect(renderer.dirMatchesSearch(node)).toBe(false);
+  }
+
+  it('returns original roots when no filters active', () => {
+    const root = makeDir('/a', 'a', { files: [{ path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
+    const result = ft([root]);
+    expect(result.isFiltered).toBe(false);
+    expect(result.roots).toEqual([root]);
+  });
+
+  it('keeps dir with direct file in searchResults', () => {
+    const root = makeDir('/a', 'a', { files: [{ path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
+    const result = ft([root], { searchResults: new Map([['/a/foo.ts', []]]) });
+    expect(result.isFiltered).toBe(true);
+    expect(result.roots.length).toBe(1);
+    expect(result.roots[0].files.length).toBe(1);
+  });
+
+  it('prunes dir when no file matches search', () => {
+    const root = makeDir('/a', 'a', { files: [{ path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
+    const result = ft([root], { searchResults: new Map([['/other/file.ts', []]]) });
+    expect(result.roots.length).toBe(0);
+  });
+
+  it('keeps dir when descendant file matches', () => {
+    const nested = makeDir('/a/b', 'b', { files: [{ path: '/a/b/nested.ts', name: 'nested.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
+    const root = makeDir('/a', 'a', { children: [nested] });
+    const result = ft([root], { searchResults: new Map([['/a/b/nested.ts', []]]) });
+    expect(result.roots.length).toBe(1);
+    expect(result.roots[0].children.length).toBe(1);
+  });
+
+  it('prunes file not matching language filter + search intersection', () => {
+    const root = makeDir('/a', 'a', { files: [{ path: '/a/foo.ts', name: 'foo.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }] });
+    const result = ft([root], { searchResults: new Map([['/a/foo.ts', []]]), activeFilters: new Set(['YAML']) });
+    expect(result.roots.length).toBe(0);
+  });
+
+  it('keeps file matching both search and language filter', () => {
+    const root = makeDir('/a', 'a', { files: [{ path: '/a/config.yaml', name: 'config.yaml', langName: 'YAML', langColor: '#cb171e', sizeBytes: 0 }] });
+    const result = ft([root], { searchResults: new Map([['/a/config.yaml', []]]), activeFilters: new Set(['YAML']) });
+    expect(result.roots.length).toBe(1);
+  });
+
+  it('prunes dir with YAML (matches filter, not search) + TypeScript (in search, not filter)', () => {
+    const root = makeDir('/a', 'a', { files: [
+      { path: '/a/config.yaml', name: 'config.yaml', langName: 'YAML', langColor: '#cb171e', sizeBytes: 0 },
+      { path: '/a/app.ts', name: 'app.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 },
+    ] });
+    const result = ft([root], { searchResults: new Map([['/a/app.ts', []]]), activeFilters: new Set(['YAML']) });
+    expect(result.roots.length).toBe(0);
+  });
+
+  it('prunes empty dir when search is active', () => {
+    const root = makeDir('/a', 'a', { files: [], children: [] });
+    const result = ft([root], { searchResults: new Map([['/a/other.ts', []]]) });
+    expect(result.roots.length).toBe(0);
   });
 });
 
@@ -2000,7 +1958,7 @@ describe('search rendering integration', () => {
     expect(li.querySelectorAll('.match-line-row').length).toBe(0);
   });
 
-  it('hides files not in searchResults', () => {
+  it('hides files not in searchResults (via filterTree)', () => {
     const state = createState();
     state.searchResults = new Map([['/r/match.ts', []]]);
     state.render = vi.fn();
@@ -2008,9 +1966,18 @@ describe('search rendering integration', () => {
     const f1 = makeFile('/r/match.ts');
     const f2 = makeFile('/r/nomatch.ts');
     const dir = makeDir('/r', 'r', { files: [f1, f2], totalFiles: 2, stats: [] });
+    // Pre-filter the tree as renderTree would
+    const filtered = filterTree([dir], {
+      activeFilters: state.activeFilters,
+      searchResults: state.searchResults,
+      searchAncestorPaths: null,
+      fileFilterFn: null,
+      searchResultsVersion: 0,
+    });
     const renderer = makeRenderer(state);
     renderer.beforeRender();
-    const li = renderer.renderDirNode(dir, 0, 10, [], 300);
+    (state as any)._isFiltered = filtered.isFiltered;
+    const li = renderer.renderDirNode(filtered.roots[0], 0, 10, [], 300);
     const fileRows = li.querySelectorAll('.file-row');
     expect(fileRows.length).toBe(1);
     expect(fileRows[0].dataset.path).toBe('/r/match.ts');
@@ -2468,18 +2435,7 @@ describe('searchResultsHighlight — idx and path edge cases', () => {
   });
 });
 
-// --- dirMatchesSearch — empty dir ---
-
-describe('dirMatchesSearch — empty dir', () => {
-  it('returns false for a dir with no files and no children when search is active', () => {
-    const state = createState();
-    state.searchResults = new Map([['/a/other.ts', []]]);
-    const renderer = makeRenderer(state);
-    renderer.beforeRender();
-    const node = makeDir('/a', 'a', { files: [], children: [] });
-    expect(renderer.dirMatchesSearch(node)).toBe(false);
-  });
-});
+// (dirMatchesSearch tests moved to filterTree search block above)
 
 // --- expandMatchedDirs — deep nesting ---
 
@@ -3608,67 +3564,64 @@ describe('getVisibleFiles with fileFilterFn', () => {
   });
 });
 
-// --- file filter: dirMatchesFileFilter ---
-describe('dirMatchesFileFilter', () => {
-  it('returns true for all dirs when fileFilterFn is null', () => {
-    const state = createState();
-    state.fileFilterFn = null;
-    const renderer = makeRenderer(state);
-    renderer.beforeRender();
+// --- filterTree: file filter ---
+describe('filterTree fileFilter', () => {
+  function ft(roots: DirNode[], opts: Partial<Parameters<typeof filterTree>[1]> = {}) {
+    return filterTree(roots, {
+      activeFilters: opts.activeFilters ?? new Set(),
+      searchResults: opts.searchResults ?? null,
+      searchAncestorPaths: opts.searchAncestorPaths ?? null,
+      fileFilterFn: opts.fileFilterFn ?? null,
+      searchResultsVersion: opts.searchResultsVersion ?? 0,
+    });
+  }
+
+  it('returns original roots when fileFilterFn is null', () => {
     const dir = makeDir('/ws/src', 'src', {
       files: [{ name: 'index.ts', path: '/ws/src/index.ts', langName: 'TypeScript' }],
     });
-    expect(renderer.dirMatchesFileFilter(dir)).toBe(true);
+    const result = ft([dir]);
+    expect(result.isFiltered).toBe(false);
+    expect(result.roots[0].files.length).toBe(1);
   });
 
-  it('returns true when a direct file matches', () => {
-    const state = createState();
-    state.fileFilterFn = (name: string) => name.includes('api');
-    const renderer = makeRenderer(state);
-    renderer.beforeRender();
+  it('keeps dir with direct file match', () => {
     const dir = makeDir('/ws/src', 'src', {
       files: [
         { name: 'apiHandler.ts', path: '/ws/src/apiHandler.ts', langName: 'TypeScript' },
         { name: 'utils.ts', path: '/ws/src/utils.ts', langName: 'TypeScript' },
       ],
     });
-    expect(renderer.dirMatchesFileFilter(dir)).toBe(true);
+    const result = ft([dir], { fileFilterFn: (n: string) => n.includes('api') });
+    expect(result.roots.length).toBe(1);
+    expect(result.roots[0].files.length).toBe(1);
+    expect(result.roots[0].files[0].name).toBe('apiHandler.ts');
   });
 
-  it('returns false when no file matches', () => {
-    const state = createState();
-    state.fileFilterFn = (name: string) => name.includes('api');
-    const renderer = makeRenderer(state);
-    renderer.beforeRender();
+  it('prunes dir when no file matches', () => {
     const dir = makeDir('/ws/src', 'src', {
       files: [{ name: 'utils.ts', path: '/ws/src/utils.ts', langName: 'TypeScript' }],
     });
-    expect(renderer.dirMatchesFileFilter(dir)).toBe(false);
+    const result = ft([dir], { fileFilterFn: (n: string) => n.includes('api') });
+    expect(result.roots.length).toBe(0);
   });
 
-  it('returns true when a descendant file matches', () => {
-    const state = createState();
-    state.fileFilterFn = (name: string) => name.includes('api');
-    const renderer = makeRenderer(state);
-    renderer.beforeRender();
+  it('keeps dir when descendant file matches', () => {
     const child = makeDir('/ws/src/handlers', 'handlers', {
       files: [{ name: 'apiHandler.ts', path: '/ws/src/handlers/apiHandler.ts', langName: 'TypeScript' }],
     });
     const dir = makeDir('/ws/src', 'src', { children: [child] });
-    expect(renderer.dirMatchesFileFilter(dir)).toBe(true);
+    const result = ft([dir], { fileFilterFn: (n: string) => n.includes('api') });
+    expect(result.roots.length).toBe(1);
+    expect(result.roots[0].children.length).toBe(1);
   });
 
   it('respects activeFilters intersection', () => {
-    const state = createState();
-    state.fileFilterFn = (name: string) => name.includes('api');
-    state.activeFilters = new Set(['JavaScript']);
-    const renderer = makeRenderer(state);
-    renderer.beforeRender();
     const dir = makeDir('/ws/src', 'src', {
       files: [{ name: 'apiHandler.ts', path: '/ws/src/apiHandler.ts', langName: 'TypeScript' }],
     });
-    // File matches name filter but not language filter
-    expect(renderer.dirMatchesFileFilter(dir)).toBe(false);
+    const result = ft([dir], { fileFilterFn: (n: string) => n.includes('api'), activeFilters: new Set(['JavaScript']) });
+    expect(result.roots.length).toBe(0);
   });
 });
 

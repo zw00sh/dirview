@@ -8,6 +8,7 @@ export { createRenderer } from './renderer';
 export * from './renderer/dom-patch';
 export * from './renderer/render-tree';
 export * from './search';
+export * from './filter';
 export * from './messaging';
 export * from './setup';
 export type * from './types';

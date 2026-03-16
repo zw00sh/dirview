@@ -33,6 +33,7 @@ export function createState(): WebviewState {
     scanBar: null,
     _rerenderPending: false,
     _searchRenderTimer: null,
+    searchResultsVersion: 0,
     // Placeholder — assigned below
     rerender: null!,
   };

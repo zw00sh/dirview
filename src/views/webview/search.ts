@@ -267,6 +267,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
 
     if (!pattern && !fileFilter) {
       state.fileFilterFn = null;
+      state.searchResultsVersion++;
       vscode.postMessage({ command: 'clearSearch' });
       return;
     }
@@ -274,6 +275,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     const contextLines = contextLinesEnabled ? (parseInt(contextInput.value, 10) || 0) : 0;
 
     // File filter: regex mode uses client-side filtering; glob mode passes to ripgrep as-is.
+    state.searchResultsVersion++;
     if (includeUseRegex && fileFilter) {
       // Client-side regex filtering — don't send to ripgrep.
       try {
@@ -320,6 +322,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     clearBtn.style.display = 'none';
     statusEl.style.display = 'none';
     state.fileFilterFn = null;
+    state.searchResultsVersion++;
     vscode.postMessage({ command: 'clearSearch' });
   }
 
@@ -365,6 +368,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     clearBtn.style.display = mainInput.value ? '' : 'none';
     if (!mainInput.value && !includeInput.value) {
       state.fileFilterFn = null;
+      state.searchResultsVersion++;
       vscode.postMessage({ command: 'clearSearch' });
       return;
     }

@@ -86,6 +86,7 @@ export function createMessageHandler(
     },
     searchResults(message: BackendToWebviewMessage & { type: 'searchResults' }) {
       // Non-streaming fallback (used by searchFiles / clearSearch / errors).
+      state.searchResultsVersion++;
       state.searchResults = message.matches
         ? new Map(Object.entries(message.matches))
         : null;
@@ -104,6 +105,7 @@ export function createMessageHandler(
     },
     searchResultsBatch(message: BackendToWebviewMessage & { type: 'searchResultsBatch' }) {
       // Progressive delivery: merge incoming batch into accumulated results.
+      state.searchResultsVersion++;
       const newFilePaths = new Set(Object.keys(message.matches || {}));
       if (!state.searchResults) { state.searchResults = new Map(); }
       for (const [p, m] of Object.entries(message.matches || {})) { state.searchResults.set(p, m); }
@@ -133,6 +135,7 @@ export function createMessageHandler(
       // Final signal after all batches have been delivered.
       // If no batches arrived (zero results), searchResults is still null — set to empty Map
       // so the tree filters to empty rather than falling back to showing the full tree.
+      state.searchResultsVersion++;
       if (state.searchResults === null) { state.searchResults = new Map(); }
       state.searchActive = false;
       if (state.scanBar) { state.scanBar.show(false); }
@@ -142,6 +145,7 @@ export function createMessageHandler(
       if (state.lastRoots) { state.rerender(); }
     },
     searchProgress(message: BackendToWebviewMessage & { type: 'searchProgress' }) {
+      state.searchResultsVersion++;
       state.searchActive = true;
       // Store workspace root paths for converting absolute file paths to relative.
       state.searchRootPaths = message.rootPaths || [];

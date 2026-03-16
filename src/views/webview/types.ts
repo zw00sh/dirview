@@ -113,6 +113,9 @@ export interface WebviewState extends CoreWebviewState {
   searchRootPaths: string[];
   searchBar_updateStatus: (() => void) | null;
   _searchRenderTimer: ReturnType<typeof setTimeout> | null;
+  /** Monotonic counter incremented on every search/filter state mutation.
+   *  Used by filterTree() to invalidate its cache. */
+  searchResultsVersion: number;
 }
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
@@ -147,8 +150,6 @@ export interface RendererContext {
   deps: RendererDeps;
   opts: RendererOptions;
   nodeMap: Map<string, NodeMapEntry>;
-  searchMatchCache: { current: WeakMap<DirNode, boolean> };
-  fileFilterMatchCache: { current: WeakMap<DirNode, boolean> };
   root: HTMLElement;
   tooltip: HTMLElement;
   vscode: VsCodeApi;
@@ -157,9 +158,6 @@ export interface RendererContext {
 
 export interface Renderer {
   beforeRender(): void;
-  dirMatchesFilter(node: DirNode): boolean;
-  dirMatchesSearch(node: DirNode): boolean;
-  dirMatchesFileFilter(node: DirNode): boolean;
   renderIndentGuides(depth: number, ancestors: IndentAncestor[]): HTMLSpanElement;
   renderFileNode(file: FileNode, depth: number, ancestors: IndentAncestor[]): HTMLLIElement;
   renderMatchLine(file: FileNode, matchGroup: SearchMatch[], depth: number, ancestors: IndentAncestor[], dedent?: number): HTMLLIElement;

@@ -4,7 +4,7 @@
 import { SVG_CHEVRON, SVG_PLUS, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_OPEN_IN_TAB } from '../icons';
 import {
   escHtml, formatBytes, sortDirs, sortFiles, groupEmptyDirs,
-  compactedNode, compactedPath, getVisibleChildren, getVisibleFiles, computeBarWidth,
+  compactedNode, compactedPath, computeBarWidth,
 } from '../utils';
 import { setupDelegatedEvents } from './events';
 import {
@@ -17,23 +17,8 @@ import { h } from '../h';
 import type { DirNode, FileNode, FileTypeStats, WebviewState, SortMode, RendererDeps, RendererOptions, Renderer, IndentAncestor, SearchMatch, NodeMapEntry, RendererContext } from '../types';
 
 // Creates render helpers bound to a mutable state object.
-//
-// state: {
-//   activeFilters: Set, expanded: Map, truncationExpanded: Set,
-//   emptyGroupExpanded: Set, truncateThreshold: number,
-//   currentSortMode: string, lastRoots: array|null,
-//   lastAutoRescanEnabled: boolean, render: function|null
-// }
-//
-// deps: {
-//   vscode: object, root: HTMLElement, tooltip: HTMLElement,
-//   options: {
-//     skipDepthZeroGuides: boolean,  // true=sidebar, false=tab
-//     barFactor: number,             // fraction of clientWidth for max bar
-//     barMaxWidth: number,           // absolute max bar width (px)
-//     barFallbackWidth: number,      // fallback when clientWidth is 0
-//   }
-// }
+// The tree is pre-filtered by filterTree() before reaching the renderer —
+// children/files arrays already contain only visible nodes.
 export function createRenderer(state: WebviewState, deps: RendererDeps): Renderer {
   const { vscode, root, tooltip } = deps;
   const opts: RendererOptions = deps.options || {};
@@ -43,22 +28,12 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
   // each full re-render. Used by delegated event handlers to avoid per-element closures.
   const nodeMap: Map<string, NodeMapEntry> = new Map();
 
-  // WeakMap cache for search-result matching — preserved across renders when inputs
-  // haven't changed (e.g. expand/collapse with same search results). Only reset when
-  // searchResults or fileFilterFn identity changes.
-  const searchMatchCache = { current: new WeakMap<DirNode, boolean>() };
-  const fileFilterMatchCache = { current: new WeakMap<DirNode, boolean>() };
-  let lastSearchResults: Map<string, any> | null | undefined;
-  let lastFileFilterFn: ((name: string) => boolean) | null | undefined;
-
   // Build the shared context object that extracted modules access.
   const ctx: RendererContext = {
     state,
     deps,
     opts,
     nodeMap,
-    searchMatchCache,
-    fileFilterMatchCache,
     root,
     tooltip,
     vscode,
@@ -67,11 +42,6 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
 
   // ── Delegated event handlers ─────────────────────────────────────────────
   setupDelegatedEvents(ctx);
-
-  function dirMatchesFilter(node: DirNode): boolean {
-    if (state.activeFilters.size === 0) { return true; }
-    return node.stats.some(s => state.activeFilters.has(s.name) && s.count > 0);
-  }
 
   function renderIndentGuides(depth: number, ancestors: IndentAncestor[]): HTMLSpanElement {
     const guides: HTMLSpanElement[] = [];
@@ -91,59 +61,6 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
 
   // Wire up renderIndentGuides on the context so extracted modules can use it.
   ctx.renderIndentGuides = renderIndentGuides;
-
-  // Returns true if any descendant file matches the client-side filename filter.
-  // Used when regex file filter is active. Memoized per render cycle.
-  function dirMatchesFileFilter(node: DirNode): boolean {
-    if (!state.fileFilterFn) { return true; }
-    const cached = fileFilterMatchCache.current.get(node);
-    if (cached !== undefined) { return cached; }
-    for (const f of (node.files || [])) {
-      if (state.fileFilterFn(f.name) &&
-        (state.activeFilters.size === 0 || state.activeFilters.has(f.langName))) {
-        fileFilterMatchCache.current.set(node, true);
-        return true;
-      }
-    }
-    for (const c of (node.children || [])) {
-      if (dirMatchesFileFilter(c)) {
-        fileFilterMatchCache.current.set(node, true);
-        return true;
-      }
-    }
-    fileFilterMatchCache.current.set(node, false);
-    return false;
-  }
-
-  // Returns true if any descendant file of node has a path in state.searchResults.
-  // Uses the precomputed ancestor path index for O(1) lookups when no language filter
-  // is active. Falls back to recursive tree walk (memoized via WeakMap) when language
-  // filters require per-file language checks.
-  function dirMatchesSearch(node: DirNode): boolean {
-    if (!state.searchResults) { return true; }
-    // Fast path: ancestor index available and no language filter — O(1) lookup.
-    if (state.searchAncestorPaths && state.activeFilters.size === 0) {
-      return state.searchAncestorPaths.has(node.path);
-    }
-    // Slow path: language filter active — recursive walk with WeakMap memoization.
-    const cached = searchMatchCache.current.get(node);
-    if (cached !== undefined) { return cached; }
-    for (const f of (node.files || [])) {
-      if (state.searchResults.has(f.path) &&
-        (state.activeFilters.size === 0 || state.activeFilters.has(f.langName))) {
-        searchMatchCache.current.set(node, true);
-        return true;
-      }
-    }
-    for (const c of (node.children || [])) {
-      if (dirMatchesSearch(c)) {
-        searchMatchCache.current.set(node, true);
-        return true;
-      }
-    }
-    searchMatchCache.current.set(node, false);
-    return false;
-  }
 
   function renderFileNode(file: FileNode, depth: number, ancestors: IndentAncestor[]): HTMLLIElement {
     const hasMatches = !!(state.searchResults?.has(file.path) && state.searchResults.get(file.path)!.length > 0);
@@ -300,55 +217,30 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
 
   function renderDirNode(node: DirNode, depth: number, maxMetric: number, ancestors: IndentAncestor[], clientWidth: number): HTMLLIElement {
     // Compact folders: collapse chain of dirs with exactly 1 child dir and 0 files.
-    // Skip sortDirs inside the loop — single-child arrays don't need sorting.
+    // Tree is pre-filtered, so children/files are already the visible set.
     let displayNode: DirNode = node;
     let displayName: string = node.name;
     const compactSegments: Array<{ name: string; path: string }> = [{ name: node.name, path: node.path }];
-    while (true) {
-      const children = displayNode.children;
-      const files = displayNode.files || [];
-      let vChildren: DirNode[] = state.activeFilters.size > 0
-        ? children.filter(c => dirMatchesFilter(c))
-        : children;
-      let vFiles: FileNode[] = state.activeFilters.size > 0
-        ? files.filter(f => state.activeFilters.has(f.langName))
-        : files;
-      // Also apply search filter when active — only compact through dirs with a single matching child.
-      if (state.searchResults) {
-        vChildren = vChildren.filter(c => dirMatchesSearch(c));
-        vFiles = vFiles.filter(f => state.searchResults!.has(f.path));
-      }
-      if (state.fileFilterFn) {
-        vChildren = vChildren.filter(c => dirMatchesFileFilter(c));
-        vFiles = vFiles.filter(f => state.fileFilterFn!(f.name));
-      }
-      if (vChildren.length === 1 && vFiles.length === 0) {
-        displayName += ' / ' + vChildren[0].name;
-        compactSegments.push({ name: vChildren[0].name, path: vChildren[0].path });
-        displayNode = vChildren[0];
-      } else {
-        break;
-      }
+    while (displayNode.children.length === 1 && (displayNode.files || []).length === 0) {
+      displayName += ' / ' + displayNode.children[0].name;
+      compactSegments.push({ name: displayNode.children[0].name, path: displayNode.children[0].path });
+      displayNode = displayNode.children[0];
     }
 
     const li = h('li', { dataset: { nodePath: displayNode.path } });
 
-    const hasActiveFilter = state.activeFilters.size > 0 || !!state.searchResults || !!state.fileFilterFn;
-    const isExpanded = state.expanded.get(displayNode.path) ?? (hasActiveFilter || depth === 0);
+    const isFiltered = !!(state as any)._isFiltered;
+    const isExpanded = state.expanded.get(displayNode.path) ?? (isFiltered || depth === 0);
     // Record implicit depth-0 expansion so button state reflects reality after initial render.
-    // Skip during active filter/search to avoid recording ephemeral auto-expanded state.
-    if (!state.expanded.has(displayNode.path) && depth === 0 && !hasActiveFilter) {
+    // Skip during active filter to avoid recording ephemeral auto-expanded state.
+    if (!state.expanded.has(displayNode.path) && depth === 0 && !isFiltered) {
       state.expanded.set(displayNode.path, true);
     }
 
     const sortedChildren: DirNode[] = sortDirs(displayNode.children, state.currentSortMode);
     const sortedFiles: FileNode[] = sortFiles(displayNode.files || []);
 
-    // Apply language filter and search results filter
-    const visibleChildren: DirNode[] = getVisibleChildren(sortedChildren, state.activeFilters, dirMatchesFilter, state.searchResults, (c: DirNode) => dirMatchesSearch(c), state.fileFilterFn, (c: DirNode) => dirMatchesFileFilter(c));
-    const visibleFiles: FileNode[] = getVisibleFiles(sortedFiles, state.activeFilters, state.searchResults, state.fileFilterFn);
-
-    const hasChildren = visibleChildren.length > 0 || visibleFiles.length > 0;
+    const hasChildren = sortedChildren.length > 0 || sortedFiles.length > 0;
 
     // Dir row
     const row = h('div', {
@@ -423,22 +315,6 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     row.appendChild(nameEl);
 
     // Hover action buttons — overlay on the right (sidebar) or inline after name (tab)
-    //
-    // Expand uses 3-tier progressive escalation:
-    //   1. Target is collapsed → expand target only
-    //   2. Target is expanded, not all direct children expanded → expand all direct children
-    //   3. Target is expanded, all direct children expanded → recursively expand entire subtree
-    //
-    // Collapse mirrors expand with 3-tier progressive de-escalation:
-    //   1. Any descendant beyond direct children is expanded → collapse those deeper descendants
-    //      (direct children stay expanded, giving the user a "flatten to one level" step)
-    //   2. Some/all direct children are expanded (no deeper) → collapse all direct children
-    //   3. No children are expanded → collapse target itself
-    //
-    // This design lets the user incrementally drill deeper with repeated expand clicks,
-    // and incrementally retreat with repeated collapse clicks, without jarring jumps.
-    // Action buttons use data-action + data-path so the delegated click handler
-    // in createRenderer can process them without per-element listener closures.
     const actionsEl = h('div', { className: 'dir-actions' },
       ...(displayNode.children.length > 0 ? [
         h('button', {
@@ -514,12 +390,11 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
       if (isExpanded) {
         const nextAncestors: IndentAncestor[] = [...ancestors, { path: displayNode.path }];
 
-        // Empty dir grouping (only when no filter and no search active)
-        if (state.activeFilters.size === 0 && !state.searchResults && visibleChildren.length > 0) {
-          for (const group of groupEmptyDirs(visibleChildren)) {
+        // Empty dir grouping — only when no filter is active (filtered trees already pruned)
+        if (!isFiltered && sortedChildren.length > 0) {
+          for (const group of groupEmptyDirs(sortedChildren)) {
             if (group.type === 'emptyGroup') {
               if (state.emptyGroupExpanded.has(group.nodes[0].path)) {
-                // Already expanded — render individual dirs
                 for (const n of group.nodes) {
                   childrenEl.appendChild(renderDirNode(n, depth + 1, maxMetric, nextAncestors, clientWidth));
                 }
@@ -531,24 +406,19 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
             }
           }
         } else {
-          for (const child of visibleChildren) {
+          for (const child of sortedChildren) {
             childrenEl.appendChild(renderDirNode(child, depth + 1, maxMetric, nextAncestors, clientWidth));
           }
         }
 
-        // File truncation — disabled when search is active (all matched files must be shown).
-        // Also disabled when depth === 0 and there are no directory children (single-dir root):
-        // truncation at the root level is confusing when all files are already at the top level.
-        const isSingleDirRoot = depth === 0 && visibleChildren.length === 0;
-        const shouldTruncate = !state.searchResults && !isSingleDirRoot && state.truncateThreshold > 0 && visibleFiles.length > state.truncateThreshold && !state.truncationExpanded.has(displayNode.path);
-        const shownFiles = shouldTruncate ? visibleFiles.slice(0, state.truncateThreshold) : visibleFiles;
-        const hiddenFiles = shouldTruncate ? visibleFiles.slice(state.truncateThreshold) : [];
+        // File truncation — disabled when filter is active (all matched files must be shown).
+        const isSingleDirRoot = depth === 0 && sortedChildren.length === 0;
+        const shouldTruncate = !isFiltered && !isSingleDirRoot && state.truncateThreshold > 0 && sortedFiles.length > state.truncateThreshold && !state.truncationExpanded.has(displayNode.path);
+        const shownFiles = shouldTruncate ? sortedFiles.slice(0, state.truncateThreshold) : sortedFiles;
+        const hiddenFiles = shouldTruncate ? sortedFiles.slice(state.truncateThreshold) : [];
 
         for (const file of shownFiles) {
           childrenEl.appendChild(renderFileNode(file, depth + 1, nextAncestors));
-          // Match lines sit at depth+2, one level below the file row. Include the
-          // file in the ancestors array so the indent guide at the file's depth is
-          // clickable — clicking it collapses the file's match group.
           const fileAncestors: IndentAncestor[] = [...nextAncestors, { path: file.path, isFileMatch: true }];
           _renderFileMatches(ctx, childrenEl, file, depth + 2, fileAncestors);
         }
@@ -566,22 +436,9 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
 
   return {
     // Called at the start of each full renderTree pass to flush stale node references.
-    // Preserves search/filter caches across renders when inputs haven't changed
-    // (e.g. expand/collapse doesn't invalidate search match results).
     beforeRender() {
       nodeMap.clear();
-      if (lastSearchResults !== state.searchResults) {
-        searchMatchCache.current = new WeakMap();
-        lastSearchResults = state.searchResults;
-      }
-      if (lastFileFilterFn !== state.fileFilterFn) {
-        fileFilterMatchCache.current = new WeakMap();
-        lastFileFilterFn = state.fileFilterFn;
-      }
     },
-    dirMatchesFilter,
-    dirMatchesSearch,
-    dirMatchesFileFilter,
     renderIndentGuides,
     renderFileNode,
     renderMatchLine: (file, matchGroup, depth, ancestors, dedent) =>
