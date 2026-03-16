@@ -1,42 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
 import {
-  createState, getVisibleFiles, createSearchBar, filterTree,
+  createState, createSearchBar, filterTree,
 } from './index';
 import { makeDir, makeRenderer } from './test-helpers';
 import type { DirNode } from './types';
-
-// --- getVisibleFiles (no file filter fn — purely lang + search filters) ---
-describe('getVisibleFiles', () => {
-  const files = [
-    { name: 'apiHandler.ts', path: '/ws/apiHandler.ts', langName: 'TypeScript' },
-    { name: 'utils.ts', path: '/ws/utils.ts', langName: 'TypeScript' },
-    { name: 'auth.js', path: '/ws/auth.js', langName: 'JavaScript' },
-  ] as any[];
-
-  it('returns all files when no filters active', () => {
-    const result = (getVisibleFiles as any)(files, new Set(), null);
-    expect(result).toEqual(files);
-  });
-
-  it('filters by activeFilters (language)', () => {
-    const result = (getVisibleFiles as any)(files, new Set(['TypeScript']), null);
-    expect(result.map((f: any) => f.name)).toEqual(['apiHandler.ts', 'utils.ts']);
-  });
-
-  it('filters by searchResults', () => {
-    const searchResults = new Map([['/ws/apiHandler.ts', []]]);
-    const result = (getVisibleFiles as any)(files, new Set(), searchResults);
-    expect(result.map((f: any) => f.name)).toEqual(['apiHandler.ts']);
-  });
-
-  it('combines activeFilters and searchResults', () => {
-    const searchResults = new Map([['/ws/apiHandler.ts', []], ['/ws/auth.js', []]]);
-    const result = (getVisibleFiles as any)(files, new Set(['TypeScript']), searchResults);
-    // Must match BOTH activeFilters (TypeScript) and searchResults
-    expect(result.map((f: any) => f.name)).toEqual(['apiHandler.ts']);
-  });
-});
 
 // --- filterTree: search results filter ---
 describe('filterTree with searchResults', () => {

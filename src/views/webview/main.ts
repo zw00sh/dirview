@@ -157,8 +157,7 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   scroller.setTreeClass('sidebar' + (state.currentSortMode === 'size' ? ' sort-size' : ''));
   scroller.update(flatRows, totalHeight);
 
-  const isFiltered = state.activeFilters.size > 0 || state.searchResults !== null || state.fileFilterActive;
-  const filteredEmpty = isFiltered && flatRows.length === 0;
+  const filteredEmpty = state._isFiltered && flatRows.length === 0;
   const existingNoResults = root.querySelector(':scope > .empty-state');
   if (filteredEmpty) {
     if (!existingNoResults) { root.appendChild(emptyState('noResults')); }

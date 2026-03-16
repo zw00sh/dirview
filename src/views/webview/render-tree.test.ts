@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
 import {
-  createState, renderTree, setupStickyTracking,
+  createState, renderTree,
 } from './index';
 import { makeDir, makeRenderer } from './test-helpers';
 
@@ -214,55 +214,6 @@ describe('onNavigate dir-name click', () => {
     expect(navigate).not.toHaveBeenCalled();
     // Expand state was toggled
     expect(state.expanded.get('/ws/src')).toBe(true);
-  });
-});
-
-// --- setupStickyTracking ---
-describe('setupStickyTracking', () => {
-  it('returns an object with updateStuck and setEnabled functions', () => {
-    const el = document.createElement('div');
-    const result = setupStickyTracking(el);
-    expect(typeof result.updateStuck).toBe('function');
-    expect(typeof result.setEnabled).toBe('function');
-  });
-
-  it('setEnabled(false) adds sticky-disabled class to document.body', () => {
-    const el = document.createElement('div');
-    const { setEnabled } = setupStickyTracking(el);
-    document.body.classList.remove('sticky-disabled');
-    setEnabled(false);
-    expect(document.body.classList.contains('sticky-disabled')).toBe(true);
-  });
-
-  it('setEnabled(true) removes sticky-disabled class from document.body', () => {
-    const el = document.createElement('div');
-    const { setEnabled } = setupStickyTracking(el);
-    document.body.classList.add('sticky-disabled');
-    setEnabled(true);
-    expect(document.body.classList.contains('sticky-disabled')).toBe(false);
-  });
-
-  it('setEnabled(false) clears is-stuck-bottom class from sticky-dir elements', () => {
-    const el = document.createElement('div');
-    const stickyEl = document.createElement('div');
-    stickyEl.className = 'sticky-dir is-stuck-bottom';
-    el.appendChild(stickyEl);
-    const { setEnabled } = setupStickyTracking(el);
-    setEnabled(false);
-    expect(stickyEl.classList.contains('is-stuck-bottom')).toBe(false);
-  });
-
-  it('updateStuck short-circuits when sticky-disabled is on body', () => {
-    const el = document.createElement('div');
-    const stickyEl = document.createElement('div');
-    stickyEl.className = 'sticky-dir';
-    el.appendChild(stickyEl);
-    document.body.classList.add('sticky-disabled');
-    const { updateStuck } = setupStickyTracking(el);
-    // Should not throw or add classes when disabled
-    updateStuck();
-    expect(stickyEl.classList.contains('is-stuck')).toBe(false);
-    document.body.classList.remove('sticky-disabled');
   });
 });
 

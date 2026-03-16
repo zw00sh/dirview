@@ -220,32 +220,6 @@ export function renderLegend(legendEl: HTMLElement, stats: LangStat[], activeFil
   legendEl.appendChild(items);
 }
 
-// Filter helpers — shared by renderDirNode and renderRoots.
-// searchResults and searchMatchFn are optional; omit them for callers that don't need search filtering.
-export function getVisibleChildren(
-  sortedChildren: DirNode[],
-  activeFilters: Set<string>,
-  matchFn: (node: DirNode) => boolean,
-  searchResults: Map<string, unknown> | null,
-  searchMatchFn?: (node: DirNode) => boolean,
-): DirNode[] {
-  let dirs = sortedChildren;
-  if (activeFilters.size > 0) { dirs = dirs.filter(matchFn); }
-  if (searchResults && searchMatchFn) { dirs = dirs.filter(searchMatchFn); }
-  return dirs;
-}
-
-export function getVisibleFiles(
-  sortedFiles: FileNode[],
-  activeFilters: Set<string>,
-  searchResults: Map<string, unknown> | null,
-): FileNode[] {
-  let files = sortedFiles;
-  if (activeFilters.size > 0) { files = files.filter(f => activeFilters.has(f.langName)); }
-  if (searchResults) { files = files.filter(f => searchResults.has(f.path)); }
-  return files;
-}
-
 // Computes the bar width in pixels for a proportional bar.
 // Deduplicates identical computation previously in renderDirNode and renderTruncatedRow.
 export function computeBarWidth(pct: number, clientWidth: number, rootEl: HTMLElement, opts: RendererOptions): number {

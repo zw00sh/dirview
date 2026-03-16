@@ -30,11 +30,12 @@ export class TabProvider {
     this.config = config;
   }
 
-  /** Probe ripgrep once and cache the result. */
+  /** Probe ripgrep once and cache the result. Resets on failure so retries are possible. */
   private probeRipgrep(): Promise<boolean> {
     if (!this.rgProbe) {
       const svc = new SearchService(vscode.env.appRoot);
-      this.rgProbe = svc.probe().then((ok) => { this.rgAvailable = ok; return ok; });
+      this.rgProbe = svc.probe().then((ok) => { this.rgAvailable = ok; return ok; })
+        .catch(() => { this.rgProbe = undefined; this.rgAvailable = false; return false; });
     }
     return this.rgProbe;
   }
