@@ -614,6 +614,8 @@ export function buildAncestorPaths(filePaths: Iterable<string>, rootPaths?: stri
       ancestors.add(dir);
       end = filePath.lastIndexOf('/', end - 1);
     }
+    // Always include the workspace root ('') — every file is a descendant of it.
+    ancestors.add('');
   }
   return ancestors;
 }
