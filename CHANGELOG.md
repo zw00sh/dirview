@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.1] — 2026-03-16
+
+### Fixed
+- File filter regex now matches against the workspace-relative path (e.g., `src/api/index.ts`) instead of just the filename. Filtering by "api" now correctly includes files inside `api/` directories, matching VSCode native search behavior.
+- Search status text now shows filtered counts when a client-side file filter or language filter is active, instead of raw ripgrep totals.
+- Search status text now updates correctly after toggling language filters in the legend while search results are displayed.
+- Fixed status text timing: filtered counts are deferred to post-render callback so they reflect the actual visible results.
+
+### Changed
+- File scanner moved to a worker thread for ~76% total scan speedup on local filesystems. Remote filesystems fall back to main-thread `vscode.workspace.fs`.
+- Sort button tooltip shows "(size unavailable on remote filesystems)" when connected to a remote workspace.
+- Removed debounce for client-side regex file filters (renders complete in <16ms).
+
 ## [1.2.0] — 2026-03-16
 
 ### Added
