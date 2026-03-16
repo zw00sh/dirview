@@ -17,8 +17,7 @@ vi.mock('vscode', () => {
     workspace: {
       workspaceFolders: undefined as unknown,
       fs: {
-        readDirectory: vi.fn(),
-        stat: vi.fn().mockResolvedValue({ size: 0 }),
+        readDirectory: vi.fn().mockResolvedValue([]),
         readFile: vi.fn().mockRejectedValue(new Error('ENOENT')),
       },
       getConfiguration: vi.fn().mockReturnValue({
@@ -30,38 +29,26 @@ vi.mock('vscode', () => {
 
 vi.mock('fs', () => ({
   promises: {
-    readdir: vi.fn().mockResolvedValue([]),
-    stat: vi.fn().mockResolvedValue({ size: 0 }),
     readFile: vi.fn().mockRejectedValue(new Error('ENOENT')),
   },
 }));
 
 import * as vscode from 'vscode';
-import * as fs from 'fs';
 import { scanWorkspace } from './fileScanner';
-
-/** Create a mock Dirent-like object for fs.readdir({ withFileTypes: true }) */
-function dirent(name: string, type: 'file' | 'dir' | 'symlink') {
-  return {
-    name,
-    isFile: () => type === 'file',
-    isDirectory: () => type === 'dir',
-    isSymbolicLink: () => type === 'symlink',
-  };
-}
 
 describe('scanWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (fs.promises.readFile as ReturnType<typeof vi.fn>)
+    (vscode.workspace.fs.readFile as ReturnType<typeof vi.fn>)
       .mockRejectedValue(new Error('ENOENT'));
-    (fs.promises.stat as ReturnType<typeof vi.fn>)
-      .mockResolvedValue({ size: 100 });
-    (fs.promises.readdir as ReturnType<typeof vi.fn>)
+    (vscode.workspace.fs.readDirectory as ReturnType<typeof vi.fn>)
       .mockResolvedValue([]);
     (vscode.workspace.getConfiguration as ReturnType<typeof vi.fn>)
       .mockReturnValue({ get: vi.fn().mockReturnValue(undefined) });
   });
+
+  // Tests exercise the remote scan path (no workerClient passed).
+  // The local worker path is tested separately via the worker integration.
 
   it('returns empty result when no workspace folders', async () => {
     (vscode.workspace as { workspaceFolders: undefined }).workspaceFolders = undefined;
@@ -71,12 +58,15 @@ describe('scanWorkspace', () => {
   });
 
   it('scans a simple flat directory', async () => {
-    const folderUri = { fsPath: '/repo', scheme: 'file' };
+    const folderUri = { fsPath: '/repo', scheme: 'remote' };
     (vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [
       { uri: folderUri, name: 'repo' },
     ];
-    (fs.promises.readdir as ReturnType<typeof vi.fn>)
-      .mockResolvedValue([dirent('index.ts', 'file'), dirent('style.css', 'file')]);
+    (vscode.workspace.fs.readDirectory as ReturnType<typeof vi.fn>)
+      .mockResolvedValue([
+        ['index.ts', vscode.FileType.File],
+        ['style.css', vscode.FileType.File],
+      ]);
 
     const result = await scanWorkspace(false);
     expect(result.roots).toHaveLength(1);
@@ -86,17 +76,22 @@ describe('scanWorkspace', () => {
   });
 
   it('scans nested directories', async () => {
-    const folderUri = { fsPath: '/repo', scheme: 'file' };
+    const folderUri = { fsPath: '/repo', scheme: 'remote' };
     (vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [
       { uri: folderUri, name: 'repo' },
     ];
-    (fs.promises.readdir as ReturnType<typeof vi.fn>)
-      .mockImplementation((dirPath: string) => {
-        if (dirPath === '/repo') {
-          return Promise.resolve([dirent('src', 'dir'), dirent('README.md', 'file')]);
+    (vscode.workspace.fs.readDirectory as ReturnType<typeof vi.fn>)
+      .mockImplementation(({ fsPath }: { fsPath: string }) => {
+        if (fsPath === '/repo') {
+          return Promise.resolve([
+            ['src', vscode.FileType.Directory],
+            ['README.md', vscode.FileType.File],
+          ]);
         }
-        if (dirPath === '/repo/src') {
-          return Promise.resolve([dirent('index.ts', 'file')]);
+        if (fsPath === '/repo/src') {
+          return Promise.resolve([
+            ['index.ts', vscode.FileType.File],
+          ]);
         }
         return Promise.resolve([]);
       });
@@ -110,14 +105,17 @@ describe('scanWorkspace', () => {
   });
 
   it('excludes VCS directories', async () => {
-    const folderUri = { fsPath: '/repo', scheme: 'file' };
+    const folderUri = { fsPath: '/repo', scheme: 'remote' };
     (vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [
       { uri: folderUri, name: 'repo' },
     ];
-    (fs.promises.readdir as ReturnType<typeof vi.fn>)
-      .mockImplementation((dirPath: string) => {
-        if (dirPath === '/repo') {
-          return Promise.resolve([dirent('.git', 'dir'), dirent('app.ts', 'file')]);
+    (vscode.workspace.fs.readDirectory as ReturnType<typeof vi.fn>)
+      .mockImplementation(({ fsPath }: { fsPath: string }) => {
+        if (fsPath === '/repo') {
+          return Promise.resolve([
+            ['.git', vscode.FileType.Directory],
+            ['app.ts', vscode.FileType.File],
+          ]);
         }
         return Promise.resolve([]);
       });
@@ -128,14 +126,16 @@ describe('scanWorkspace', () => {
   });
 
   it('detects symlink cycles via visitedPaths', async () => {
-    const folderUri = { fsPath: '/repo', scheme: 'file' };
+    const folderUri = { fsPath: '/repo', scheme: 'remote' };
     (vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [
       { uri: folderUri, name: 'repo' },
     ];
-    (fs.promises.readdir as ReturnType<typeof vi.fn>)
-      .mockImplementation((dirPath: string) => {
-        if (dirPath === '/repo') {
-          return Promise.resolve([dirent('loop', 'symlink')]);
+    (vscode.workspace.fs.readDirectory as ReturnType<typeof vi.fn>)
+      .mockImplementation(({ fsPath }: { fsPath: string }) => {
+        if (fsPath === '/repo') {
+          return Promise.resolve([
+            ['loop', vscode.FileType.Directory | vscode.FileType.SymbolicLink],
+          ]);
         }
         return Promise.resolve([]);
       });
@@ -144,40 +144,42 @@ describe('scanWorkspace', () => {
     expect(result).toBeDefined();
   });
 
-  it('aggregates stats from subdirectories', async () => {
-    const folderUri = { fsPath: '/repo', scheme: 'file' };
+  it('aggregates stats from subdirectories (remote — no sizeBytes)', async () => {
+    const folderUri = { fsPath: '/repo', scheme: 'remote' };
     (vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [
       { uri: folderUri, name: 'repo' },
     ];
-    (fs.promises.readdir as ReturnType<typeof vi.fn>)
-      .mockImplementation((dirPath: string) => {
-        if (dirPath === '/repo') {
-          return Promise.resolve([dirent('src', 'dir')]);
+    (vscode.workspace.fs.readDirectory as ReturnType<typeof vi.fn>)
+      .mockImplementation(({ fsPath }: { fsPath: string }) => {
+        if (fsPath === '/repo') {
+          return Promise.resolve([['src', vscode.FileType.Directory]]);
         }
-        if (dirPath === '/repo/src') {
-          return Promise.resolve([dirent('a.ts', 'file'), dirent('b.ts', 'file')]);
+        if (fsPath === '/repo/src') {
+          return Promise.resolve([
+            ['a.ts', vscode.FileType.File],
+            ['b.ts', vscode.FileType.File],
+          ]);
         }
         return Promise.resolve([]);
       });
-    (fs.promises.stat as ReturnType<typeof vi.fn>)
-      .mockResolvedValue({ size: 500 });
 
     const result = await scanWorkspace(false);
     const root = result.roots[0];
     expect(root.totalFiles).toBe(2);
-    expect(root.sizeBytes).toBe(1000);
+    // Remote path skips stat — sizeBytes is 0
+    expect(root.sizeBytes).toBe(0);
     const tsStats = root.stats.find((s: { name: string }) => s.name === 'TypeScript');
     expect(tsStats).toBeDefined();
     expect(tsStats?.count).toBe(2);
   });
 
   it('returns without error when signal is pre-aborted', async () => {
-    const folderUri = { fsPath: '/repo', scheme: 'file' };
+    const folderUri = { fsPath: '/repo', scheme: 'remote' };
     (vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [
       { uri: folderUri, name: 'repo' },
     ];
-    (fs.promises.readdir as ReturnType<typeof vi.fn>)
-      .mockResolvedValue([dirent('a.ts', 'file')]);
+    (vscode.workspace.fs.readDirectory as ReturnType<typeof vi.fn>)
+      .mockResolvedValue([['a.ts', vscode.FileType.File]]);
 
     const controller = new AbortController();
     controller.abort();
@@ -189,13 +191,13 @@ describe('scanWorkspace', () => {
 
   it('scans multiple workspace folders in parallel', async () => {
     (vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [
-      { uri: { fsPath: '/folderA', scheme: 'file' }, name: 'A' },
-      { uri: { fsPath: '/folderB', scheme: 'file' }, name: 'B' },
+      { uri: { fsPath: '/folderA', scheme: 'remote' }, name: 'A' },
+      { uri: { fsPath: '/folderB', scheme: 'remote' }, name: 'B' },
     ];
-    (fs.promises.readdir as ReturnType<typeof vi.fn>)
-      .mockImplementation((dirPath: string) => {
-        if (dirPath === '/folderA') { return Promise.resolve([dirent('a.ts', 'file')]); }
-        if (dirPath === '/folderB') { return Promise.resolve([dirent('b.ts', 'file')]); }
+    (vscode.workspace.fs.readDirectory as ReturnType<typeof vi.fn>)
+      .mockImplementation(({ fsPath }: { fsPath: string }) => {
+        if (fsPath === '/folderA') { return Promise.resolve([['a.ts', vscode.FileType.File]]); }
+        if (fsPath === '/folderB') { return Promise.resolve([['b.ts', vscode.FileType.File]]); }
         return Promise.resolve([]);
       });
 
@@ -207,14 +209,17 @@ describe('scanWorkspace', () => {
   });
 
   it('respects maxDepth setting', async () => {
-    const folderUri = { fsPath: '/repo', scheme: 'file' };
+    const folderUri = { fsPath: '/repo', scheme: 'remote' };
     (vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [
       { uri: folderUri, name: 'repo' },
     ];
     (vscode.workspace.getConfiguration as ReturnType<typeof vi.fn>)
       .mockReturnValue({ get: (key: string, def: unknown) => key === 'maxDepth' ? 1 : def });
-    (fs.promises.readdir as ReturnType<typeof vi.fn>)
-      .mockResolvedValue([dirent('src', 'dir'), dirent('app.ts', 'file')]);
+    (vscode.workspace.fs.readDirectory as ReturnType<typeof vi.fn>)
+      .mockResolvedValue([
+        ['src', vscode.FileType.Directory],
+        ['app.ts', vscode.FileType.File],
+      ]);
 
     const result = await scanWorkspace(false);
     const root = result.roots[0];

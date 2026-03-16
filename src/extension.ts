@@ -44,6 +44,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   coordinator.startWatcher(context);
+  context.subscriptions.push({ dispose: () => coordinator.dispose() });
 
   // Set initial Shiki theme to match VSCode's active color theme, and update on changes
   updateTheme(vscode.window.activeColorTheme.kind);

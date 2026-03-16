@@ -15,6 +15,21 @@ await esbuild.build({
 
 console.log(`esbuild: extension bundled → out/extension.js (${devMode ? 'dev' : 'production'})`);
 
+// Bundle scan worker — runs in a worker_threads Worker, no vscode dependency.
+// vscode is intentionally NOT listed as external so any accidental import causes a build error.
+await esbuild.build({
+  entryPoints: ['src/scanner/scanWorker.ts'],
+  bundle: true,
+  outfile: 'out/scanWorker.js',
+  external: ['@vscode/ripgrep', 'ws'],
+  format: 'cjs',
+  platform: 'node',
+  sourcemap: false,
+  minify: true,
+});
+
+console.log(`esbuild: scan worker bundled → out/scanWorker.js`);
+
 // Bundle webview entry points — each produces a single self-contained JS file.
 // format: 'iife' because webview has no module system (loaded via <script> tags).
 const webviewEntries = ['main', 'tab', 'languages'];
