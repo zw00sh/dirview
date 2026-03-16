@@ -54,7 +54,7 @@ Webview source lives in `src/views/webview/`. Each entry point is bundled by esb
 
 | File | Purpose |
 |------|---------|
-| `main.ts` | Sidebar entry point: init and message handler. Options: skipDepthZeroGuides, hideCounts |
+| `main.ts` | Sidebar entry point: virtual scrolling, sticky overlay, message handler. Options: skipDepthZeroGuides, hideCounts |
 | `tab.ts` | Tab entry point: toolbar buttons, sort cycling, filter legend, truncation/ignored toggles, search |
 | `languages.ts` | Standalone legend panel entry point |
 | `index.ts` | Barrel re-export of all shared modules |
@@ -75,6 +75,7 @@ Webview source lives in `src/views/webview/`. Each entry point is bundled by esb
 | File | Purpose |
 |------|---------|
 | `style.css` | Tree/bar/tooltip styling using VSCode CSS variables |
+| `sidebar.css` | Sidebar-specific layout (flex column body, scroll container, virtual sticky overlay) |
 | `tab.css` | Tab-specific layout (toolbar, legend section, flex column body) |
 | `languages.css` | Legend item styling (swatch, active/inactive states) |
 
@@ -273,7 +274,7 @@ Note: `test-repos/` contains sample repositories used for visual testing of the 
 - **Bar scaling**: Bars are proportional to `metric / maxMetric` where maxMetric is the largest value among non-root nodes. Tab uses `sqrt()` scaling; sidebar uses linear.
 - **Sort modes**: `files` = descending by file count, `name` = ascending alphabetical, `size` = descending by byte size. Files within a directory are always sorted alphabetically regardless of mode.
 - **Empty dir grouping**: 2+ consecutive empty sibling dirs are grouped into a single "N empty directories" row (only when no filter is active).
-- **Virtual scrolling**: Tab view uses virtual scrolling (renders only visible rows + buffer) for large tree performance. Sidebar does not use virtual scrolling.
+- **Virtual scrolling**: Both tab and sidebar use virtual scrolling (renders only visible rows + buffer) via `flattenTree` → `createVirtualScroller`. Both use JS-driven sticky overlays (`createStickyOverlay`) instead of CSS `position: sticky`.
 - **Pre-render filtering**: `filter.ts` produces a shallow-cloned tree with only visible nodes before rendering, so the renderer has no filtering logic.
 - **Language filter behavior**: When filters activate, `expanded` map is cleared so all dirs auto-expand (any dir matching the filter shows its contents). `dirMatchesFilter` checks if any of a dir's stats match an active filter.
 - **File filter (search bar)**: Tab supports "files to include" and "files to exclude" glob fields (comma-separated). Exclude is hidden behind a "..." toggle matching VS Code's native search details. All glob filtering is handled by ripgrep (`--iglob` / `--iglob !`). Falls back to `findFiles` API when ripgrep is unavailable. File count status shows filtered vs total counts.

@@ -866,38 +866,6 @@ li:not(.match-group) > .match-context-row:hover {
   background: var(--vscode-list-hoverBackground);
 }
 
-/* Sticky parent directory headers — parent dir-rows stick to the top of the
-   scroll area while their parent <li> is in view, providing spatial context.
-   --depth (set in renderDirNode) determines the stacking offset.
-   Border is only shown on the bottommost stuck row (.is-stuck-bottom toggled by JS).
-   A transparent border is always present to prevent layout shift when toggling. */
-/* Sticky headers — sidebar only (tab uses JS overlay via virtual scroller) */
-.sidebar .sticky-dir {
-  position: sticky;
-  top: calc(var(--depth) * var(--row-height));
-  z-index: calc(100 - var(--depth));
-  background: var(--vscode-sideBar-background);
-}
-.sidebar .sticky-dir.is-stuck-bottom {
-  overflow: visible;
-}
-.sidebar .sticky-dir.is-stuck-bottom::after {
-  content: '';
-  position: absolute;
-  bottom: -3px;
-  left: 0;
-  right: 0;
-  height: 3px;
-  box-shadow: 0 6px 6px -6px rgba(0, 0, 0, 1) inset;
-}
-
-/* When sticky is disabled, revert to normal flow */
-.sticky-disabled .sticky-dir {
-  position: static;
-  z-index: auto;
-  background: transparent;
-}
-
 /* Files with inline search matches: filename is clickable (opens file) */
 .has-matches .file-name {
   cursor: pointer;

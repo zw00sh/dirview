@@ -49,6 +49,8 @@ Toggling the ignored state triggers a full rescan affecting all views.
 
 ## Tree Rendering
 
+Both the sidebar and tab views use virtual scrolling — only visible rows plus a small overscan buffer are rendered into the DOM. This enables smooth performance on large repositories (e.g., linux kernel with 91k files). Both views use a JS-driven sticky overlay for directory header pinning.
+
 ### Directory Rows
 
 - Each directory row displays: indent guides, a chevron, the directory name, a flex spacer, a proportional bar, and a file count (or byte size in size sort mode).

@@ -1,0 +1,47 @@
+/* Sidebar layout: flex column body with #root as the scroll container.
+   Required for virtual scrolling — the scroller needs a measurable viewport. */
+
+body {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#root {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 0 4px 0;
+}
+
+/* ── Virtual sticky overlay ───────────────────────────────────────────── */
+
+.virtual-sticky-overlay {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  background: var(--vscode-sideBar-background);
+}
+
+.virtual-sticky-overlay:empty {
+  display: none;
+}
+
+.virtual-sticky-overlay .dir-row {
+  background: var(--vscode-sideBar-background);
+}
+
+.virtual-sticky-overlay .dir-row.is-stuck-bottom {
+  overflow: visible;
+}
+
+.virtual-sticky-overlay .dir-row.is-stuck-bottom::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  box-shadow: 0 6px 6px -6px rgba(0, 0, 0, 1) inset;
+}

@@ -111,7 +111,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private getHtml(webview: vscode.Webview): string {
     return buildWebviewHtml(webview, this.extensionUri, {
       scripts: ['main.js'],
-      styles: ['style.css'],
+      styles: ['style.css', 'sidebar.css'],
       title: 'Directory Breakdown',
       bodyAttrs: `data-vscode-context='{"preventDefaultContextMenuItems": true}'`,
     });
