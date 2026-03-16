@@ -143,7 +143,10 @@
       {
         "command": "dirview.toggleStickyHeaders",
         "title": "Enable Sticky Headers",
-        "icon": "$(pin)"
+        "icon": {
+          "light": "media/icon-sticky-off-light.svg",
+          "dark": "media/icon-sticky-off-dark.svg"
+        }
       },
       {
         "command": "dirview.toggleStickyHeadersOff",
