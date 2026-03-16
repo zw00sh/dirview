@@ -119,6 +119,23 @@ export class TabProvider {
     return [dirPath];
   }
 
+  /** Builds a typed update message for a given dirPath, consolidating field defaults. */
+  private buildUpdateMessage(dirPath: string, roots: DirNode[], overrides?: Partial<ScanUpdatePayload>): import('./webview/types').BackendToWebviewMessage & { type: 'update' } {
+    return {
+      type: 'update',
+      roots,
+      dirPath,
+      workspaceFolderName: this.getWorkspaceFolderName(dirPath),
+      autoRescanEnabled: overrides?.autoRescanEnabled ?? this.lastPayload?.autoRescanEnabled ?? true,
+      sortMode: overrides?.sortMode ?? this.lastPayload?.sortMode ?? 'files',
+      truncateThreshold: overrides?.truncateThreshold ?? this.lastPayload?.truncateThreshold ?? 4,
+      showIgnored: overrides?.showIgnored ?? this.lastPayload?.showIgnored ?? false,
+      stickyHeadersEnabled: overrides?.tabStickyHeadersEnabled ?? this.config.tabStickyHeadersEnabled,
+      isLocal: overrides?.isLocal ?? this.lastPayload?.isLocal ?? true,
+      hasRipgrep: this.rgAvailable,
+    };
+  }
+
   /** Opens the root-level breakdown tab (respects allowDuplicateTabs setting). */
   openOrFocus(): void {
     this.openForDir('');
@@ -202,17 +219,7 @@ export class TabProvider {
         panel.title = this.getTabTitle(targetPath);
         const roots = this.getRootsForDir(targetPath);
         if (roots !== undefined) {
-          post(panel.webview, {
-            type: 'update', roots, dirPath: targetPath,
-            workspaceFolderName: this.getWorkspaceFolderName(targetPath),
-            autoRescanEnabled: this.lastPayload?.autoRescanEnabled ?? true,
-            sortMode: this.lastPayload?.sortMode ?? 'files',
-            truncateThreshold: this.lastPayload?.truncateThreshold ?? 4,
-            showIgnored: this.lastPayload?.showIgnored ?? false,
-            stickyHeadersEnabled: this.config.tabStickyHeadersEnabled,
-            isLocal: this.lastPayload?.isLocal ?? true,
-            hasRipgrep: this.rgAvailable,
-          });
+          post(panel.webview, this.buildUpdateMessage(targetPath, roots));
         }
       }
     });
@@ -227,16 +234,7 @@ export class TabProvider {
       const currentPath = visEntry.dirPath;
       const roots = this.getRootsForDir(currentPath);
       if (roots !== undefined) {
-        post(panel.webview, {
-          type: 'update', roots, dirPath: currentPath,
-          workspaceFolderName: this.getWorkspaceFolderName(currentPath),
-          autoRescanEnabled: this.lastPayload?.autoRescanEnabled ?? true,
-          sortMode: this.lastPayload?.sortMode ?? 'files',
-          truncateThreshold: this.lastPayload?.truncateThreshold ?? 4,
-          showIgnored: this.lastPayload?.showIgnored ?? false,
-          stickyHeadersEnabled: this.config.tabStickyHeadersEnabled,
-          hasRipgrep: this.rgAvailable,
-        });
+        post(panel.webview, this.buildUpdateMessage(currentPath, roots));
       }
     });
 
@@ -255,16 +253,7 @@ export class TabProvider {
     const roots = this.getRootsForDir(dirPath);
     if (roots !== undefined) {
       setTimeout(() => {
-        post(panel.webview, {
-          type: 'update', roots, dirPath,
-          workspaceFolderName: this.getWorkspaceFolderName(dirPath),
-          autoRescanEnabled: this.lastPayload?.autoRescanEnabled ?? true,
-          sortMode: this.lastPayload?.sortMode ?? 'files',
-          truncateThreshold: this.lastPayload?.truncateThreshold ?? 4,
-          showIgnored: this.lastPayload?.showIgnored ?? false,
-          stickyHeadersEnabled: this.config.tabStickyHeadersEnabled,
-          hasRipgrep: this.rgAvailable,
-        });
+        post(panel.webview, this.buildUpdateMessage(dirPath, roots));
       }, 100);
     }
   }
@@ -288,13 +277,7 @@ export class TabProvider {
       const panelRoots = this.getRootsForDir(dirPath);
       // Send empty array if the directory was deleted — the tab will show an empty state.
       const effectiveRoots = panelRoots ?? [];
-      post(panel.webview, {
-        type: 'update', roots: effectiveRoots, dirPath,
-        workspaceFolderName: this.getWorkspaceFolderName(dirPath),
-        autoRescanEnabled, sortMode, truncateThreshold, showIgnored, stickyHeadersEnabled,
-        isLocal: payload.isLocal,
-        hasRipgrep: this.rgAvailable,
-      });
+      post(panel.webview, this.buildUpdateMessage(dirPath, effectiveRoots, payload));
     }
   }
 

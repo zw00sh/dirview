@@ -53,6 +53,22 @@ export function findFirstVisible(flatRows: FlatRow[], scrollTop: number): number
   return lo;
 }
 
+/** Binary search for the first row whose offsetY >= target, starting from startFrom.
+ *  Used to find the end of the visible range. */
+export function findFirstPast(flatRows: FlatRow[], target: number, startFrom: number): number {
+  let lo = startFrom;
+  let hi = flatRows.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (flatRows[mid].offsetY < target) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo;
+}
+
 // ── Factory ──────────────────────────────────────────────────────────────────
 
 export function createVirtualScroller(config: VirtualScrollerConfig): VirtualScroller {
@@ -93,11 +109,8 @@ export function createVirtualScroller(config: VirtualScrollerConfig): VirtualScr
 
     // Find visible range via binary search.
     const visibleStart = findFirstVisible(flatRows, scrollTop);
-    let visibleEnd = visibleStart;
     const bottomEdge = scrollTop + viewportHeight;
-    while (visibleEnd < flatRows.length && flatRows[visibleEnd].offsetY < bottomEdge) {
-      visibleEnd++;
-    }
+    const visibleEnd = findFirstPast(flatRows, bottomEdge, visibleStart);
 
     // Apply overscan.
     const renderStart = Math.max(0, visibleStart - overscan);

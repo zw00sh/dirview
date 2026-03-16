@@ -34,3 +34,14 @@ export interface DirNode {
   files: FileNode[];      // direct file children of this directory
   children: DirNode[];
 }
+
+// ── Worker thread message types ──────────────────────────────────────────
+
+export type ScanWorkerRequest =
+  | { type: 'scan'; id: number; folders: Array<{ fsPath: string; name: string }>; maxDepth: number; showIgnored: boolean; filesExcludePatterns: string[][] }
+  | { type: 'abort' };
+
+export type ScanWorkerResponse =
+  | { type: 'result'; id: number; roots: DirNode[]; totalFiles: number }
+  | { type: 'error'; id: number; message: string }
+  | { type: 'aborted'; id: number };

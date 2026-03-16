@@ -1,8 +1,9 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { createVscodeMock } from './test-utils/vscode-mock';
 
 const registeredCommands: Record<string, (...args: unknown[]) => unknown> = {};
 
-vi.mock('vscode', () => ({
+vi.mock('vscode', () => createVscodeMock({
   commands: {
     registerCommand: vi.fn((name: string, cb: (...args: unknown[]) => unknown) => {
       registeredCommands[name] = cb;
@@ -13,7 +14,6 @@ vi.mock('vscode', () => ({
     workspaceFolders: [],
     getConfiguration: vi.fn().mockReturnValue({ get: vi.fn() }),
   },
-  env: { clipboard: { writeText: vi.fn() } },
 }));
 
 import { registerCommands } from './commands';

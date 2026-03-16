@@ -362,6 +362,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
       inputContainer.classList.remove('regex-error');
       filterContainer.classList.remove('regex-error');
       state.fileFilterFn = null;
+      state.fileFilterPattern = null;
       state.searchResultsVersion++;
       vscode.postMessage({ command: 'clearSearch' });
       return;
@@ -380,8 +381,11 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
       // Client-side regex filtering — don't send to ripgrep.
       const re = new RegExp(fileFilter, 'i');
       state.fileFilterFn = (name: string) => re.test(name);
+      state.fileFilterPattern = fileFilter;
     } else {
       state.fileFilterFn = null;
+      state.fileFilterPattern = null;
+      state.fileFilterPattern = null;
     }
 
     // Glob mode: pass the filter to ripgrep as-is (no normalization).
@@ -464,6 +468,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
       // No filter either — full clear.
       statusEl.style.display = 'none';
       state.fileFilterFn = null;
+      state.fileFilterPattern = null;
       state.searchResultsVersion++;
       vscode.postMessage({ command: 'clearSearch' });
     } else {
@@ -518,6 +523,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
       anchorMainQuery = null;
       anchorIncludeQuery = null;
       state.fileFilterFn = null;
+      state.fileFilterPattern = null;
       state.searchResultsVersion++;
       vscode.postMessage({ command: 'clearSearch' });
       return;

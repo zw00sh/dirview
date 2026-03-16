@@ -94,6 +94,7 @@ export function renderTree(
     searchResults: state.searchResults,
     searchAncestorPaths: state.searchAncestorPaths,
     fileFilterFn: state.fileFilterFn,
+    fileFilterPattern: state.fileFilterPattern,
     searchResultsVersion: state.searchResultsVersion,
   });
   // Swap in filtered roots for this render pass. The original roots stay in state.lastRoots
@@ -101,7 +102,7 @@ export function renderTree(
   const savedRoots = state.lastRoots;
   state.lastRoots = filtered.roots;
   // Store isFiltered on state so the renderer can read it for auto-expand logic.
-  (state as any)._isFiltered = filtered.isFiltered;
+  state._isFiltered = filtered.isFiltered;
   state.lastFilteredFileCount = filtered.totalVisibleFiles;
   state.lastFilteredMatchCount = filtered.totalVisibleMatches;
 

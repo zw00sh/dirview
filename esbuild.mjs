@@ -10,7 +10,7 @@ await esbuild.build({
   format: 'cjs',
   platform: 'node',
   sourcemap: false,
-  minify: true,
+  minify: !devMode,
 });
 
 console.log(`esbuild: extension bundled → out/extension.js (${devMode ? 'dev' : 'production'})`);
@@ -25,7 +25,7 @@ await esbuild.build({
   format: 'cjs',
   platform: 'node',
   sourcemap: false,
-  minify: true,
+  minify: !devMode,
 });
 
 console.log(`esbuild: scan worker bundled → out/scanWorker.js`);

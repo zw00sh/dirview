@@ -9,6 +9,7 @@ export interface FilterInputs {
   searchResults: Map<string, SearchMatch[]> | null;
   searchAncestorPaths: Set<string> | null;
   fileFilterFn: ((relativePath: string) => boolean) | null;
+  fileFilterPattern: string | null;
   searchResultsVersion: number;
 }
 
@@ -25,7 +26,7 @@ export interface FilteredTree {
 
 let cachedRoots: DirNode[] | null = null;
 let cachedActiveFilters: Set<string> | null = null;
-let cachedFileFilterFn: ((name: string) => boolean) | null = null;
+let cachedFileFilterPattern: string | null = null;
 let cachedVersion = -1;
 let cachedResult: FilteredTree | null = null;
 
@@ -34,7 +35,7 @@ function cacheValid(roots: DirNode[], inputs: FilterInputs): boolean {
     cachedResult !== null &&
     cachedRoots === roots &&
     cachedActiveFilters === inputs.activeFilters &&
-    cachedFileFilterFn === inputs.fileFilterFn &&
+    cachedFileFilterPattern === inputs.fileFilterPattern &&
     cachedVersion === inputs.searchResultsVersion
   );
 }
@@ -62,7 +63,7 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
     cachedResult = { roots, isFiltered: false, totalVisibleFiles: total, totalVisibleMatches: 0 };
     cachedRoots = roots;
     cachedActiveFilters = activeFilters;
-    cachedFileFilterFn = fileFilterFn;
+    cachedFileFilterPattern = inputs.fileFilterPattern;
     cachedVersion = inputs.searchResultsVersion;
     return cachedResult;
   }
@@ -160,7 +161,7 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
   cachedResult = result;
   cachedRoots = roots;
   cachedActiveFilters = activeFilters;
-  cachedFileFilterFn = fileFilterFn;
+  cachedFileFilterPattern = inputs.fileFilterPattern;
   cachedVersion = inputs.searchResultsVersion;
 
   return result;

@@ -1,6 +1,8 @@
 // Shared test helpers for webview tests
-import { vi } from 'vitest';
+import { vi, afterEach } from 'vitest';
 import { createState, createRenderer } from './index';
+
+afterEach(() => { document.body.innerHTML = ''; });
 
 // Mock acquireVsCodeApi for webview tests
 (globalThis as any).acquireVsCodeApi = () => ({

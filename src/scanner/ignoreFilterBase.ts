@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import ignore, { Ignore } from 'ignore';
 import { Minimatch } from 'minimatch';
-import { VCS_DIRS } from './constants';
+import { isVcsDir } from './constants';
 
 /**
  * Pure JS ignore filter — no vscode dependency.
@@ -56,7 +56,7 @@ export class IgnoreFilterBase {
 
   /** Synchronous exclude check — requires localIg to be pre-loaded. */
   shouldExcludeDirSync(name: string, relPath: string, localIg: Ignore): boolean {
-    if (VCS_DIRS.has(name)) { return true; }
+    if (isVcsDir(name)) { return true; }
     if (this.showIgnored) { return false; }
 
     if (this.isFilesExcluded(relPath + '/')) { return true; }

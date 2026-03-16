@@ -1,6 +1,6 @@
 import { Worker } from 'worker_threads';
 import * as path from 'path';
-import type { DirNode } from './types';
+import type { DirNode, ScanWorkerRequest, ScanWorkerResponse } from './types';
 
 export interface WorkerScanResult {
   roots: DirNode[];
@@ -21,12 +21,12 @@ export class ScanWorkerClient {
 
   constructor() {
     this.worker = new Worker(path.join(__dirname, 'scanWorker.js'));
-    this.worker.on('message', (msg: { type: string; id: number; roots?: DirNode[]; totalFiles?: number; message?: string }) => {
+    this.worker.on('message', (msg: ScanWorkerResponse) => {
       const entry = this.pending.get(msg.id);
       if (!entry) { return; }
       this.pending.delete(msg.id);
       if (msg.type === 'result') {
-        entry.resolve({ roots: msg.roots!, totalFiles: msg.totalFiles! });
+        entry.resolve({ roots: msg.roots, totalFiles: msg.totalFiles });
       } else if (msg.type === 'error') {
         entry.reject(new Error(msg.message ?? 'Worker scan failed'));
       } else if (msg.type === 'aborted') {
@@ -50,12 +50,12 @@ export class ScanWorkerClient {
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.worker.postMessage({ type: 'scan', id, folders, maxDepth, showIgnored, filesExcludePatterns });
+      this.worker.postMessage({ type: 'scan', id, folders, maxDepth, showIgnored, filesExcludePatterns } satisfies ScanWorkerRequest);
     });
   }
 
   abort(): void {
-    this.worker.postMessage({ type: 'abort' });
+    this.worker.postMessage({ type: 'abort' } satisfies ScanWorkerRequest);
     for (const [, entry] of this.pending) {
       entry.reject(new Error('Scan aborted'));
     }

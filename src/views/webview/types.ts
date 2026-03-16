@@ -40,7 +40,8 @@ export type BackendToWebviewMessage =
   | { type: 'searchResultsDone'; fileCount: number; matchCount: number; truncated: boolean }
   | { type: 'searchResults'; matches: Record<string, SearchMatch[]> | null; fileCount?: number; matchCount?: number; truncated?: boolean; error?: string }
   | { type: 'themeChanged' }
-  | { type: 'setDisplayMode'; showPct: boolean };
+  | { type: 'setDisplayMode'; showPct: boolean }
+  | { type: 'languagesUpdate'; roots: Array<{ stats: FileTypeStats[]; totalFiles: number }>; activeFilters: string[]; showPct: boolean };
 
 // ── Messages: webview → backend ───────────────────────────────────────────────
 
@@ -105,6 +106,9 @@ export interface WebviewState extends CoreWebviewState {
   searchFileCount: number;
   searchMatchCount: number;
   fileFilterFn: ((relativePath: string) => boolean) | null;
+  /** Source pattern string for the file filter — used for cache key comparison
+   *  since fileFilterFn is a new closure on every search. */
+  fileFilterPattern: string | null;
   /** Precomputed set of directory paths that are ancestors of search result files.
    *  Enables O(1) dirMatchesSearch checks instead of recursive tree walks. */
   searchAncestorPaths: Set<string> | null;
@@ -122,6 +126,9 @@ export interface WebviewState extends CoreWebviewState {
   lastFilteredMatchCount: number;
   /** Optional callback invoked after each render completes (post-rAF). */
   onAfterRender: (() => void) | null;
+  /** Whether any filter (language, search, file) is currently active.
+   *  Set before render so the renderer can read it for chevron/expand logic. */
+  _isFiltered: boolean;
 }
 
 // ── Renderer ──────────────────────────────────────────────────────────────────

@@ -26,6 +26,7 @@ export function createState(): WebviewState {
     searchFileCount: 0,
     searchMatchCount: 0,
     fileFilterFn: null,
+    fileFilterPattern: null,
     searchAncestorPaths: null,
     searchRootPaths: [],
     searchBar_updateStatus: null,
@@ -37,6 +38,7 @@ export function createState(): WebviewState {
     lastFilteredFileCount: 0,
     lastFilteredMatchCount: 0,
     onAfterRender: null,
+    _isFiltered: false,
     // Placeholder — assigned below
     rerender: null!,
   };

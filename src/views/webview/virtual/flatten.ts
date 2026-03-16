@@ -4,6 +4,7 @@
 
 import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, compactedNode } from '../utils';
 import { filterTree } from '../filter';
+import { assembleMatchGroups } from '../match-grouping';
 import type { DirNode, FileNode, WebviewState, IndentAncestor, SearchMatch } from '../types';
 import type {
   FlatRow, FlattenResult, FlattenOptions,
@@ -37,6 +38,7 @@ export function flattenTree(
     searchResults: state.searchResults,
     searchAncestorPaths: state.searchAncestorPaths,
     fileFilterFn: state.fileFilterFn,
+    fileFilterPattern: state.fileFilterPattern,
     searchResultsVersion: state.searchResultsVersion,
   });
   const isFiltered = filtered.isFiltered;
@@ -175,121 +177,9 @@ export function flattenTree(
     // Sort by line number
     const sorted = fileMatches.slice().sort((a, b) => a.line - b.line);
 
-    // ── Phase 1: Build single match groups ────────────────────────────────
-    interface SingleMatchGroup {
-      matchGroup: SearchMatch[];
-      matchLine: number;
-      contextBefore: SearchMatch[];
-      contextAfter: SearchMatch[];
-    }
+    const groups = assembleMatchGroups(sorted);
 
-    const singleGroups: SingleMatchGroup[] = [];
-    let contextBuffer: SearchMatch[] = [];
-
-    for (let i = 0; i < sorted.length; ) {
-      const m = sorted[i];
-      if (m.isContext) {
-        contextBuffer.push(m);
-        i++;
-        continue;
-      }
-
-      // Group consecutive same-line non-context matches
-      const sameLineGroup: SearchMatch[] = [m];
-      let j = i + 1;
-      while (j < sorted.length && !sorted[j].isContext && sorted[j].line === m.line) {
-        sameLineGroup.push(sorted[j]);
-        j++;
-      }
-
-      // Split buffered context between previous group and this one
-      if (contextBuffer.length > 0) {
-        if (singleGroups.length === 0) {
-          singleGroups.push({ matchGroup: sameLineGroup, matchLine: m.line, contextBefore: contextBuffer, contextAfter: [] });
-        } else {
-          const mid = Math.ceil(contextBuffer.length / 2);
-          singleGroups[singleGroups.length - 1].contextAfter = contextBuffer.slice(0, mid);
-          singleGroups.push({ matchGroup: sameLineGroup, matchLine: m.line, contextBefore: contextBuffer.slice(mid), contextAfter: [] });
-        }
-        contextBuffer = [];
-      } else {
-        singleGroups.push({ matchGroup: sameLineGroup, matchLine: m.line, contextBefore: [], contextAfter: [] });
-      }
-
-      i = j;
-    }
-
-    // Trailing context
-    if (contextBuffer.length > 0 && singleGroups.length > 0) {
-      singleGroups[singleGroups.length - 1].contextAfter = contextBuffer;
-    }
-
-    // Trim empty/whitespace-only context from edges
-    for (const g of singleGroups) {
-      while (g.contextBefore.length > 0 && g.contextBefore[0].lineText.trim() === '') { g.contextBefore.shift(); }
-      while (g.contextAfter.length > 0 && g.contextAfter[g.contextAfter.length - 1].lineText.trim() === '') { g.contextAfter.pop(); }
-    }
-
-    // ── Phase 1.5: Merge contiguous groups ────────────────────────────────
-    interface MatchGroupEntry {
-      matches: Array<{
-        matchGroup: SearchMatch[];
-        matchLine: number;
-        contextBefore: SearchMatch[];
-      }>;
-      contextAfter: SearchMatch[];
-      dedent: number;
-    }
-
-    const groups: MatchGroupEntry[] = [];
-    for (const sg of singleGroups) {
-      const firstLine = sg.contextBefore.length > 0 ? sg.contextBefore[0].line : sg.matchLine;
-      if (groups.length > 0) {
-        const prev = groups[groups.length - 1];
-        const prevLastMatch = prev.matches[prev.matches.length - 1];
-        const prevLastLine = prev.contextAfter.length > 0
-          ? prev.contextAfter[prev.contextAfter.length - 1].line
-          : prevLastMatch.matchLine;
-        if (firstLine <= prevLastLine + 1) {
-          const interContext = [...prev.contextAfter, ...sg.contextBefore];
-          prev.contextAfter = sg.contextAfter;
-          prev.matches.push({
-            matchGroup: sg.matchGroup,
-            matchLine: sg.matchLine,
-            contextBefore: interContext,
-          });
-          continue;
-        }
-      }
-      groups.push({
-        matches: [{
-          matchGroup: sg.matchGroup,
-          matchLine: sg.matchLine,
-          contextBefore: sg.contextBefore,
-        }],
-        contextAfter: sg.contextAfter,
-        dedent: 0,
-      });
-    }
-
-    // ── Phase 1.75: Compute per-group dedent ──────────────────────────────
-    for (const g of groups) {
-      const allLines: SearchMatch[] = [];
-      for (const m of g.matches) {
-        allLines.push(...m.contextBefore, ...m.matchGroup);
-      }
-      allLines.push(...g.contextAfter);
-      let minIndent = Infinity;
-      for (const m of allLines) {
-        const text = m.lineText || '';
-        if (text.trim() === '') { continue; }
-        const indent = text.length - text.trimStart().length;
-        if (indent < minIndent) { minIndent = indent; }
-      }
-      g.dedent = minIndent === Infinity ? 0 : minIndent;
-    }
-
-    // ── Phase 2: Emit MatchGroupFlatRows ─────────────────────────────────
+    // ── Emit MatchGroupFlatRows ──────────────────────────────────────────
     const threshold = state.truncateThreshold;
     const shouldTruncateMatches = threshold > 0 && groups.length > threshold && !state.truncationExpanded.has(file.path);
 

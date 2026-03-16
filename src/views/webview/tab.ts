@@ -62,8 +62,17 @@ const searchBar = createSearchBar(state, vscode, {
 });
 searchContentEl.appendChild(searchBar.el);
 
-let searchCollapsed = false;
-let treeCollapsed = false;
+// Consolidated tab-local UI state.
+const tabUI = {
+  searchCollapsed: false,
+  treeCollapsed: false,
+  legendCollapsed: false,
+  legendShowPct: false,
+  showIgnored: false,
+  truncationEnabled: true,
+  isLocal: true,
+  stickyEnabled: true,
+};
 // Initialise chevrons to match expanded state (chevron rotated 90° = expanded).
 searchChevronEl.style.transform = 'rotate(90deg)';
 treeChevronEl.style.transform = 'rotate(90deg)';
@@ -72,8 +81,8 @@ treeChevronEl.style.transform = 'rotate(90deg)';
 window.addEventListener('keydown', (e: KeyboardEvent) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
     e.preventDefault();
-    if (searchCollapsed) {
-      searchCollapsed = false;
+    if (tabUI.searchCollapsed) {
+      tabUI.searchCollapsed = false;
       searchContentEl.style.display = '';
       searchChevronEl.style.transform = 'rotate(90deg)';
       updateSearchActiveAlert();
@@ -83,11 +92,11 @@ window.addEventListener('keydown', (e: KeyboardEvent) => {
 });
 
 function updateSearchActiveAlert() {
-  searchActiveAlert.style.display = (searchCollapsed && state.searchResults) ? '' : 'none';
+  searchActiveAlert.style.display = (tabUI.searchCollapsed && state.searchResults) ? '' : 'none';
 }
 
 function updateLegendActiveAlert() {
-  legendActiveAlert.style.display = (legendCollapsed && state.activeFilters.size > 0) ? '' : 'none';
+  legendActiveAlert.style.display = (tabUI.legendCollapsed && state.activeFilters.size > 0) ? '' : 'none';
 }
 
 const renderer = createRenderer(state, {
@@ -107,9 +116,7 @@ const renderer = createRenderer(state, {
   onNavigate: (path: string) => vscode.postMessage({ command: 'navigateToDir', path }),
 });
 
-let currentShowIgnored = false;
-let currentTruncationEnabled = true;
-let currentIsLocal = true;
+// (showIgnored, truncationEnabled, isLocal now in tabUI)
 // The directory path this tab is rooted at ('' = workspace root).
 state.dirPath = '';
 // Workspace folder name used by ancestor path context menus.
@@ -117,8 +124,7 @@ state.workspaceFolderName = '';
 
 // Tab-local truncation defaults (match config defaults)
 state.truncateThreshold = 4;
-let legendCollapsed = false;
-let legendShowPct = false;
+// (tabUI.legendCollapsed, tabUI.legendShowPct now in tabUI)
 
 // SVG icons for the legend display toggle — typographic % and # glyphs, matching sidebar title bar icons
 const SVG_PCT = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><text x="8" y="12.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', sans-serif" font-weight="600" font-size="13" fill="currentColor">%</text></svg>';
@@ -127,29 +133,29 @@ const SVG_HASH = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://
 function getSortTitle(mode: SortMode): string {
   const sortNames: Record<SortMode, string> = { files: 'by file count', name: 'by name', size: 'by size' };
   const base = 'Sort: ' + (sortNames[mode] || 'by file count');
-  if (!currentIsLocal) { return base + ' (size unavailable on remote filesystems)'; }
+  if (!tabUI.isLocal) { return base + ' (size unavailable on remote filesystems)'; }
   return base;
 }
 
 // ── Toolbar button helpers ──────────────────────────────────────────────
 
 function updateToggleIgnoredBtn() {
-  toggleIgnoredBtn.innerHTML = currentShowIgnored ? SVG_EYE_CLOSED : SVG_EYE;
-  toggleIgnoredBtn.title = currentShowIgnored ? 'Hide Ignored Files' : 'Show Ignored Files';
+  toggleIgnoredBtn.innerHTML = tabUI.showIgnored ? SVG_EYE_CLOSED : SVG_EYE;
+  toggleIgnoredBtn.title = tabUI.showIgnored ? 'Hide Ignored Files' : 'Show Ignored Files';
   toggleIgnoredBtn.setAttribute('aria-label', toggleIgnoredBtn.title);
 }
 
 function updateTruncationBtn() {
-  toggleTruncationBtn.innerHTML = currentTruncationEnabled ? SVG_FOLD : SVG_UNFOLD;
-  toggleTruncationBtn.title = currentTruncationEnabled ? 'Disable File Truncation' : 'Enable File Truncation';
+  toggleTruncationBtn.innerHTML = tabUI.truncationEnabled ? SVG_FOLD : SVG_UNFOLD;
+  toggleTruncationBtn.title = tabUI.truncationEnabled ? 'Disable File Truncation' : 'Enable File Truncation';
   toggleTruncationBtn.setAttribute('aria-label', toggleTruncationBtn.title);
 }
 
-let currentStickyEnabled = true;
+// (stickyEnabled now in tabUI)
 
 function updateStickyBtn() {
-  toggleStickyBtn.innerHTML = currentStickyEnabled ? SVG_STICKY : SVG_STICKY_OFF;
-  toggleStickyBtn.title = currentStickyEnabled ? 'Disable Sticky Headers' : 'Enable Sticky Headers';
+  toggleStickyBtn.innerHTML = tabUI.stickyEnabled ? SVG_STICKY : SVG_STICKY_OFF;
+  toggleStickyBtn.title = tabUI.stickyEnabled ? 'Disable Sticky Headers' : 'Enable Sticky Headers';
   toggleStickyBtn.setAttribute('aria-label', toggleStickyBtn.title);
 }
 
@@ -265,11 +271,11 @@ for (const btn of [sortBtn, toggleStickyBtn, toggleTruncationBtn, toggleIgnoredB
 }
 
 toggleTruncationBtn.addEventListener('click', () => {
-  vscode.postMessage({ command: 'toggleTruncation', enabled: !currentTruncationEnabled });
+  vscode.postMessage({ command: 'toggleTruncation', enabled: !tabUI.truncationEnabled });
 });
 sortBtn.addEventListener('click', () => {
   if (!state.lastRoots) { return; }
-  const modes: SortMode[] = currentIsLocal ? ['files', 'name', 'size'] : ['files', 'name'];
+  const modes: SortMode[] = tabUI.isLocal ? ['files', 'name', 'size'] : ['files', 'name'];
   const next = modes[(modes.indexOf(state.currentSortMode) + 1) % modes.length];
   state.currentSortMode = next;
   sortBtn.title = getSortTitle(next);
@@ -279,7 +285,7 @@ sortBtn.addEventListener('click', () => {
   state.rerender();
 });
 toggleIgnoredBtn.addEventListener('click', () => {
-  vscode.postMessage({ command: 'toggleIgnored', show: !currentShowIgnored });
+  vscode.postMessage({ command: 'toggleIgnored', show: !tabUI.showIgnored });
 });
 expandAllBtn.addEventListener('click', () => {
   if (!state.lastRoots) { return; }
@@ -296,30 +302,30 @@ collapseAllBtn.addEventListener('click', () => {
   state.rerender();
 });
 toggleStickyBtn.addEventListener('click', () => {
-  vscode.postMessage({ command: 'toggleStickyHeaders', enabled: !currentStickyEnabled });
+  vscode.postMessage({ command: 'toggleStickyHeaders', enabled: !tabUI.stickyEnabled });
 });
 refreshBtn.addEventListener('click', () => {
   vscode.postMessage({ command: 'refresh' });
 });
 function toggleLegend() {
-  legendCollapsed = !legendCollapsed;
-  legendEl.style.display = legendCollapsed ? 'none' : '';
-  legendChevron.style.transform = legendCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
-  legendHeader.setAttribute('aria-expanded', String(!legendCollapsed));
+  tabUI.legendCollapsed = !tabUI.legendCollapsed;
+  legendEl.style.display = tabUI.legendCollapsed ? 'none' : '';
+  legendChevron.style.transform = tabUI.legendCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
+  legendHeader.setAttribute('aria-expanded', String(!tabUI.legendCollapsed));
   updateLegendActiveAlert();
 }
 function toggleSearch() {
-  searchCollapsed = !searchCollapsed;
-  searchContentEl.style.display = searchCollapsed ? 'none' : '';
-  searchChevronEl.style.transform = searchCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
-  searchHeaderEl.setAttribute('aria-expanded', String(!searchCollapsed));
+  tabUI.searchCollapsed = !tabUI.searchCollapsed;
+  searchContentEl.style.display = tabUI.searchCollapsed ? 'none' : '';
+  searchChevronEl.style.transform = tabUI.searchCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
+  searchHeaderEl.setAttribute('aria-expanded', String(!tabUI.searchCollapsed));
   updateSearchActiveAlert();
 }
 function toggleTree() {
-  treeCollapsed = !treeCollapsed;
-  root.style.display = treeCollapsed ? 'none' : '';
-  treeChevronEl.style.transform = treeCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
-  treeHeaderEl.setAttribute('aria-expanded', String(!treeCollapsed));
+  tabUI.treeCollapsed = !tabUI.treeCollapsed;
+  root.style.display = tabUI.treeCollapsed ? 'none' : '';
+  treeChevronEl.style.transform = tabUI.treeCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
+  treeHeaderEl.setAttribute('aria-expanded', String(!tabUI.treeCollapsed));
 }
 legendHeader.addEventListener('click', toggleLegend);
 searchHeaderEl.addEventListener('click', toggleSearch);
@@ -332,9 +338,9 @@ for (const [el, fn] of [[legendHeader, toggleLegend], [searchHeaderEl, toggleSea
 }
 legendDisplayToggle.addEventListener('click', (e: MouseEvent) => {
   e.stopPropagation(); // Don't collapse the legend section when clicking the toggle
-  legendShowPct = !legendShowPct;
-  legendDisplayToggle.innerHTML = legendShowPct ? SVG_HASH : SVG_PCT;
-  legendDisplayToggle.title = legendShowPct ? 'Show counts' : 'Show percentages';
+  tabUI.legendShowPct = !tabUI.legendShowPct;
+  legendDisplayToggle.innerHTML = tabUI.legendShowPct ? SVG_HASH : SVG_PCT;
+  legendDisplayToggle.title = tabUI.legendShowPct ? 'Show counts' : 'Show percentages';
   legendDisplayToggle.setAttribute('aria-label', legendDisplayToggle.title);
   if (state.lastRoots) {
     updateLegend(computeStats(state.lastRoots));
@@ -383,8 +389,8 @@ function updateLegend(stats: LangStat[]) {
     return;
   }
   legendSection.style.display = '';
-  legendEl.style.display = legendCollapsed ? 'none' : '';
-  renderLegend(legendEl, stats, state.activeFilters, toggleFilter, legendShowPct);
+  legendEl.style.display = tabUI.legendCollapsed ? 'none' : '';
+  renderLegend(legendEl, stats, state.activeFilters, toggleFilter, tabUI.legendShowPct);
 }
 
 // ── Tree ────────────────────────────────────────────────────────────────
@@ -420,7 +426,7 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   renderer.beforeRender();
 
   // Set _isFiltered on state so the renderer's renderDirRow can read it for chevron/expand logic.
-  (state as any)._isFiltered = state.activeFilters.size > 0 || state.searchResults !== null || state.fileFilterFn !== null;
+  state._isFiltered = state.activeFilters.size > 0 || state.searchResults !== null || state.fileFilterFn !== null;
 
   // Build flat rows and update virtual scroller
   const { flatRows, totalHeight, totalVisibleFiles, totalVisibleMatches } = flattenTree(state, roots, {
@@ -458,8 +464,8 @@ const sharedHandler = createMessageHandler(state, scanBar, root, {
   render,
   resolveUpdateSortMode: () => state.currentSortMode || 'files',
   onBeforeUpdate: (message: BackendToWebviewMessage & { type: 'update' }) => {
-    currentShowIgnored = message.showIgnored || false;
-    if (typeof message.isLocal === 'boolean') { currentIsLocal = message.isLocal; }
+    tabUI.showIgnored = message.showIgnored || false;
+    if (typeof message.isLocal === 'boolean') { tabUI.isLocal = message.isLocal; }
     updateToggleIgnoredBtn();
     if (typeof message.dirPath === 'string') {
       const dirChanged = state.dirPath !== message.dirPath;
@@ -470,7 +476,7 @@ const sharedHandler = createMessageHandler(state, scanBar, root, {
     }
     if (typeof message.workspaceFolderName === 'string') { state.workspaceFolderName = message.workspaceFolderName; }
     if (typeof message.stickyHeadersEnabled === 'boolean') {
-      currentStickyEnabled = message.stickyHeadersEnabled;
+      tabUI.stickyEnabled = message.stickyHeadersEnabled;
       updateStickyBtn();
       overlay.setEnabled(message.stickyHeadersEnabled);
     }
@@ -491,7 +497,7 @@ window.addEventListener('message', (event: MessageEvent) => {
     return;
   }
   if (message.type === 'updateStickyHeaders') {
-    currentStickyEnabled = message.enabled;
+    tabUI.stickyEnabled = message.enabled;
     updateStickyBtn();
     overlay.setEnabled(message.enabled);
     return;
@@ -504,7 +510,7 @@ window.addEventListener('message', (event: MessageEvent) => {
     }
     if (typeof newThreshold === 'number') { state.truncateThreshold = newThreshold; }
     if (typeof message.truncationEnabled === 'boolean') {
-      currentTruncationEnabled = message.truncationEnabled;
+      tabUI.truncationEnabled = message.truncationEnabled;
       updateTruncationBtn();
     }
     if (state.lastRoots) { state.rerender(); }

@@ -16,6 +16,7 @@ describe('filterTree search', () => {
       searchResults: opts.searchResults ?? null,
       searchAncestorPaths: opts.searchAncestorPaths ?? null,
       fileFilterFn: opts.fileFilterFn ?? null,
+      fileFilterPattern: null,
       searchResultsVersion: opts.searchResultsVersion ?? 0,
     });
   }
@@ -368,11 +369,12 @@ describe('search rendering integration', () => {
       searchResults: state.searchResults,
       searchAncestorPaths: null,
       fileFilterFn: null,
+      fileFilterPattern: null,
       searchResultsVersion: 0,
     });
     const renderer = makeRenderer(state);
     renderer.beforeRender();
-    (state as any)._isFiltered = filtered.isFiltered;
+    state._isFiltered = filtered.isFiltered;
     const li = renderer.renderDirNode(filtered.roots[0], 0, 10, [], 300);
     const fileRows = li.querySelectorAll('.file-row');
     expect(fileRows.length).toBe(1);

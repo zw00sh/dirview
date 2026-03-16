@@ -1,26 +1,17 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { createVscodeMock } from '../test-utils/vscode-mock';
 import { IgnoreFilter } from './ignoreFilter';
 
-vi.mock('vscode', () => {
-  const Uri = {
-    joinPath: (base: { fsPath: string }, ...parts: string[]) => ({
-      fsPath: [base.fsPath, ...parts].join('/'),
-    }),
-    file: (path: string) => ({ fsPath: path }),
-  };
-
-  return {
-    workspace: {
-      fs: {
-        readFile: vi.fn().mockRejectedValue(new Error('ENOENT')),
-      },
-      getConfiguration: vi.fn().mockReturnValue({
-        get: vi.fn().mockReturnValue({}),
-      }),
+vi.mock('vscode', () => createVscodeMock({
+  workspace: {
+    fs: {
+      readFile: vi.fn().mockRejectedValue(new Error('ENOENT')),
     },
-    Uri,
-  };
-});
+    getConfiguration: vi.fn().mockReturnValue({
+      get: vi.fn().mockReturnValue({}),
+    }),
+  },
+}));
 
 vi.mock('fs', () => ({
   promises: {

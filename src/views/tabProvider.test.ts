@@ -1,26 +1,12 @@
 import { vi, describe, it, expect } from 'vitest';
+import { createVscodeMock } from '../test-utils/vscode-mock';
 
 const { WORKSPACE_ROOT } = vi.hoisted(() => ({ WORKSPACE_ROOT: '/Users/test/myproject' }));
 
-vi.mock('vscode', () => ({
-  Uri: {
-    joinPath: (base: { fsPath: string }, ...parts: string[]) => ({
-      fsPath: [base.fsPath, ...parts].join('/'),
-    }),
-    file: (p: string) => ({ fsPath: p }),
-  },
+vi.mock('vscode', () => createVscodeMock({
   workspace: {
     workspaceFolders: [{ uri: { fsPath: WORKSPACE_ROOT } }],
   },
-  window: {
-    createWebviewPanel: vi.fn(() => ({
-      webview: { html: '', onDidReceiveMessage: vi.fn(), postMessage: vi.fn(), asWebviewUri: vi.fn() },
-      onDidDispose: vi.fn(),
-      reveal: vi.fn(),
-      dispose: vi.fn(),
-    })),
-  },
-  ViewColumn: { One: 1 },
 }));
 
 vi.mock('./buildWebviewHtml', () => ({ buildWebviewHtml: vi.fn(() => '') }));

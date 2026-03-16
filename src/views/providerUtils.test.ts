@@ -1,14 +1,9 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { createVscodeMock } from '../test-utils/vscode-mock';
 
 // --- Mocks ---
 
-vi.mock('vscode', () => ({
-  Uri: { file: (p: string) => ({ fsPath: p }) },
-  Position: class { constructor(public line: number, public char: number) {} },
-  Range: class { constructor(public start: any, public end: any) {} },
-  window: { showTextDocument: vi.fn() },
-  commands: { executeCommand: vi.fn() },
-}));
+vi.mock('vscode', () => createVscodeMock());
 
 // highlightGroup mock — returns resolved promise with fake HTML strings per line.
 // Tests can override via highlightDeferred to control async timing.
@@ -395,7 +390,7 @@ describe('handleCommonMessage', () => {
 
   it('openFile without line — calls vscode.open and returns true', () => {
     const result = handleCommonMessage({ command: 'openFile', path: '/a/foo.ts' }, {});
-    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('vscode.open', { fsPath: '/a/foo.ts' });
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('vscode.open', { fsPath: '/a/foo.ts', scheme: 'file' });
     expect(result).toBe(true);
   });
 
@@ -403,7 +398,7 @@ describe('handleCommonMessage', () => {
     const result = handleCommonMessage({ command: 'openFile', path: '/a/foo.ts', line: 5 }, {});
     expect(vscode.window.showTextDocument).toHaveBeenCalledOnce();
     const [uri, opts] = (vscode.window.showTextDocument as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(uri).toEqual({ fsPath: '/a/foo.ts' });
+    expect(uri).toEqual({ fsPath: '/a/foo.ts', scheme: 'file' });
     // Position should be line-1=4, char 0
     expect(opts.selection.start.line).toBe(4);
     expect(opts.selection.start.char).toBe(0);

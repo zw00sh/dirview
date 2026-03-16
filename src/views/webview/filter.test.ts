@@ -48,6 +48,7 @@ describe('filterTree fileFilter', () => {
       searchResults: opts.searchResults ?? null,
       searchAncestorPaths: opts.searchAncestorPaths ?? null,
       fileFilterFn: opts.fileFilterFn ?? null,
+      fileFilterPattern: null,
       searchResultsVersion: opts.searchResultsVersion ?? 0,
     });
   }
@@ -109,6 +110,7 @@ describe('filterTree fileFilter matches relative path', () => {
       searchResults: opts.searchResults ?? null,
       searchAncestorPaths: opts.searchAncestorPaths ?? null,
       fileFilterFn: opts.fileFilterFn ?? null,
+      fileFilterPattern: null,
       searchResultsVersion: opts.searchResultsVersion ?? Date.now(),
     });
   }
@@ -154,6 +156,7 @@ describe('filterTree totalVisibleMatches', () => {
       searchResults: opts.searchResults ?? null,
       searchAncestorPaths: opts.searchAncestorPaths ?? null,
       fileFilterFn: opts.fileFilterFn ?? null,
+      fileFilterPattern: null,
       searchResultsVersion: opts.searchResultsVersion ?? Date.now(),
     });
   }
@@ -236,6 +239,7 @@ describe('filterTree totalVisibleMatches with language filter', () => {
       searchResults: opts.searchResults ?? null,
       searchAncestorPaths: opts.searchAncestorPaths ?? null,
       fileFilterFn: opts.fileFilterFn ?? null,
+      fileFilterPattern: null,
       searchResultsVersion: opts.searchResultsVersion ?? Date.now(),
     });
   }

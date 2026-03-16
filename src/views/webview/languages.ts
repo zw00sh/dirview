@@ -34,7 +34,7 @@ window.addEventListener('message', (event: MessageEvent) => {
     scanBar.show(true);
     return;
   }
-  if (message.type === 'update') {
+  if (message.type === 'languagesUpdate' || message.type === 'update') {
     scanBar.show(false);
     currentStats = computeStats(message.roots || []);
     if (message.activeFilters !== undefined) {

@@ -1,31 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { createVscodeMock } from '../test-utils/vscode-mock';
 
-vi.mock('vscode', () => {
-  const FileType = { Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64 };
-
-  const Uri = {
-    joinPath: (base: { fsPath: string; scheme?: string }, ...parts: string[]) => ({
-      fsPath: [base.fsPath, ...parts].join('/'),
-      scheme: base.scheme ?? 'file',
-    }),
-    file: (path: string) => ({ fsPath: path, scheme: 'file' }),
-  };
-
-  return {
-    FileType,
-    Uri,
-    workspace: {
-      workspaceFolders: undefined as unknown,
-      fs: {
-        readDirectory: vi.fn().mockResolvedValue([]),
-        readFile: vi.fn().mockRejectedValue(new Error('ENOENT')),
-      },
-      getConfiguration: vi.fn().mockReturnValue({
-        get: vi.fn().mockReturnValue(undefined),
-      }),
-    },
-  };
-});
+vi.mock('vscode', () => createVscodeMock());
 
 vi.mock('fs', () => ({
   promises: {

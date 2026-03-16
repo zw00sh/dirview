@@ -40,17 +40,15 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
       })
     );
 
-    // Languages panel sends stripped roots (stats + totalFiles only), which doesn't
-    // conform to the shared BackendToWebviewMessage update shape — use raw postMessage.
     this.disposables.push(webviewView.onDidChangeVisibility(() => {
       if (webviewView.visible && this.lastPayload) {
-        webviewView.webview.postMessage({ type: 'update', roots: this.stripRoots(this.lastPayload.roots), activeFilters: this.activeFilters, showPct: this.showPct });
+        post(webviewView.webview, { type: 'languagesUpdate', roots: this.stripRoots(this.lastPayload.roots), activeFilters: this.activeFilters, showPct: this.showPct });
       }
     }));
     if (this.lastPayload) {
       setTimeout(() => {
         if (this.lastPayload) {
-          webviewView.webview.postMessage({ type: 'update', roots: this.stripRoots(this.lastPayload.roots), activeFilters: this.activeFilters, showPct: this.showPct });
+          post(webviewView.webview, { type: 'languagesUpdate', roots: this.stripRoots(this.lastPayload.roots), activeFilters: this.activeFilters, showPct: this.showPct });
         }
       }, 100);
     }
@@ -62,8 +60,7 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
 
   update(payload: ScanUpdatePayload): void {
     this.lastPayload = payload;
-    // Languages panel sends stripped roots (stats + totalFiles only) — use raw postMessage.
-    this.view?.webview.postMessage({ type: 'update', roots: this.stripRoots(payload.roots), activeFilters: this.activeFilters, showPct: this.showPct });
+    if (this.view) { post(this.view.webview, { type: 'languagesUpdate', roots: this.stripRoots(payload.roots), activeFilters: this.activeFilters, showPct: this.showPct }); }
   }
 
   toggleDisplayMode(): void {
