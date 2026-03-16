@@ -74,13 +74,14 @@ export function setupDelegatedEvents(ctx: RendererContext): void {
         const entry = nodeMap.get(path!);
         if (!entry) { return; }
         const node = entry.node as DirNode;
-        const isExp = state.expanded.get(node.path);
+        const isFiltered = state.activeFilters.size > 0 || !!state.searchResults || !!state.fileFilterFn;
+        const isExp = state.expanded.get(node.path) ?? isFiltered;
         if (!isExp) {
           state.expanded.set(node.path, true);
         } else {
           const allDirectChildrenExpanded = node.children.every((child: DirNode) => {
             const cn = compactedNode(child);
-            return cn.children.length === 0 || state.expanded.get(cn.path);
+            return cn.children.length === 0 || (state.expanded.get(cn.path) ?? isFiltered);
           });
           if (allDirectChildrenExpanded) {
             walkExpand(state, node.children);
@@ -98,12 +99,13 @@ export function setupDelegatedEvents(ctx: RendererContext): void {
         const entry = nodeMap.get(path!);
         if (!entry) { return; }
         const node = entry.node as DirNode;
-        if (!state.expanded.get(node.path)) { return; }
-        const anyChildExpanded = node.children.some((child: DirNode) => state.expanded.get(compactedPath(child)));
+        const isFiltered = state.activeFilters.size > 0 || !!state.searchResults || !!state.fileFilterFn;
+        if (!(state.expanded.get(node.path) ?? isFiltered)) { return; }
+        const anyChildExpanded = node.children.some((child: DirNode) => state.expanded.get(compactedPath(child)) ?? isFiltered);
         if (anyChildExpanded) {
           const anyDeeperExpanded = node.children.some((child: DirNode) => {
             const cn = compactedNode(child);
-            return hasExpandedDescendant(state, cn);
+            return hasExpandedDescendant(state, cn, isFiltered);
           });
           if (anyDeeperExpanded) {
             for (const child of node.children) {

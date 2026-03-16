@@ -762,6 +762,96 @@ describe('tieredCollapseAll', () => {
   });
 });
 
+// --- tieredExpandAll with filters active ---
+
+describe('tieredExpandAll with filters', () => {
+  function makeWorkspace() {
+    const ax = makeDir('/ws/a/x', 'x', { totalFiles: 1 });
+    const ay = makeDir('/ws/a/y', 'y', { totalFiles: 1 });
+    const bp = makeDir('/ws/b/p', 'p', { totalFiles: 1 });
+    const bq = makeDir('/ws/b/q', 'q', { totalFiles: 1 });
+    const a = makeDir('/ws/a', 'a', { children: [ax, ay], totalFiles: 2 });
+    const b = makeDir('/ws/b', 'b', { children: [bp, bq], totalFiles: 2 });
+    const ws = makeDir('/ws', 'ws', { children: [a, b], totalFiles: 4 });
+    return { ws, a, b, ax, ay, bp, bq };
+  }
+
+  it('tier 1: recognizes implicitly expanded top-level and expands children', () => {
+    const { ws } = makeWorkspace();
+    const state = createState();
+    state.fileFilterFn = () => true; // filter active, no explicit expanded entries
+    // All top-level implicitly expanded → tier 2: deep expand
+    tieredExpandAll(state, [ws]);
+    expect(state.expanded.get('/ws/a/x')).toBe(true);
+    expect(state.expanded.get('/ws/b/p')).toBe(true);
+  });
+
+  it('tier 1: expands explicitly collapsed top-level items back', () => {
+    const { ws } = makeWorkspace();
+    const state = createState();
+    state.fileFilterFn = () => true;
+    state.expanded.set('/ws/a', false); // explicitly collapsed during filter
+    // Not all top-level expanded → tier 1
+    tieredExpandAll(state, [ws]);
+    expect(state.expanded.get('/ws/a')).toBe(true);
+    expect(state.expanded.get('/ws/b')).toBe(true);
+  });
+});
+
+// --- tieredCollapseAll with filters active ---
+
+describe('tieredCollapseAll with filters', () => {
+  function makeWorkspace() {
+    const ax_deep = makeDir('/ws/a/ax/deep', 'deep', { totalFiles: 1 });
+    const ax_other = makeDir('/ws/a/ax/other', 'other', { totalFiles: 1 });
+    const ax = makeDir('/ws/a/ax', 'ax', { children: [ax_deep, ax_other], totalFiles: 2 });
+    const a = makeDir('/ws/a', 'a', { children: [ax], totalFiles: 2 });
+    const bx = makeDir('/ws/b/x', 'x', { totalFiles: 1 });
+    const by = makeDir('/ws/b/y', 'y', { totalFiles: 1 });
+    const b = makeDir('/ws/b', 'b', { children: [bx, by], totalFiles: 2 });
+    const ws = makeDir('/ws', 'ws', { children: [a, b], totalFiles: 4 });
+    return { ws, a, b, ax, ax_deep, ax_other, bx, by };
+  }
+
+  it('tier 1: collapses implicitly expanded deeper descendants', () => {
+    const { ws } = makeWorkspace();
+    const state = createState();
+    state.searchResults = new Map(); // filter active, all dirs implicitly expanded
+    tieredCollapseAll(state, [ws]);
+    // Tier 1: deeper descendants collapsed, top-level stays implicitly open
+    expect(state.expanded.get('/ws/a/ax/deep')).toBe(false);
+    expect(state.expanded.get('/ws/a/ax/other')).toBe(false);
+    // Top-level not explicitly collapsed (still implicit)
+    expect(state.expanded.has('/ws/a/ax')).toBe(false); // no explicit entry
+  });
+
+  it('tier 2: collapses top-level after tier 1 has collapsed descendants', () => {
+    const { ws } = makeWorkspace();
+    const state = createState();
+    state.searchResults = new Map();
+    // Tier 1: collapse deeper
+    tieredCollapseAll(state, [ws]);
+    // Tier 2: collapse top-level
+    tieredCollapseAll(state, [ws]);
+    expect(state.expanded.get('/ws/a/ax')).toBe(false);
+    expect(state.expanded.get('/ws/b')).toBe(false);
+  });
+
+  it('tier 3: no-op when everything is explicitly collapsed', () => {
+    const { ws } = makeWorkspace();
+    const state = createState();
+    state.searchResults = new Map();
+    tieredCollapseAll(state, [ws]); // tier 1
+    tieredCollapseAll(state, [ws]); // tier 2
+    const snapshot = new Map(state.expanded);
+    tieredCollapseAll(state, [ws]); // tier 3: no-op
+    // State unchanged
+    for (const [k, v] of snapshot) {
+      expect(state.expanded.get(k)).toBe(v);
+    }
+  });
+});
+
 // ── patchTreeChildren / patchDirLi ───────────────────────────────────────────
 
 function makeLi(path: string, barWidth: number, countText: string, childPaths: string[] = []) {

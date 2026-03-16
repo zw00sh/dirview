@@ -137,11 +137,11 @@ export function compactedPath(node: DirNode): string {
 }
 
 // Returns true if any of node's descendants are expanded.
-export function hasExpandedDescendant(state: WebviewState, node: DirNode): boolean {
+export function hasExpandedDescendant(state: WebviewState, node: DirNode, defaultExpanded = false): boolean {
   for (const child of (node.children || [])) {
     const cn = compactedNode(child);
-    if (state.expanded.get(cn.path)) return true;
-    if (hasExpandedDescendant(state, cn)) return true;
+    if (state.expanded.get(cn.path) ?? defaultExpanded) return true;
+    if (hasExpandedDescendant(state, cn, defaultExpanded)) return true;
   }
   return false;
 }

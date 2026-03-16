@@ -82,9 +82,13 @@ export function tieredExpandAll(state: WebviewState, roots: DirNode[]): void {
   const topLevel = roots.flatMap(r => r.children || []);
   if (topLevel.length === 0) { return; }
 
+  // When filters are active, dirs are implicitly expanded by the renderer.
+  // Use isFiltered as fallback so tier checks recognize implicitly expanded nodes.
+  const isFiltered = state.activeFilters.size > 0 || !!state.searchResults || !!state.fileFilterFn;
+
   const allTopExpanded = topLevel.every(node => {
     const cn = compactedNode(node);
-    return cn.children.length === 0 || state.expanded.get(cn.path);
+    return cn.children.length === 0 || (state.expanded.get(cn.path) ?? isFiltered);
   });
 
   if (!allTopExpanded) {
@@ -111,7 +115,12 @@ export function tieredCollapseAll(state: WebviewState, roots: DirNode[]): void {
   const topLevel = roots.flatMap(r => r.children || []);
   if (topLevel.length === 0) { return; }
 
-  const anyTopExpanded = topLevel.some(node => state.expanded.get(compactedPath(node)));
+  // When filters are active, dirs are implicitly expanded by the renderer.
+  // Use isFiltered as fallback so tier checks recognize implicitly expanded nodes.
+  const isFiltered = state.activeFilters.size > 0 || !!state.searchResults || !!state.fileFilterFn;
+  const isNodeExpanded = (node: DirNode) => state.expanded.get(compactedPath(node)) ?? isFiltered;
+
+  const anyTopExpanded = topLevel.some(isNodeExpanded);
   if (!anyTopExpanded) {
     // Tier 3: nothing to collapse
     return;
@@ -119,11 +128,13 @@ export function tieredCollapseAll(state: WebviewState, roots: DirNode[]): void {
 
   const anyDeeperExpanded = topLevel.some(node => {
     const cn = compactedNode(node);
-    return hasExpandedDescendant(state, cn);
+    return hasExpandedDescendant(state, cn, isFiltered);
   });
 
   if (anyDeeperExpanded) {
-    // Tier 1: collapse everything inside top-level items, keep top-level itself open
+    // Tier 1: collapse everything inside top-level items, keep top-level itself open.
+    // walkCollapse sets explicit false on descendants, overriding the isFiltered
+    // auto-expand default in the renderer.
     for (const node of topLevel) {
       const cn = compactedNode(node);
       walkCollapse(state, cn.children || []);
