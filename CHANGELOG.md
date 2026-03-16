@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0] — 2026-03-16
+
+### Added
+- **Virtual scrolling** in the tab view: renders only visible rows (~50) regardless of tree size. Expand-all on the linux kernel (28k files) drops from 3.6–5.1s to ~47ms.
+- Centered empty state messages with icons for all placeholder views (initializing, scanning, no workspace, no results, error).
+- "No results found" empty state when search or filter produces zero matches.
+- Dynamic search debounce: skips the 300ms delay when narrowing a small result set (< 500 files).
+- File count shown in status line for client-side regex file filters.
+
+### Fixed
+- Glob file filter in subtree tabs showing no results due to incorrect workspace root path conversion.
+- Glob file filter showing no results because workspace root was missing from ancestor path index.
+
 ## [1.1.3] — 2026-03-16
 
 ### Fixed
