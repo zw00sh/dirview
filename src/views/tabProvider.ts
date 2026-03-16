@@ -64,6 +64,15 @@ export class TabProvider {
     return undefined;
   }
 
+  /** Returns the tab title for a given dirPath.
+   *  Root tabs use the workspace name; subtree tabs use the directory basename. */
+  private getTabTitle(dirPath: string): string {
+    if (dirPath === '') {
+      return vscode.workspace.name || 'Breakdown';
+    }
+    return path.basename(dirPath);
+  }
+
   /** Returns the workspace folder name that contains the given dirPath.
    *  For the workspace root tab (dirPath === ''), returns the single workspace
    *  folder name if there is exactly one, so the toolbar shows "source" instead
@@ -133,7 +142,7 @@ export class TabProvider {
     }
 
     const id = this.nextPanelId++;
-    const title = dirPath === '' ? 'Breakdown' : path.basename(dirPath);
+    const title = this.getTabTitle(dirPath);
     const panel = vscode.window.createWebviewPanel(
       'dirview.tab',
       title,
@@ -189,7 +198,7 @@ export class TabProvider {
         if (oldService) { oldService.cancel(); }
         // Update the dirPath in place — no re-keying needed with numeric IDs.
         navEntry.dirPath = targetPath;
-        panel.title = targetPath === '' ? 'Breakdown' : path.basename(targetPath);
+        panel.title = this.getTabTitle(targetPath);
         const roots = this.getRootsForDir(targetPath);
         if (roots !== undefined) {
           post(panel.webview, {
