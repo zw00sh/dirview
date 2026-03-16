@@ -189,7 +189,10 @@ export class TabProvider {
       const rootPaths = this.getRootPaths(currentPath ?? '');
       const wsRootPaths = this.getRootPaths('');
       const svc = panelId !== undefined ? (this.searchServices.get(panelId) ?? searchService) : searchService;
-      if (handleSearchMessage(message, svc, (msg) => post(panel.webview, msg), rootPaths, this.rgAvailable, wsRootPaths)) { return; }
+      // When auto-rescan is disabled (large repos), trigger a background rescan after
+      // search completes so the tree catches up with filesystem changes ripgrep discovered.
+      const rescanAfterSearch = this.lastPayload?.autoRescanEnabled === false ? this.onRefresh : undefined;
+      if (handleSearchMessage(message, svc, (msg) => post(panel.webview, msg), rootPaths, this.rgAvailable, wsRootPaths, rescanAfterSearch)) { return; }
 
       if (handleCommonMessage(message, {
         onRefresh: this.onRefresh,

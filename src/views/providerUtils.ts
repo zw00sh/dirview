@@ -59,6 +59,7 @@ export function handleSearchMessage(
   rootPaths: string[],
   hasRipgrep = true,
   workspaceRootPaths?: string[],
+  onSearchComplete?: () => void,
 ): boolean {
   // rootPaths scopes the ripgrep search (may be a subdirectory for subtree tabs).
   // workspaceRootPaths is used by the webview to convert absolute file paths to
@@ -237,6 +238,7 @@ export function handleSearchMessage(
       await Promise.all(pendingBatches);
       if (searchService.getGeneration() !== searchGen) { return; }
       postMessage({ type: 'searchResultsDone', fileCount: r.fileCount, matchCount: r.matchCount, truncated: r.truncated });
+      onSearchComplete?.();
     }).catch((err: Error) => {
       postMessage({ type: 'searchResults', matches: null, error: String(err) });
     });
@@ -251,6 +253,7 @@ export function handleSearchMessage(
         const matchesObj: Record<string, []> = {};
         for (const p of r.matches.keys()) { matchesObj[p] = []; }
         postMessage({ type: 'searchResults', matches: matchesObj, fileCount: r.fileCount, matchCount: 0, truncated: r.truncated });
+        onSearchComplete?.();
       }).catch((err: Error) => {
         postMessage({ type: 'searchResults', matches: null, error: String(err) });
       });
@@ -264,6 +267,7 @@ export function handleSearchMessage(
         const matchesObj: Record<string, []> = {};
         for (const u of filtered) { matchesObj[u.fsPath] = []; }
         postMessage({ type: 'searchResults', matches: matchesObj, fileCount: filtered.length, matchCount: 0, truncated: false });
+        onSearchComplete?.();
       }).catch((err: Error) => {
         postMessage({ type: 'searchResults', matches: null, error: String(err) });
       });
