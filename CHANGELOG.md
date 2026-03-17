@@ -1,9 +1,25 @@
 # Changelog
 
-## [1.3.2] — 2026-03-17
+## [1.4.0] — 2026-03-17
+
+### Added
+- **Redesigned tab header** — breadcrumb navigation replaces the plain title, with nested indentation reflecting directory depth and a viewport-aware resize observer.
+- **Navigation history** — breadcrumb supports back/forward navigation through previously visited subtree tabs.
+- **Scroll shadow** — a subtle shadow appears under the tab tree header when content is scrolled.
+- **E2E test harness** — integration tests run real ripgrep against real test repositories, covering cross-module interactions (filter + search + expand state + rendering pipeline).
+
+### Changed
+- Tab header uses a decorative dot separator instead of a chevron.
+- Legend layout is now stable (no longer shifts when toggling filters); removed the file filter cap.
+- Scanner and ripgrep file discovery are now aligned — content search scoped by language filter uses `--type-add` so ripgrep and the scanner agree on which files to include.
+- Glob normalization improved for edge cases (bare `*`, trailing slashes).
 
 ### Fixed
-- Subtab breadcrumb now includes compacted intermediate directories. Previously, opening a subdirectory tab and searching would show files directly under the breadcrumb root, swallowing single-child directory chains (e.g. `api / src / controllers` was hidden).
+- **Language filter + search re-trigger** — toggling or clearing language filters during an active content search now re-fires the ripgrep query so results reflect the updated filter scope. Previously, removing a language filter left stale results scoped to the old set.
+- **Multi-root key collisions** — FlatRow keys are now prefixed with root index in multi-root workspaces, preventing virtual scroller collisions when roots share relative paths.
+- **Highlight promise leak** — `pendingBatches` in the search handler now uses a self-cleaning Set instead of an unbounded array, preventing memory growth during rapid search-cancel-search cycles.
+- Subtab breadcrumb now includes compacted intermediate directories (e.g. `api / src / controllers` was previously hidden).
+- Renderer `renderFileNode` now reads pre-computed `hasMatches` from FlatRow data instead of global search state, improving consistency in the virtual-scroll path.
 
 ## [1.3.1] — 2026-03-17
 
