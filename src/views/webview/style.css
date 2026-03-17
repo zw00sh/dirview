@@ -161,6 +161,11 @@ body {
   cursor: pointer;
 }
 
+.indent-guide:not([data-action]) {
+  cursor: default;
+  pointer-events: none;
+}
+
 .indent-guide::before {
   content: '';
   position: absolute;

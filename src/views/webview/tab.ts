@@ -43,7 +43,6 @@ const legendActiveAlert = document.getElementById('legend-active-alert')!;
 const treeSection = document.getElementById('tree-section')!;
 const treeHeaderEl = document.getElementById('tree-header')!;
 const root = document.getElementById('root')!;
-const treeHeaderTitle = document.getElementById('tree-header-title')!;
 const treeHeaderBreadcrumb = document.getElementById('tree-header-breadcrumb')!;
 const sortBtn = document.getElementById('tab-sort')!;
 const toggleStickyBtn = document.getElementById('tab-toggle-sticky')!;
@@ -197,38 +196,41 @@ function updateRefreshBtn(autoRescanEnabled: boolean) {
 }
 
 function updateNavigation() {
-  // Header title: current root name, ALL CAPS
-  const displayName = state.dirPath
-    ? state.dirPath.split('/').pop()!
-    : (state.workspaceFolderName || 'Tree');
-  treeHeaderTitle.textContent = displayName.toUpperCase();
-
-  // Breadcrumb: inline in the header after the title, hidden at workspace root
   treeHeaderBreadcrumb.innerHTML = '';
-  if (!state.dirPath) { return; }
 
-  // Dot separator between title and breadcrumb
-  treeHeaderBreadcrumb.appendChild(h('span', { className: 'tab-tree-header-separator', textContent: '\u00B7' }));
-
-  const segments = state.dirPath.split('/');
+  // Build breadcrumb segments — always visible (shows workspace name at root)
+  const segments = state.dirPath ? state.dirPath.split('/') : [];
   const hasRootName = !!state.workspaceFolderName;
-  const allNames = hasRootName ? [state.workspaceFolderName, ...segments] : segments;
+  const allNames = state.dirPath
+    ? (hasRootName ? [state.workspaceFolderName, ...segments] : segments)
+    : [state.workspaceFolderName || 'Tree'];
 
   for (let i = 0; i < allNames.length; i++) {
     if (i > 0) {
       treeHeaderBreadcrumb.appendChild(h('span', { className: 'path-sep', textContent: ' / ' }));
     }
     const offset = hasRootName ? i - 1 : i;
-    const segPath = offset < 0 ? '' : segments.slice(0, offset + 1).join('/');
+    const segPath = !state.dirPath ? '' : (offset < 0 ? '' : segments.slice(0, offset + 1).join('/'));
+    const isLast = i === allNames.length - 1;
     const seg = h('span', {
-      className: 'path-segment',
+      className: 'path-segment' + (isLast ? ' current' : ''),
       textContent: allNames[i],
     });
-    seg.addEventListener('click', (e: MouseEvent) => {
-      e.stopPropagation();
-      navigateTo(segPath);
-    });
+    if (!isLast || state.dirPath) {
+      seg.addEventListener('click', (e: MouseEvent) => {
+        e.stopPropagation();
+        navigateTo(segPath);
+      });
+    }
     treeHeaderBreadcrumb.appendChild(seg);
+  }
+}
+
+/** Add one level of indentation so the tree appears nested under the header breadcrumb. */
+function addHeaderIndent(rows: FlatRow[]) {
+  for (const row of rows) {
+    (row as any).depth += 1;
+    row.ancestors = [null as any, ...row.ancestors];
   }
 }
 
@@ -467,6 +469,10 @@ function legendStats(): LangStat[] {
   return computeStats(state.lastRoots);
 }
 
+// Base legend stats from the initial unfiltered scan — frozen order for stable layout.
+// Updated only when new scan data arrives, not on search/filter changes.
+let baseLegendStats: LangStat[] = [];
+
 function updateLegend(stats?: LangStat[]) {
   const s = stats ?? legendStats();
   // Hide legend only when there's no data at all (no scan yet).
@@ -540,6 +546,7 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   const { flatRows, totalHeight, totalVisibleFiles, totalVisibleMatches, filteredRoots, searchFilteredStats } = flattenTree(state, roots, {
     clientWidth: root.clientWidth || 600,
   });
+  addHeaderIndent(flatRows);
 
   // Restore threshold for future interactive renders.
   state.truncateThreshold = savedThreshold;
@@ -587,6 +594,10 @@ const sharedHandler = createMessageHandler(state, scanBar, root, {
   resolveUpdateSortMode: () => state.currentSortMode || 'files',
   onBeforeUpdate: (message: BackendToWebviewMessage & { type: 'update' }) => {
     initialRender = true;
+    // Freeze the base legend stats from fresh scan data for stable layout ordering.
+    if (message.roots && message.roots.length > 0) {
+      baseLegendStats = computeStats(message.roots as DirNode[]);
+    }
     tabUI.showIgnored = message.showIgnored || false;
     if (typeof message.isLocal === 'boolean') { tabUI.isLocal = message.isLocal; }
     updateToggleIgnoredBtn();

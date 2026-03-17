@@ -83,7 +83,7 @@ export function createStickyOverlay(config: StickyOverlayConfig): StickyOverlay 
     const scrollTop = container.scrollTop;
 
     // Build set of ancestor paths for quick lookup
-    const ancestorPaths = new Set(ancestors.map(a => a.path));
+    const ancestorPaths = new Set(ancestors.filter(a => a != null).map(a => a.path));
 
     // Find the DirFlatRows for these ancestors that are above the scroll position.
     // We only need to scan rows before visibleStart (they're above the viewport).

@@ -341,7 +341,7 @@ export class TabProvider {
   </div>
   <div id="tree-section" class="tab-tree-section">
   <div id="tree-header" class="tab-tree-header">
-    <span id="tree-header-title" class="tab-tree-header-title">Tree</span>
+    <span class="tab-tree-header-chevron"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M6.146 3.146a.5.5 0 0 0 0 .707l4.146 4.146-4.146 4.146a.5.5 0 0 0 .707.707l4.5-4.5a.5.5 0 0 0 0-.707l-4.5-4.5a.5.5 0 0 0-.707 0Z"/></svg></span>
     <span id="tree-header-breadcrumb" class="tab-tree-header-breadcrumb"></span>
     <div style="display:flex;align-items:center;gap:2px;margin-left:auto">
       <button class="tab-action tab-refresh-btn" id="tab-refresh" title="Refresh (auto-rescan disabled for large repo)" aria-label="Refresh" style="display:none"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M4.681 3.156a6 6 0 0 1 8.468 1.088l.47.616H11.5a.5.5 0 0 0 0 1h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-1 0v1.768l-.412-.54a7 7 0 1 0 1.374 5.107.5.5 0 1 0-.984.176A6 6 0 1 1 4.68 3.156z"/></svg></button>

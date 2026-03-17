@@ -3,6 +3,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createVirtualScroller, findFirstVisible } from './scroller';
 import type { FlatRow } from './types';
 
+// Polyfill ResizeObserver for jsdom
+globalThis.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as any;
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeFlatRows(count: number, height: number = 22): FlatRow[] {

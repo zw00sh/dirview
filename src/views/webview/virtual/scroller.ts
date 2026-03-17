@@ -169,6 +169,16 @@ export function createVirtualScroller(config: VirtualScrollerConfig): VirtualScr
 
   container.addEventListener('scroll', onScroll, { passive: true });
 
+  // Re-render when the container resizes (e.g. panel drag, sidebar toggle).
+  const resizeObserver = new ResizeObserver(() => {
+    if (flatRows.length > 0) {
+      lastRenderStart = -1;
+      lastRenderEnd = -1;
+      renderPass();
+    }
+  });
+  resizeObserver.observe(container);
+
   // ── Public methods ───────────────────────────────────────────────────────
 
   function update(newFlatRows: FlatRow[], totalHeight: number): void {
@@ -198,6 +208,7 @@ export function createVirtualScroller(config: VirtualScrollerConfig): VirtualScr
   }
 
   function destroy(): void {
+    resizeObserver.disconnect();
     container.removeEventListener('scroll', onScroll);
     if (treeEl) {
       treeEl.remove();
