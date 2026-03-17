@@ -247,7 +247,7 @@ function renderFlatRow(r: Renderer, row: FlatRow): HTMLElement {
     case 'dir':
       return r.renderDirRow(row.node, row.depth, row.maxMetric, row.ancestors, row.clientWidth);
     case 'file':
-      return r.renderFileNode(row.file, row.depth, row.ancestors);
+      return r.renderFileNode(row.file, row.depth, row.ancestors, row.hasMatches);
     case 'truncated':
       return r.renderTruncatedRow(row.hiddenFiles, row.depth, row.ancestors, row.dirPath, row.maxMetric, row.clientWidth);
     case 'emptyGroup':

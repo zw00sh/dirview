@@ -62,8 +62,9 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
   // Wire up renderIndentGuides on the context so extracted modules can use it.
   ctx.renderIndentGuides = renderIndentGuides;
 
-  function renderFileNode(file: FileNode, depth: number, ancestors: IndentAncestor[]): HTMLLIElement {
-    const hasMatches = !!(state.searchResults?.has(file.path) && state.searchResults.get(file.path)!.length > 0);
+  function renderFileNode(file: FileNode, depth: number, ancestors: IndentAncestor[], hasMatchesOverride?: boolean): HTMLLIElement {
+    // Virtual path passes pre-computed hasMatches from FlatRow; non-virtual path falls back to state lookup.
+    const hasMatches = hasMatchesOverride ?? !!(state.searchResults?.has(file.path) && state.searchResults.get(file.path)!.length > 0);
     const row = h('div', {
       className: 'file-row clickable' + (hasMatches ? ' has-matches' : ''),
       // For files without matches: data-action opens the file via delegated click handler.

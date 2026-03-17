@@ -43,6 +43,9 @@ export interface FileFlatRow extends FlatRowBase {
   type: 'file';
   height: typeof ROW_HEIGHT_FILE;
   file: FileNode;
+  /** Whether this file has search matches (pre-computed at flatten time so the renderer
+   *  doesn't need to read global search state). */
+  hasMatches: boolean;
 }
 
 export interface TruncatedFlatRow extends FlatRowBase {

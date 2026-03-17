@@ -172,7 +172,7 @@ export interface RendererContext {
 export interface Renderer {
   beforeRender(): void;
   renderIndentGuides(depth: number, ancestors: IndentAncestor[]): HTMLSpanElement;
-  renderFileNode(file: FileNode, depth: number, ancestors: IndentAncestor[]): HTMLLIElement;
+  renderFileNode(file: FileNode, depth: number, ancestors: IndentAncestor[], hasMatches?: boolean): HTMLLIElement;
   renderMatchLine(file: FileNode, matchGroup: SearchMatch[], depth: number, ancestors: IndentAncestor[], dedent?: number): HTMLLIElement;
   renderContextLine(file: FileNode, match: SearchMatch, depth: number, ancestors: IndentAncestor[], dedent?: number): HTMLLIElement;
   renderMoreMatchesRow(count: number, depth: number, ancestors: IndentAncestor[], filePath: string): HTMLLIElement;

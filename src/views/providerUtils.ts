@@ -205,7 +205,8 @@ export function handleSearchMessage(
     }
 
     // Track in-flight batch highlights so we can wait for them before sending 'done'.
-    const pendingBatches: Promise<void>[] = [];
+    // Each promise removes itself on completion to prevent unbounded accumulation.
+    const pendingBatches = new Set<Promise<void>>();
 
     const { result } = searchService.searchWorkspace(
       message.pattern,
@@ -228,8 +229,8 @@ export function handleSearchMessage(
             if (patches.length > 0) {
               postMessage({ type: 'searchResultsHighlight', patches });
             }
-          });
-          pendingBatches.push(highlightPromise);
+          }).finally(() => { pendingBatches.delete(highlightPromise); });
+          pendingBatches.add(highlightPromise);
         },
       }
     );

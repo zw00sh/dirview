@@ -1,4 +1,7 @@
 // Tree rendering functions: renderRoots, renderTree.
+// This is the non-virtual render path used by the sidebar (main.ts). The tab uses
+// the virtual-scroll path in flatten.ts → scroller.ts instead. Both paths must be
+// kept in sync for consistent behavior.
 
 import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, emptyState } from '../utils';
 import { filterTree } from '../filter';

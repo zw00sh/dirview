@@ -46,6 +46,8 @@ export function formatBytes(bytes: number): string {
 
 // WeakMap caches keyed by the original array reference: Map<mode, sortedArray>.
 // This avoids redundant .slice().sort() on every render for unchanged data.
+// Note: filterTree() shallow-clones arrays, so these caches miss on filtered trees
+// (new array references). The caches primarily benefit unfiltered re-renders.
 const _sortDirsCache = new WeakMap<DirNode[], Map<SortMode, DirNode[]>>();
 const _sortFilesCache = new WeakMap<FileNode[], FileNode[]>();
 

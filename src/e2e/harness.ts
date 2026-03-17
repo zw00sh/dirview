@@ -197,7 +197,7 @@ export async function createHarness(options: HarnessOptions): Promise<Harness> {
           ul.appendChild(renderer.renderDirRow(row.node, row.depth, row.maxMetric, row.ancestors, row.clientWidth));
           break;
         case 'file':
-          ul.appendChild(renderer.renderFileNode(row.file, row.depth, row.ancestors));
+          ul.appendChild(renderer.renderFileNode(row.file, row.depth, row.ancestors, row.hasMatches));
           break;
         case 'truncated':
           ul.appendChild(renderer.renderTruncatedRow(row.hiddenFiles, row.depth, row.ancestors, row.dirPath, row.maxMetric, row.clientWidth));

@@ -1,6 +1,10 @@
 // Match rendering functions for the tree renderer.
 // Extracted from createRenderer — handles search match lines, context lines,
 // "more matches" rows, and the full renderFileMatches orchestrator.
+//
+// renderFileMatches() is the non-virtual render path (used by sidebar via render-tree.ts).
+// The virtual-scroll tab path pre-computes match groups in flatten.ts and renders them
+// directly in tab.ts renderFlatRow() without calling renderFileMatches().
 
 import { SVG_CHEVRON, SVG_PLUS, SVG_WARNING } from '../icons';
 import { h } from '../h';
