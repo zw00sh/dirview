@@ -170,10 +170,6 @@ export function setupDelegatedEvents(ctx: RendererContext): void {
 
     // Dir-name click → navigate (tab mode only; onNavigate is not set in sidebar).
     if (deps.onNavigate) {
-      // Breadcrumb ancestor segment: navigate to that specific ancestor path.
-      const navSeg = (e.target as HTMLElement).closest('[data-navigate-path]') as HTMLElement | null;
-      if (navSeg) { deps.onNavigate(navSeg.dataset.navigatePath!); return; }
-      // Any dir-name click: navigate to that directory.
       const dirNameEl = (e.target as HTMLElement).closest('.dir-name') as HTMLElement | null;
       if (dirNameEl) {
         const parentDirRow = dirNameEl.closest('.dir-row[data-path]') as HTMLElement | null;

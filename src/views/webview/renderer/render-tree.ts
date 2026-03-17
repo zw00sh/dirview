@@ -1,18 +1,14 @@
 // Tree rendering functions: renderRoots, renderTree.
 
 import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, emptyState } from '../utils';
-import { ensureRootsExpanded } from '../state';
 import { filterTree } from '../filter';
 import { patchTreeChildren } from './dom-patch';
 import { h } from '../h';
 
 import type { DirNode, WebviewState, Renderer } from '../types';
 
-// Renders the root-level tree rows into treeEl. Shared between sidebar and tab views.
-// Requires state.lastRoots to be set.
-// opts.showRootNode: if true (tab), render each root as a depth-0 dir-row itself rather than
-//   rendering the root's children at depth 0. Enables the root-as-tree-node design where the
-//   workspace folder (or subdir) appears as the topmost row and its children are at depth 1.
+// Renders the root-level tree rows into treeEl. Roots' children appear at depth 0.
+// For multi-root workspaces, a header row with the folder name appears above each root's children.
 export function renderRoots(
   renderer: Renderer,
   state: WebviewState,
@@ -20,19 +16,9 @@ export function renderRoots(
   maxMetric: number,
   clientWidth: number,
   isFiltered: boolean,
-  opts?: { showRootNode?: boolean; cssClass?: string },
+  opts?: { cssClass?: string },
 ): void {
   const roots = state.lastRoots!;
-
-  if (opts && opts.showRootNode) {
-    // Tab view: each root is a visible depth-0 node, always expanded.
-    ensureRootsExpanded(state, roots);
-    for (const r of roots) {
-      state.currentRootName = r.name;
-      treeEl.appendChild(renderer.renderDirNode(r, 0, maxMetric, [], clientWidth));
-    }
-    return;
-  }
 
   for (const r of roots) {
     state.currentRootName = r.name;
@@ -85,7 +71,7 @@ export function renderTree(
   state: WebviewState,
   renderer: Renderer,
   rootEl: HTMLElement,
-  opts?: { cssClass?: string; showRootNode?: boolean },
+  opts?: { cssClass?: string },
 ): void {
   // Clear the nodeMap so stale entries from the previous render don't persist.
   if (renderer.beforeRender) { renderer.beforeRender(); }

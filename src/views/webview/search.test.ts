@@ -1122,51 +1122,57 @@ describe('collapsible file-row with search matches', () => {
   });
 });
 
-// --- createSearchBar setDirPill ---
-describe('createSearchBar setDirPill', () => {
+// --- createSearchBar setScopeWarning ---
+describe('createSearchBar setScopeWarning', () => {
   function makeSearchBar(standalone: boolean) {
     const state = createState();
     const vscode = { postMessage: vi.fn() } as any;
     const bar = createSearchBar(state, vscode, standalone ? { standalone: true } : undefined);
-    return { bar, vscode };
+    document.body.appendChild(bar.el);
+    return { bar, state };
   }
 
-  it('shows pill with basename for a subdirectory path', () => {
+  it('shows scope hint and yellow border when include input is focused in scoped tab', () => {
     const { bar } = makeSearchBar(false);
-    bar.setDirPill('src/scanner');
-    const pill = bar.el.querySelector('.search-dir-pill');
-    expect(pill.style.display).toBe('');
-    expect(pill.querySelector('.search-dir-pill-text').textContent).toBe('in: scanner');
+    bar.setScopeWarning('src/scanner');
+    const includeInput = bar.el.querySelector('.search-filter-input[aria-label="files to include"]') as HTMLInputElement;
+    includeInput.focus();
+    const container = includeInput.closest('.search-filter-container')!;
+    expect(container.classList.contains('scope-warning')).toBe(true);
+    const hint = container.querySelector('.search-scope-hint') as HTMLElement;
+    expect(hint.style.display).not.toBe('none');
+    expect(hint.textContent).toContain('scanner');
   });
 
-  it('hides pill when dirPath is empty', () => {
+  it('hides scope hint when input loses focus', () => {
     const { bar } = makeSearchBar(false);
-    bar.setDirPill('src/scanner');
-    bar.setDirPill('');
-    const pill = bar.el.querySelector('.search-dir-pill');
-    expect(pill.style.display).toBe('none');
+    bar.setScopeWarning('src/scanner');
+    const includeInput = bar.el.querySelector('.search-filter-input[aria-label="files to include"]') as HTMLInputElement;
+    includeInput.focus();
+    includeInput.blur();
+    const container = includeInput.closest('.search-filter-container')!;
+    expect(container.classList.contains('scope-warning')).toBe(false);
+    const hint = container.querySelector('.search-scope-hint') as HTMLElement;
+    expect(hint.style.display).toBe('none');
   });
 
-  it('uses the last segment for deeply nested paths', () => {
+  it('does not show scope hint when dirPath is empty', () => {
     const { bar } = makeSearchBar(false);
-    bar.setDirPill('deep/nested/dir');
-    const pill = bar.el.querySelector('.search-dir-pill');
-    expect(pill.querySelector('.search-dir-pill-text').textContent).toBe('in: dir');
-  });
-
-  it('close button posts navigateToDir with empty path', () => {
-    const { bar, vscode } = makeSearchBar(false);
-    bar.setDirPill('src/scanner');
-    const closeBtn = bar.el.querySelector('.search-dir-pill-close');
-    closeBtn.click();
-    expect(vscode.postMessage).toHaveBeenCalledWith({ command: 'navigateToDir', path: '' });
+    bar.setScopeWarning('');
+    const includeInput = bar.el.querySelector('.search-filter-input[aria-label="files to include"]') as HTMLInputElement;
+    includeInput.focus();
+    const container = includeInput.closest('.search-filter-container')!;
+    expect(container.classList.contains('scope-warning')).toBe(false);
   });
 
   it('is a no-op in standalone mode', () => {
     const { bar } = makeSearchBar(true);
-    bar.setDirPill('src/scanner');
-    const pill = bar.el.querySelector('.search-dir-pill');
-    expect(pill).toBeNull();
+    bar.setScopeWarning('src/scanner');
+    // Hint elements exist but remain hidden in standalone mode
+    const hints = bar.el.querySelectorAll('.search-scope-hint');
+    for (const hint of hints) {
+      expect((hint as HTMLElement).style.display).toBe('none');
+    }
   });
 });
 

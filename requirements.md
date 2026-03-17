@@ -242,7 +242,7 @@ Search is available in the inline **Search section** in the editor tab.
 ### Toolbar
 
 The tab toolbar contains (left to right):
-- **Breadcrumb title**: clickable path segments showing the tab's root directory. Each segment navigates the tab to that ancestor directory. Segments have context menus (copy path, reveal in explorer).
+- **Header title**: displays the current root directory name in ALL CAPS. Shows the workspace folder name at the workspace root, or the directory basename when drilled into a subdirectory.
 - **Sort button**: cycles through sort modes locally.
 - **Truncation toggle**: enables/disables file truncation for all tabs.
 - **Ignored toggle**: shows/hides ignored files (triggers a rescan affecting all views).
@@ -251,8 +251,10 @@ The tab toolbar contains (left to right):
 
 ### Navigation
 
-- Clicking a breadcrumb segment navigates the tab to that directory (re-roots the tab).
+- **Footer breadcrumb**: when the tab is rooted at a subdirectory, a footer bar below the tree shows the full path from the workspace root (e.g. `apigateway / directus / api`). Each segment is clickable to navigate to that ancestor directory.
+- The footer is hidden when the tab is at the workspace root.
 - The tab title and panel data update to reflect the new root.
+- **Scope warning**: when the tab is scoped to a subdirectory, the "files to include" input shows a yellow warning border and the status area displays "⚠ Search is scoped to [dirname]" when no search is active.
 
 ### State Independence
 
@@ -285,4 +287,4 @@ Right-clicking a directory or file row provides:
 
 - Each workspace folder is scanned independently with its own ignore filter state.
 - When multiple workspace folders exist, a header row with the folder name appears above each root's children.
-- The tab breadcrumb shows the workspace folder name as the first segment.
+- The tab header shows the workspace folder name, and the footer breadcrumb includes it as the first segment when navigating subdirectories.

@@ -135,7 +135,7 @@ export interface WebviewState extends CoreWebviewState {
 export interface RendererOptions {
   skipDepthZeroGuides?: boolean;
   hideCounts?: boolean;
-  hideRootBar?: boolean;
+
   barFactor?: number;
   barMaxWidth?: number;
   barFallbackWidth?: number;
@@ -153,6 +153,7 @@ export interface RendererDeps {
   root: HTMLElement;
   tooltip: HTMLElement;
   options: RendererOptions;
+  /** When set, clicking a dir-name navigates to that directory instead of toggling expand/collapse. */
   onNavigate?: (path: string) => void;
   onExpandChanged?: (anyExpanded: boolean) => void;
 }
@@ -216,7 +217,7 @@ export interface SearchBarResult {
   updateFilteredStatus: () => void;
   setStatus: (data: SearchStatusData) => void;
   updateFilterWarning: (count: number) => void;
-  setDirPill: (dirPath: string) => void;
+  setScopeWarning: (dirPath: string) => void;
   triggerSearch: () => void;
   /** Update ripgrep availability — hides content search + context UI when false. */
   setHasRipgrep: (available: boolean) => void;

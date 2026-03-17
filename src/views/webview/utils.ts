@@ -23,9 +23,14 @@ const emptyStateConfig: Record<EmptyStateVariant, { icon: string; text: string; 
   error:        { icon: SVG_WARNING, text: '', cls: 'error' },
 };
 
-export function emptyState(variant: EmptyStateVariant, errorMessage?: string): HTMLElement {
+export function emptyState(variant: EmptyStateVariant, message?: string): HTMLElement {
   const { icon, text, cls } = emptyStateConfig[variant];
-  const msg = variant === 'error' ? `Error: ${errorMessage || 'Unknown error'}` : text;
+  let msg: string;
+  if (message) {
+    msg = variant === 'error' ? `Error: ${message}` : message;
+  } else {
+    msg = text;
+  }
   return h('div', { className: `empty-state${cls ? ' ' + cls : ''}` },
     h('div', { className: 'empty-state-icon', innerHTML: icon }),
     h('div', { className: 'empty-state-text', textContent: msg }),
@@ -77,7 +82,7 @@ let _maxMetricCache: { roots: DirNode[] | null; sortMode: SortMode | null; inclu
 
 // Computes the max metric value across the tree for bar scaling.
 // When includeRoots is false (default), skips root nodes so they always render at 100%.
-// When includeRoots is true (tab showRootNode mode), includes roots so bars scale relative to them.
+// When includeRoots is true, includes roots so bars scale relative to them.
 export function computeMaxMetric(roots: DirNode[], sortMode: SortMode, includeRoots: boolean): number {
   if (_maxMetricCache.roots === roots && _maxMetricCache.sortMode === sortMode && _maxMetricCache.includeRoots === !!includeRoots) {
     return _maxMetricCache.value;

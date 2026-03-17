@@ -103,29 +103,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   // Bordered container wrapping pill + input so they appear as one unified input field.
   const filterContainer = h('div', { className: 'search-filter-container' });
 
-  // Dir-scope pill — shows the tab's root directory basename with a dismiss button.
-  // Only created for non-standalone search bars (tabs), hidden when dirPath is ''.
-  let dirPill: HTMLSpanElement | null = null;
-  let dirPillText: HTMLSpanElement | null = null;
-  if (!standalone) {
-    dirPillText = h('span', { className: 'search-dir-pill-text' });
-    dirPill = h('span', { className: 'search-dir-pill', style: { display: 'none' } },
-      dirPillText,
-      h('button', {
-        className: 'search-dir-pill-close',
-        title: 'Reset to workspace root',
-        innerHTML: Icons.SVG_CLOSE,
-        attr: { 'aria-label': 'Reset to workspace root' },
-        on: { click: (e: MouseEvent) => {
-          e.stopPropagation();
-          vscode.postMessage({ command: 'navigateToDir', path: '' });
-        } },
-      }),
-    );
-    filterContainer.appendChild(dirPill);
-  }
-  // Lang pill is inserted before the dir pill so it appears on the left.
-  filterContainer.insertBefore(langPill, filterContainer.firstChild);
+  filterContainer.appendChild(langPill);
   filterContainer.appendChild(includeInput);
 
   // Clear button for the file filter input — last in the container, matching clearBtn order.
@@ -697,15 +675,48 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     langPill.style.display = '';
   }
 
-  /** Show/hide the directory-scope pill based on the tab's current root path. */
-  function setDirPill(dirPath: string): void {
-    if (!dirPill) { return; } // standalone mode — no pill
-    if (!dirPath) {
-      dirPill.style.display = 'none';
+  // Scope hint — inline right-aligned text inside include/exclude inputs when focused.
+  let scopeDirPath = '';
+
+  // Create scope hint elements for include and exclude containers.
+  const includeScopeHint = h('span', { className: 'search-scope-hint', style: { display: 'none' } });
+  const excludeScopeHint = h('span', { className: 'search-scope-hint', style: { display: 'none' } });
+  // Insert hints before the clear buttons so the clear button stays rightmost.
+  filterContainer.insertBefore(includeScopeHint, includeClearBtn);
+  excludeContainer.insertBefore(excludeScopeHint, excludeClearBtn);
+
+  function updateScopeHints(focused: HTMLElement | null): void {
+    if (!scopeDirPath || standalone) {
+      includeScopeHint.style.display = 'none';
+      excludeScopeHint.style.display = 'none';
+      filterContainer.classList.remove('scope-warning');
+      excludeContainer.classList.remove('scope-warning');
       return;
     }
-    dirPillText!.textContent = 'in: ' + (dirPath.split('/').pop() || dirPath);
-    dirPill.style.display = '';
+    const basename = scopeDirPath.split('/').pop() || scopeDirPath;
+    const text = '\u26A0 Scoped to ' + basename;
+    includeScopeHint.textContent = text;
+    excludeScopeHint.textContent = text;
+
+    const showInclude = focused === includeInput;
+    const showExclude = focused === excludeInput;
+    includeScopeHint.style.display = showInclude ? '' : 'none';
+    excludeScopeHint.style.display = showExclude ? '' : 'none';
+    filterContainer.classList.toggle('scope-warning', showInclude);
+    excludeContainer.classList.toggle('scope-warning', showExclude);
+  }
+
+  includeInput.addEventListener('focus', () => updateScopeHints(includeInput));
+  includeInput.addEventListener('blur', () => updateScopeHints(null));
+  excludeInput.addEventListener('focus', () => updateScopeHints(excludeInput));
+  excludeInput.addEventListener('blur', () => updateScopeHints(null));
+
+  /** Updates scope hint for the current directory path. */
+  function setScopeWarning(dirPath: string): void {
+    scopeDirPath = dirPath;
+    // Refresh if an input is currently focused.
+    const active = document.activeElement;
+    updateScopeHints(active === includeInput || active === excludeInput ? active as HTMLElement : null);
   }
 
   function setHasRipgrep(available: boolean): void {
@@ -735,7 +746,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
     updateDebounceAnchor(fileCount);
   }
 
-  return { el, focus, clear: clearSearch, show, hide, updateStatus, updateFilteredStatus, setStatus, updateFilterWarning, setDirPill, triggerSearch, setHasRipgrep };
+  return { el, focus, clear: clearSearch, show, hide, updateStatus, updateFilteredStatus, setStatus, updateFilterWarning, setScopeWarning, triggerSearch, setHasRipgrep };
 }
 
 // Updates search-result counters on state and triggers the search bar status display.

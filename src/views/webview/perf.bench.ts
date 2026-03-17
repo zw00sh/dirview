@@ -254,9 +254,9 @@ describe('renderTree + patchTreeChildren (incremental update)', () => {
     for (const c of renderTree4x3.children) state.expanded.set(c.path, true);
     const rootEl = renderer._rootEl;
     // First render — creates the tree
-    renderTree(state, renderer, rootEl, { showRootNode: true });
+    renderTree(state, renderer, rootEl);
     // Subsequent renders — patch against existing tree
-    renderTree(state, renderer, rootEl, { showRootNode: true });
+    renderTree(state, renderer, rootEl);
   });
 });
 

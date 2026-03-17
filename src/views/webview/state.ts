@@ -8,15 +8,6 @@ export function isFiltered(state: WebviewState): boolean {
   return state.activeFilters.size > 0 || !!state.searchResults || state.fileFilterActive;
 }
 
-/** Ensure tab-mode root nodes have an explicit expanded entry.
- *  Called before flatten/render so roots are always visually expanded. */
-export function ensureRootsExpanded(state: WebviewState, roots: DirNode[]): void {
-  for (const r of roots) {
-    const cn = compactedNode(r);
-    if (!state.expanded.has(cn.path)) { state.expanded.set(cn.path, true); }
-  }
-}
-
 // Create a fresh webview state object with default values.
 export function createState(): WebviewState {
   const state: WebviewState = {

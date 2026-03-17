@@ -33,8 +33,6 @@ export interface DirFlatRow extends FlatRowBase {
   height: typeof ROW_HEIGHT_DIR;
   /** The display node after folder compaction. */
   node: DirNode;
-  /** The original (pre-compaction) node — needed by the renderer for breadcrumb. */
-  originalNode: DirNode;
   isExpanded: boolean;
   hasChildren: boolean;
   maxMetric: number;
@@ -123,8 +121,6 @@ export interface FlattenResult {
 }
 
 export interface FlattenOptions {
-  /** true for tab (roots rendered as depth-0 DirFlatRows), false for sidebar (roots' children at depth 0). */
-  showRootNode?: boolean;
   /** Client width for bar scaling. Defaults to 300 if not provided. */
   clientWidth?: number;
 }

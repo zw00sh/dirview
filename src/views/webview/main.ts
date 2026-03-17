@@ -40,7 +40,7 @@ const renderer = createRenderer(state, {
 function renderFlatRow(r: Renderer, row: FlatRow): HTMLElement {
   switch (row.type) {
     case 'dir':
-      return r.renderDirRow(row.originalNode, row.depth, row.maxMetric, row.ancestors, row.clientWidth);
+      return r.renderDirRow(row.node, row.depth, row.maxMetric, row.ancestors, row.clientWidth);
     case 'file':
       return r.renderFileNode(row.file, row.depth, row.ancestors);
     case 'truncated':
@@ -128,6 +128,8 @@ const overlay = createStickyOverlay({
 
 // ── Render ───────────────────────────────────────────────────────────────
 
+let initialRender = true;
+
 function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode) {
   state.lastRoots = roots;
   state.lastAutoRescanEnabled = autoRescanEnabled;
@@ -149,10 +151,22 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
 
   state._isFiltered = isFiltered(state);
 
+  // Auto-disable truncation when the tree fits in the viewport on initial render.
+  const savedThreshold = state.truncateThreshold;
+  if (initialRender && state.truncateThreshold > 0) {
+    const probe = flattenTree(state, roots, { clientWidth: root.clientWidth || 300 });
+    const viewportHeight = root.clientHeight || 0;
+    if (viewportHeight > 0 && probe.totalHeight <= viewportHeight) {
+      state.truncateThreshold = 0;
+    }
+    initialRender = false;
+  }
+
   const { flatRows, totalHeight } = flattenTree(state, roots, {
-    showRootNode: false,
     clientWidth: root.clientWidth || 300,
   });
+
+  state.truncateThreshold = savedThreshold;
 
   currentFlatRows = flatRows;
   scroller.setTreeClass('sidebar' + (state.currentSortMode === 'size' ? ' sort-size' : ''));
@@ -175,6 +189,7 @@ const sharedMsgHandler = createMessageHandler(state, scanBar, root, {
   vscode,
   render,
   onBeforeUpdate: (message: BackendToWebviewMessage & { type: 'update' }) => {
+    initialRender = true;
     if (typeof message.truncateThreshold === 'number') {
       if (message.truncateThreshold !== state.truncateThreshold) {
         state.truncationExpanded.clear();

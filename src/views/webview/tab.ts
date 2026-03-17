@@ -43,6 +43,8 @@ const legendActiveAlert = document.getElementById('legend-active-alert')!;
 const treeSection = document.getElementById('tree-section')!;
 const treeHeaderEl = document.getElementById('tree-header')!;
 const root = document.getElementById('root')!;
+const treeHeaderTitle = document.getElementById('tree-header-title')!;
+const treeFooter = document.getElementById('tree-footer')!;
 const sortBtn = document.getElementById('tab-sort')!;
 const toggleStickyBtn = document.getElementById('tab-toggle-sticky')!;
 const toggleTruncationBtn = document.getElementById('tab-toggle-truncation')!;
@@ -103,14 +105,13 @@ const renderer = createRenderer(state, {
   tooltip,
   options: {
     skipDepthZeroGuides: false,
-    hideRootBar: true,
+
     barFactor: 0.35,
     barMaxWidth: 400,
     barFallbackWidth: 600,
     barMinWidth: 24,
     barSqrt: true,
   },
-  // Navigate to directory when its name is clicked in the tab tree.
   onNavigate: (path: string) => vscode.postMessage({ command: 'navigateToDir', path }),
 });
 
@@ -161,17 +162,57 @@ function updateRefreshBtn(autoRescanEnabled: boolean) {
   refreshBtn.style.display = autoRescanEnabled ? 'none' : '';
 }
 
+function updateNavigation() {
+  // Header: current root name, ALL CAPS
+  const displayName = state.dirPath
+    ? state.dirPath.split('/').pop()!
+    : (state.workspaceFolderName || 'Tree');
+  treeHeaderTitle.textContent = displayName.toUpperCase();
+
+  // Footer: breadcrumb from workspace root, hidden at workspace root
+  treeFooter.innerHTML = '';
+  if (!state.dirPath) {
+    treeFooter.style.display = 'none';
+    return;
+  }
+  treeFooter.style.display = '';
+
+  // Dot separator matching the tree header
+  treeFooter.appendChild(h('span', { className: 'tab-tree-header-separator', textContent: '\u00B7' }));
+
+  const segments = state.dirPath.split('/');
+  const hasRootName = !!state.workspaceFolderName;
+  const allNames = hasRootName ? [state.workspaceFolderName, ...segments] : segments;
+
+  for (let i = 0; i < allNames.length; i++) {
+    if (i > 0) {
+      treeFooter.appendChild(h('span', { className: 'path-sep', textContent: ' / ' }));
+    }
+    const offset = hasRootName ? i - 1 : i;
+    const segPath = offset < 0 ? '' : segments.slice(0, offset + 1).join('/');
+    const seg = h('span', {
+      className: 'path-segment',
+      textContent: allNames[i],
+    });
+    seg.addEventListener('click', () => {
+      vscode.postMessage({ command: 'navigateToDir', path: segPath });
+    });
+    treeFooter.appendChild(seg);
+  }
+}
+
 updateToggleIgnoredBtn();
 updateTruncationBtn();
 updateStickyBtn();
 updateRefreshBtn(true);
+updateNavigation();
 
 // ── Virtual scroller + sticky overlay ───────────────────────────────────
 
 function renderFlatRow(r: Renderer, row: FlatRow): HTMLElement {
   switch (row.type) {
     case 'dir':
-      return r.renderDirRow(row.originalNode, row.depth, row.maxMetric, row.ancestors, row.clientWidth);
+      return r.renderDirRow(row.node, row.depth, row.maxMetric, row.ancestors, row.clientWidth);
     case 'file':
       return r.renderFileNode(row.file, row.depth, row.ancestors);
     case 'truncated':
@@ -408,6 +449,10 @@ function updateLegend(stats?: LangStat[]) {
 
 // ── Tree ────────────────────────────────────────────────────────────────
 
+// Set to true when new scan data arrives (update message); cleared after the first render
+// uses it. Prevents auto-truncation-disable from firing on expand/collapse rerenders.
+let initialRender = true;
+
 function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode) {
   state.lastRoots = roots;
   state.lastAutoRescanEnabled = autoRescanEnabled;
@@ -443,11 +488,27 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   // Set _isFiltered on state so the renderer's renderDirRow can read it for chevron/expand logic.
   state._isFiltered = isFiltered(state);
 
+  // Auto-disable truncation when the tree fits in the viewport on initial render
+  // (new scan data or dir change). Once the user interacts (expand/collapse), truncation
+  // follows the normal threshold so expanding a dir doesn't cause others to truncate.
+  const savedThreshold = state.truncateThreshold;
+  if (initialRender && state.truncateThreshold > 0) {
+    // First pass: flatten with truncation to get the truncated height.
+    const probe = flattenTree(state, roots, { clientWidth: root.clientWidth || 600 });
+    const viewportHeight = root.clientHeight || 0;
+    if (viewportHeight > 0 && probe.totalHeight <= viewportHeight) {
+      state.truncateThreshold = 0; // fits on screen — disable truncation
+    }
+    initialRender = false;
+  }
+
   // Build flat rows and update virtual scroller
   const { flatRows, totalHeight, totalVisibleFiles, totalVisibleMatches, filteredRoots, searchFilteredStats } = flattenTree(state, roots, {
-    showRootNode: true,
     clientWidth: root.clientWidth || 600,
   });
+
+  // Restore threshold for future interactive renders.
+  state.truncateThreshold = savedThreshold;
   state.lastFilteredFileCount = totalVisibleFiles;
   state.lastFilteredMatchCount = totalVisibleMatches;
   lastFilteredRoots = filteredRoots;
@@ -461,10 +522,20 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   scroller.setTreeClass(state.currentSortMode === 'size' ? 'sort-size' : '');
   scroller.update(flatRows, totalHeight);
 
-  // Show/hide "no results" empty state
+  // Show/hide "no results" empty state — include scope hint when in a subdirectory tab
   const existingNoResults = root.querySelector(':scope > .empty-state');
   if (filteredEmpty) {
-    if (!existingNoResults) { root.appendChild(emptyState('noResults')); }
+    if (!existingNoResults) {
+      const el = emptyState('noResults');
+      if (state.dirPath && (state.searchResults || state.fileFilterActive)) {
+        const scopePath = (state.workspaceFolderName ? state.workspaceFolderName + ' / ' : '') + state.dirPath.split('/').join(' / ');
+        const textEl = el.querySelector('.empty-state-text')!;
+        textEl.textContent = 'No results found. Searches are currently scoped to:';
+        textEl.appendChild(h('br'));
+        textEl.appendChild(h('span', { textContent: scopePath }));
+      }
+      root.appendChild(el);
+    }
   } else {
     existingNoResults?.remove();
   }
@@ -481,17 +552,19 @@ const sharedHandler = createMessageHandler(state, scanBar, root, {
   render,
   resolveUpdateSortMode: () => state.currentSortMode || 'files',
   onBeforeUpdate: (message: BackendToWebviewMessage & { type: 'update' }) => {
+    initialRender = true;
     tabUI.showIgnored = message.showIgnored || false;
     if (typeof message.isLocal === 'boolean') { tabUI.isLocal = message.isLocal; }
     updateToggleIgnoredBtn();
     if (typeof message.dirPath === 'string') {
       const dirChanged = state.dirPath !== message.dirPath;
       state.dirPath = message.dirPath;
-      searchBar.setDirPill(message.dirPath);
+      searchBar.setScopeWarning(message.dirPath);
       // Re-run the search against the new root when the directory scope changes.
       if (dirChanged && state.searchResults) { searchBar.triggerSearch(); }
     }
     if (typeof message.workspaceFolderName === 'string') { state.workspaceFolderName = message.workspaceFolderName; }
+    updateNavigation();
     if (typeof message.stickyHeadersEnabled === 'boolean') {
       tabUI.stickyEnabled = message.stickyHeadersEnabled;
       updateStickyBtn();

@@ -276,37 +276,7 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     // and per-segment data-vscode-context for RMB "copy path" etc on individual segments.
     const nameEl = h('span', { className: 'dir-name', title: displayNode.path || displayName });
 
-    // In tab mode (onNavigate set), render ancestor breadcrumb for the root node of a subdir tab.
-    // For workspace root tabs (state.dirPath falsy), the root name renders normally below.
-    if (depth === 0 && typeof deps.onNavigate === 'function' && state.dirPath) {
-      const segments = state.dirPath.split('/');
-      const hasRootName = !!state.workspaceFolderName;
-      const allNames = hasRootName ? [state.workspaceFolderName, ...segments] : segments;
-      for (let i = 0; i < allNames.length; i++) {
-        if (i > 0) {
-          nameEl.appendChild(h('span', { className: 'path-sep', textContent: ' / ' }));
-        }
-        const offset = hasRootName ? i - 1 : i;
-        const segPath = offset < 0 ? '' : segments.slice(0, offset + 1).join('/');
-        nameEl.appendChild(h('span', { className: 'path-segment', textContent: allNames[i], dataset: { navigatePath: segPath } }));
-      }
-      // Append any compacted segments beyond the root node (index 0 is already in the breadcrumb).
-      // Without this, single-child chains like api/src/controllers are swallowed when the
-      // breadcrumb renders only the subtab's dirPath.
-      for (let i = 1; i < compactSegments.length; i++) {
-        nameEl.appendChild(h('span', { className: 'path-sep', textContent: ' / ' }));
-        nameEl.appendChild(h('span', {
-          className: 'path-segment',
-          textContent: compactSegments[i].name,
-          attr: { 'data-vscode-context': JSON.stringify({
-            webviewSection: 'directory',
-            path: compactSegments[i].path,
-            rootName: state.workspaceFolderName || state.currentRootName,
-            preventDefaultContextMenuItems: true,
-          }) },
-        }));
-      }
-    } else if (compactSegments.length === 1) {
+    if (compactSegments.length === 1) {
       nameEl.textContent = compactSegments[0].name;
     } else {
       for (let i = 0; i < compactSegments.length; i++) {
@@ -357,8 +327,7 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     row.appendChild(barSpacer);
     row.insertBefore(actionsEl, barSpacer);
 
-    // Proportional bar — skip for root node when hideRootBar is set (tab breadcrumb row)
-    if (displayNode.totalFiles > 0 && !(depth === 0 && opts.hideRootBar)) {
+    if (displayNode.totalFiles > 0) {
       const metric = state.currentSortMode === 'size' ? displayNode.sizeBytes : displayNode.totalFiles;
       const pct = metric / maxMetric;
       const barWrapWidth = computeBarWidth(pct, clientWidth, root, opts);

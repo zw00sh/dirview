@@ -210,14 +210,34 @@ body {
   padding-right: 8px;
 }
 
-/* Directory name navigation in tab tree: clicking any dir name navigates to that directory. */
 .tab-view .dir-name { flex-shrink: 1; cursor: pointer; }
-.tab-view .dir-name:not(:has(.path-segment)):hover { text-decoration: underline; }
+.tab-view .dir-name:hover { text-decoration: underline; }
 .tab-view .file-name { flex-shrink: 1; }
 .tab-view .indent-guide { width: 16px; }
 
 /* Tab view uses editor background for sticky headers */
 .tab-view .sticky-dir {
   background: var(--vscode-editor-background);
+}
+
+/* Footer breadcrumb for subdirectory navigation */
+.tab-tree-footer {
+  flex-shrink: 0;
+  height: 22px;
+  padding: 0 8px 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-top: 1px solid var(--vscode-sideBar-border, rgba(128,128,128,0.2));
+  color: var(--vscode-foreground);
+  cursor: default;
+}
+.tab-tree-footer .path-segment {
+  cursor: pointer;
+}
+
+/* Yellow warning border when search filter input is focused in a scoped tab */
+.search-filter-container.scope-warning {
+  outline: 1px solid var(--vscode-inputValidation-warningBorder, #cca700);
 }
 

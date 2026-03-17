@@ -15,7 +15,7 @@ export function makeDir(path: string, name: string, { children = [], files = [],
   return { path, name, children, files, totalFiles, sizeBytes, stats };
 }
 
-export function makeRenderer(state: any, { onExpandChanged, onNavigate }: { onExpandChanged?: any; onNavigate?: any } = {}) {
+export function makeRenderer(state: any, { onExpandChanged }: { onExpandChanged?: any } = {}) {
   const vscode = { postMessage: vi.fn() };
   const rootEl = document.createElement('div');
   document.body.appendChild(rootEl);
@@ -29,7 +29,6 @@ export function makeRenderer(state: any, { onExpandChanged, onNavigate }: { onEx
     tooltip: tooltipEl,
     options: { skipDepthZeroGuides: false, barFactor: 0.4, barMaxWidth: 200, barFallbackWidth: 300 },
     onExpandChanged,
-    onNavigate,
   }) as any;
   // Expose rootEl and vscode so tests can append rendered elements and verify messages.
   renderer._rootEl = rootEl;

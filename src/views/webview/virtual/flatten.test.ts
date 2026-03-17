@@ -75,15 +75,15 @@ function rowDepths(result: FlattenResult): number[] {
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe('flattenTree — basic structure', () => {
-  it('single root with 3 files → 1 DirFlatRow + 3 FileFlatRows', () => {
+  it('single root with 3 files → 3 FileFlatRows (root invisible)', () => {
     const root = makeDir('src', {
       files: [makeFile('a.ts'), makeFile('b.ts'), makeFile('c.ts')],
       totalFiles: 3,
     });
     const state = makeState();
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
-    expect(rowTypes(result)).toEqual(['dir', 'file', 'file', 'file']);
+    expect(rowTypes(result)).toEqual(['file', 'file', 'file']);
     expect(result.totalVisibleFiles).toBe(3);
   });
 
@@ -105,14 +105,12 @@ describe('flattenTree — basic structure', () => {
     });
 
     const state = makeState();
-    // Expand all
-    state.expanded.set('a', true);
-    // a→b→c will be compacted into a single DirFlatRow (single child, no files chain)
+    // Root is invisible; its child mid→inner compacts to a/b/c at depth 0
     state.expanded.set('a/b/c', true);
 
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
-    // a compacts to a/b/c (single child chain)
+    // a is invisible root; b→c compacts into one dir row at depth 0
     expect(rowTypes(result)).toEqual(['dir', 'file']);
     expect(rowDepths(result)).toEqual([0, 1]);
   });
@@ -123,11 +121,11 @@ describe('flattenTree — basic structure', () => {
       totalFiles: 2,
     });
     const state = makeState();
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
+    // Root invisible, just 2 file rows at depth 0
     expect(result.flatRows[0].offsetY).toBe(0);
-    expect(result.flatRows[1].offsetY).toBe(ROW_HEIGHT_DIR);
-    expect(result.flatRows[2].offsetY).toBe(ROW_HEIGHT_DIR + ROW_HEIGHT_FILE);
+    expect(result.flatRows[1].offsetY).toBe(ROW_HEIGHT_FILE);
   });
 
   it('totalHeight equals sum of all row heights', () => {
@@ -136,15 +134,16 @@ describe('flattenTree — basic structure', () => {
       totalFiles: 2,
     });
     const state = makeState();
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
-    const expectedHeight = ROW_HEIGHT_DIR + 2 * ROW_HEIGHT_FILE;
+    // Root invisible, just 2 file rows
+    const expectedHeight = 2 * ROW_HEIGHT_FILE;
     expect(result.totalHeight).toBe(expectedHeight);
   });
 
   it('empty tree → empty FlatRow array', () => {
     const state = makeState();
-    const result = flattenTree(state, [], { showRootNode: true });
+    const result = flattenTree(state, []);
 
     expect(result.flatRows).toEqual([]);
     expect(result.totalHeight).toBe(0);
@@ -172,15 +171,14 @@ describe('flattenTree — folder compaction', () => {
 
     const state = makeState();
     state.expanded.set('a/b/c', true);
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
-    // Compacted: a → b → c becomes one dir row keyed by deepest node
+    // Root invisible; mid→inner compacts to a/b/c at depth 0
     const dirRow = result.flatRows[0];
     expect(dirRow.type).toBe('dir');
     expect(dirRow.key).toBe('dir:a/b/c');
     if (dirRow.type === 'dir') {
       expect(dirRow.node.path).toBe('a/b/c');
-      expect(dirRow.originalNode.path).toBe('a');
     }
   });
 
@@ -205,9 +203,9 @@ describe('flattenTree — folder compaction', () => {
     const state = makeState();
     state.expanded.set('a/b', true);
     state.expanded.set('a/b/c', true);
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
-    // a compacts to a/b (b has files, breaking the chain)
+    // Root invisible; a→b compacts to a/b (b has files). Then a/b/c is child.
     const dirRows = result.flatRows.filter(r => r.type === 'dir');
     expect(dirRows.length).toBe(2);
     expect(dirRows[0].key).toBe('dir:a/b');
@@ -217,28 +215,43 @@ describe('flattenTree — folder compaction', () => {
 
 describe('flattenTree — expand/collapse', () => {
   it('collapsed dir → only DirFlatRow emitted, no children', () => {
+    const child = makeDir('sub', { path: 'src/sub', files: [makeFile('b.ts')], totalFiles: 1 });
     const root = makeDir('src', {
       files: [makeFile('a.ts')],
       totalFiles: 1,
-      children: [makeDir('sub', { files: [makeFile('b.ts')], totalFiles: 1 })],
+      children: [child],
     });
     const state = makeState();
-    state.expanded.set('src', false);
-    const result = flattenTree(state, [root], { showRootNode: true });
+    // Root invisible; child 'sub' at depth 0, collapsed
+    state.expanded.set('src/sub', false);
+    const result = flattenTree(state, [root]);
 
-    expect(rowTypes(result)).toEqual(['dir']);
-    expect(result.totalVisibleFiles).toBe(0);
+    // Root invisible. Children: sub (collapsed dir) + a.ts (file).
+    // sub appears as collapsed dir, a.ts appears as file.
+    const dirRows = result.flatRows.filter(r => r.type === 'dir');
+    const fileRows = result.flatRows.filter(r => r.type === 'file');
+    expect(dirRows.length).toBe(1);
+    // Root-level file a.ts is rendered at depth 0
+    expect(fileRows.length).toBe(1);
+    // sub is collapsed so no children visible from it
+    expect(result.totalVisibleFiles).toBe(1);
   });
 
   it('expanded dir → children appear after it', () => {
+    const child = makeDir('sub', {
+      path: 'src/sub',
+      files: [makeFile('a.ts', { path: '/ws/sub/a.ts' })],
+      totalFiles: 1,
+    });
     const root = makeDir('src', {
-      files: [makeFile('a.ts')],
+      children: [child],
       totalFiles: 1,
     });
     const state = makeState();
-    state.expanded.set('src', true);
-    const result = flattenTree(state, [root], { showRootNode: true });
+    state.expanded.set('src/sub', true);
+    const result = flattenTree(state, [root]);
 
+    // Root invisible; sub at depth 0 expanded, a.ts at depth 1
     expect(rowTypes(result)).toEqual(['dir', 'file']);
   });
 
@@ -247,30 +260,31 @@ describe('flattenTree — expand/collapse', () => {
     const child2 = makeDir('b', { path: 'root/b', files: [makeFile('y.ts', { path: '/ws/b/y.ts' })], totalFiles: 1 });
     const root = makeDir('root', { children: [child1, child2], totalFiles: 2 });
 
-    // Expand root and a, collapse b
+    // Root invisible; expand a, collapse b
     const state = makeState();
-    state.expanded.set('root', true);
     state.expanded.set('root/a', true);
     state.expanded.set('root/b', false);
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
-    expect(rowTypes(result)).toEqual(['dir', 'dir', 'file', 'dir']);
-    // b's dir row should be at offset = dir(root) + dir(a) + file(x)
-    const bRow = result.flatRows[3];
-    expect(bRow.offsetY).toBe(ROW_HEIGHT_DIR * 2 + ROW_HEIGHT_FILE);
+    // a (expanded) + x.ts + b (collapsed)
+    expect(rowTypes(result)).toEqual(['dir', 'file', 'dir']);
+    // b's dir row should be at offset = dir(a) + file(x)
+    const bRow = result.flatRows[2];
+    expect(bRow.offsetY).toBe(ROW_HEIGHT_DIR + ROW_HEIGHT_FILE);
   });
 
-  it('root dirs auto-expand at depth 0', () => {
+  it('root children with files appear at depth 0', () => {
     const root = makeDir('src', {
       files: [makeFile('a.ts')],
       totalFiles: 1,
     });
     const state = makeState();
-    // Don't set expanded explicitly — should auto-expand at depth 0
-    const result = flattenTree(state, [root], { showRootNode: true });
+    // Root invisible; its file appears at depth 0
+    const result = flattenTree(state, [root]);
 
-    expect(rowTypes(result)).toEqual(['dir', 'file']);
-    expect(result.flatRows[0].type === 'dir' && result.flatRows[0].isExpanded).toBe(true);
+    const fileRows = result.flatRows.filter(r => r.type === 'file');
+    expect(fileRows.length).toBe(1);
+    expect(fileRows[0].depth).toBe(0);
   });
 });
 
@@ -283,7 +297,7 @@ describe('flattenTree — truncation', () => {
 
     const state = makeState({ truncateThreshold: 3 });
     state.expanded.set('src', true);
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const fileRows = result.flatRows.filter(r => r.type === 'file');
     const truncRows = result.flatRows.filter(r => r.type === 'truncated');
@@ -302,7 +316,7 @@ describe('flattenTree — truncation', () => {
     const state = makeState({ truncateThreshold: 3 });
     state.expanded.set('src', true);
     state.truncationExpanded.add('src');
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const fileRows = result.flatRows.filter(r => r.type === 'file');
     const truncRows = result.flatRows.filter(r => r.type === 'truncated');
@@ -318,7 +332,7 @@ describe('flattenTree — truncation', () => {
     const state = makeState({ truncateThreshold: 3 });
     state.activeFilters.add('TypeScript');
     state.expanded.set('src', true);
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const truncRows = result.flatRows.filter(r => r.type === 'truncated');
     expect(truncRows.length).toBe(0);
@@ -331,12 +345,71 @@ describe('flattenTree — truncation', () => {
 
     const state = makeState({ truncateThreshold: 3 });
     state.expanded.set('src', true);
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const truncRows = result.flatRows.filter(r => r.type === 'truncated');
     expect(truncRows.length).toBe(0);
     const fileRows = result.flatRows.filter(r => r.type === 'file');
     expect(fileRows.length).toBe(10);
+  });
+});
+
+describe('flattenTree — auto-disable truncation for small trees', () => {
+  // Simulates the probe+check pattern used by tab.ts and main.ts:
+  // on initial render, flatten once to get totalHeight, and if it fits in the
+  // viewport, re-flatten with truncateThreshold=0.
+
+  function makeTree() {
+    const files = Array.from({ length: 10 }, (_, i) => makeFile(`f${i}.ts`, { path: `/ws/f${i}.ts` }));
+    const child = makeDir('sub', { path: 'src/sub', totalFiles: 0 });
+    return makeDir('src', { files, totalFiles: 10, children: [child] });
+  }
+
+  it('threshold=0 disables truncation entirely', () => {
+    const root = makeTree();
+    const state = makeState({ truncateThreshold: 0 });
+    state.expanded.set('src', true);
+    const result = flattenTree(state, [root]);
+
+    expect(result.flatRows.filter(r => r.type === 'truncated').length).toBe(0);
+    expect(result.flatRows.filter(r => r.type === 'file').length).toBe(10);
+  });
+
+  it('probe pattern: tree fits in viewport → re-flatten with threshold=0 shows all files', () => {
+    const root = makeTree();
+    const state = makeState({ truncateThreshold: 3 });
+    state.expanded.set('src', true);
+
+    // First pass (probe): truncated result
+    const probe = flattenTree(state, [root]);
+    expect(probe.flatRows.filter(r => r.type === 'truncated').length).toBe(1);
+
+    // Simulate: viewport is large enough for untruncated content
+    const viewportHeight = 500;
+    if (probe.totalHeight <= viewportHeight) {
+      // Re-flatten with truncation disabled
+      state.truncateThreshold = 0;
+      const full = flattenTree(state, [root]);
+      expect(full.flatRows.filter(r => r.type === 'truncated').length).toBe(0);
+      expect(full.flatRows.filter(r => r.type === 'file').length).toBe(10);
+      // Restore threshold
+      state.truncateThreshold = 3;
+    }
+  });
+
+  it('probe pattern: tree exceeds viewport → truncation stays active', () => {
+    const root = makeTree();
+    const state = makeState({ truncateThreshold: 3 });
+    state.expanded.set('src', true);
+
+    const probe = flattenTree(state, [root]);
+    // Simulate: viewport is too small
+    const viewportHeight = 50;
+    expect(probe.totalHeight).toBeGreaterThan(viewportHeight);
+
+    // Threshold stays, truncation remains
+    const result = flattenTree(state, [root]);
+    expect(result.flatRows.filter(r => r.type === 'truncated').length).toBe(1);
   });
 });
 
@@ -351,7 +424,7 @@ describe('flattenTree — empty dir grouping', () => {
 
     const state = makeState();
     state.expanded.set('root', true);
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const emptyGroupRows = result.flatRows.filter(r => r.type === 'emptyGroup');
     expect(emptyGroupRows.length).toBe(1);
@@ -369,13 +442,13 @@ describe('flattenTree — empty dir grouping', () => {
 
     const state = makeState();
     state.expanded.set('root', true);
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const emptyGroupRows = result.flatRows.filter(r => r.type === 'emptyGroup');
     expect(emptyGroupRows.length).toBe(0);
-    // Both should be normal dir rows
+    // Both should be normal dir rows (root invisible, so just e1 + full)
     const dirRows = result.flatRows.filter(r => r.type === 'dir');
-    expect(dirRows.length).toBe(3); // root + e1 + full
+    expect(dirRows.length).toBe(2);
   });
 
   it('emptyGroupExpanded set → individual DirFlatRows', () => {
@@ -389,13 +462,13 @@ describe('flattenTree — empty dir grouping', () => {
     const state = makeState();
     state.expanded.set('root', true);
     state.emptyGroupExpanded.add('root/e1');
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const emptyGroupRows = result.flatRows.filter(r => r.type === 'emptyGroup');
     expect(emptyGroupRows.length).toBe(0);
-    // root + 3 individual empty dirs
+    // 3 individual empty dirs (root invisible)
     const dirRows = result.flatRows.filter(r => r.type === 'dir');
-    expect(dirRows.length).toBe(4);
+    expect(dirRows.length).toBe(3);
   });
 
   it('empty group suppressed when filter active', () => {
@@ -415,7 +488,7 @@ describe('flattenTree — empty dir grouping', () => {
 
     const state = makeState();
     state.activeFilters.add('TypeScript');
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const emptyGroupRows = result.flatRows.filter(r => r.type === 'emptyGroup');
     expect(emptyGroupRows.length).toBe(0);
@@ -433,9 +506,10 @@ describe('flattenTree — sort modes', () => {
 
     const state = makeState({ currentSortMode: 'files' });
     state.expanded.set('root', true);
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
-    const dirRows = result.flatRows.filter(r => r.type === 'dir' && r.depth === 1);
+    // Root invisible; children at depth 0
+    const dirRows = result.flatRows.filter(r => r.type === 'dir' && r.depth === 0);
     expect(dirRows.map(r => r.key)).toEqual(['dir:root/many', 'dir:root/some', 'dir:root/few']);
   });
 
@@ -449,9 +523,9 @@ describe('flattenTree — sort modes', () => {
 
     const state = makeState({ currentSortMode: 'name' });
     state.expanded.set('root', true);
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
-    const dirRows = result.flatRows.filter(r => r.type === 'dir' && r.depth === 1);
+    const dirRows = result.flatRows.filter(r => r.type === 'dir' && r.depth === 0);
     expect(dirRows.map(r => r.key)).toEqual(['dir:root/apple', 'dir:root/banana', 'dir:root/cherry']);
   });
 
@@ -465,9 +539,9 @@ describe('flattenTree — sort modes', () => {
 
     const state = makeState({ currentSortMode: 'size' });
     state.expanded.set('root', true);
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
-    const dirRows = result.flatRows.filter(r => r.type === 'dir' && r.depth === 1);
+    const dirRows = result.flatRows.filter(r => r.type === 'dir' && r.depth === 0);
     expect(dirRows.map(r => r.key)).toEqual(['dir:root/large', 'dir:root/medium', 'dir:root/small']);
   });
 
@@ -481,7 +555,7 @@ describe('flattenTree — sort modes', () => {
 
     const state = makeState({ currentSortMode: 'size' });
     state.expanded.set('src', true);
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const fileRows = result.flatRows.filter(r => r.type === 'file');
     expect(fileRows.map(r => r.type === 'file' ? r.file.name : '')).toEqual(['a.ts', 'b.ts', 'c.ts']);
@@ -499,7 +573,7 @@ describe('flattenTree — filters', () => {
 
     const state = makeState();
     state.activeFilters.add('TypeScript');
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const fileRows = result.flatRows.filter(r => r.type === 'file');
     expect(fileRows.length).toBe(1);
@@ -518,7 +592,7 @@ describe('flattenTree — filters', () => {
     state.searchResults = new Map([['/ws/found.ts', [{ line: 1, column: 0, matchLength: 5, lineText: 'hello' }]]]);
     state.searchAncestorPaths = new Set(['src']);
     state.searchResultsVersion = 1;
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const fileRows = result.flatRows.filter(r => r.type === 'file');
     expect(fileRows.length).toBe(1);
@@ -537,7 +611,7 @@ describe('flattenTree — filters', () => {
     const state = makeState();
     state.activeFilters.add('TypeScript');
     // Don't set any expanded state — filter should auto-expand
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const fileRows = result.flatRows.filter(r => r.type === 'file');
     expect(fileRows.length).toBe(1);
@@ -551,7 +625,7 @@ describe('flattenTree — filters', () => {
 
     const state = makeState({ truncateThreshold: 3 });
     state.activeFilters.add('TypeScript');
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const truncRows = result.flatRows.filter(r => r.type === 'truncated');
     expect(truncRows.length).toBe(0);
@@ -566,7 +640,7 @@ describe('flattenTree — filters', () => {
     state.searchResults = new Map([['/ws/app.ts', []]]) as any;
     state.searchAncestorPaths = new Set(['src', '']);
     state.searchResultsVersion = 1;
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const fileRows = result.flatRows.filter(r => r.type === 'file');
     expect(fileRows.length).toBe(1);
@@ -575,7 +649,7 @@ describe('flattenTree — filters', () => {
 });
 
 describe('flattenTree — multi-root workspace', () => {
-  it('2 workspace roots → WorkspaceHeaderFlatRow before each root (sidebar mode)', () => {
+  it('2 workspace roots → WorkspaceHeaderFlatRow before each root', () => {
     const root1 = makeDir('project-a', {
       files: [makeFile('a.ts', { path: '/ws/a/a.ts' })],
       totalFiles: 1,
@@ -586,7 +660,7 @@ describe('flattenTree — multi-root workspace', () => {
     });
 
     const state = makeState();
-    const result = flattenTree(state, [root1, root2], { showRootNode: false });
+    const result = flattenTree(state, [root1, root2]);
 
     const headerRows = result.flatRows.filter(r => r.type === 'workspaceHeader');
     expect(headerRows.length).toBe(2);
@@ -594,39 +668,28 @@ describe('flattenTree — multi-root workspace', () => {
     expect(headerRows[1].type === 'workspaceHeader' && headerRows[1].name).toBe('project-b');
   });
 
-  it('single root → no WorkspaceHeaderFlatRow (sidebar mode)', () => {
+  it('single root → no WorkspaceHeaderFlatRow', () => {
     const root = makeDir('project', {
       files: [makeFile('a.ts', { path: '/ws/a.ts' })],
       totalFiles: 1,
     });
 
     const state = makeState();
-    const result = flattenTree(state, [root], { showRootNode: false });
+    const result = flattenTree(state, [root]);
 
     const headerRows = result.flatRows.filter(r => r.type === 'workspaceHeader');
     expect(headerRows.length).toBe(0);
   });
-
-  it('showRootNode: true (tab) → each root is a DirFlatRow at depth 0', () => {
-    const root1 = makeDir('project-a', { totalFiles: 0 });
-    const root2 = makeDir('project-b', { totalFiles: 0 });
-
-    const state = makeState();
-    const result = flattenTree(state, [root1, root2], { showRootNode: true });
-
-    expect(rowTypes(result)).toEqual(['dir', 'dir']);
-    expect(rowDepths(result)).toEqual([0, 0]);
-  });
 });
 
-describe('flattenTree — showRootNode modes', () => {
-  it('showRootNode false (sidebar) → roots children at depth 0', () => {
+describe('flattenTree — root children at depth 0', () => {
+  it('root children appear at depth 0', () => {
     const child1 = makeDir('sub1', { path: 'root/sub1', totalFiles: 1, files: [makeFile('a.ts', { path: '/ws/sub1/a.ts' })] });
     const child2 = makeDir('sub2', { path: 'root/sub2', totalFiles: 1, files: [makeFile('b.ts', { path: '/ws/sub2/b.ts' })] });
     const root = makeDir('root', { children: [child1, child2], totalFiles: 2 });
 
     const state = makeState();
-    const result = flattenTree(state, [root], { showRootNode: false });
+    const result = flattenTree(state, [root]);
 
     // No root dir row, children are at depth 0
     const dirRows = result.flatRows.filter(r => r.type === 'dir');
@@ -634,28 +697,13 @@ describe('flattenTree — showRootNode modes', () => {
     expect(dirRows[0].depth).toBe(0);
     expect(dirRows[1].depth).toBe(0);
   });
-
-  it('showRootNode true (tab) → root is a DirFlatRow, children at depth 1', () => {
-    const child = makeDir('sub', { path: 'root/sub', totalFiles: 0 });
-    const root = makeDir('root', { children: [child], totalFiles: 0 });
-
-    const state = makeState();
-    state.expanded.set('root', true);
-    // sub is compacted into root since it's a single child with no files
-    // Actually root→sub: root has 1 child (sub) and 0 files → compacts to sub
-    const result = flattenTree(state, [root], { showRootNode: true });
-
-    // root compacts to root/sub
-    expect(result.flatRows[0].type).toBe('dir');
-    expect(result.flatRows[0].depth).toBe(0);
-  });
 });
 
 describe('flattenTree — offsetY correctness', () => {
   it('first row has offsetY 0', () => {
-    const root = makeDir('src', { totalFiles: 0 });
+    const root = makeDir('src', { totalFiles: 0, children: [makeDir('sub', { path: 'src/sub', totalFiles: 0 })] });
     const state = makeState();
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     expect(result.flatRows[0].offsetY).toBe(0);
   });
@@ -666,7 +714,7 @@ describe('flattenTree — offsetY correctness', () => {
       totalFiles: 3,
     });
     const state = makeState();
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     for (let i = 1; i < result.flatRows.length; i++) {
       const prev = result.flatRows[i - 1];
@@ -676,19 +724,24 @@ describe('flattenTree — offsetY correctness', () => {
 
   it('mixed row types (dir, file, matchGroup) → correct cumulative offsets', () => {
     const file = makeFile('found.ts', { path: '/ws/found.ts' });
-    const root = makeDir('src', { files: [file], totalFiles: 1 });
+    const child = makeDir('sub', {
+      path: 'src/sub',
+      files: [file],
+      totalFiles: 1,
+    });
+    const root = makeDir('src', { children: [child], totalFiles: 1 });
 
     const state = makeState();
-    state.expanded.set('src', true);
+    state.expanded.set('src/sub', true);
     state.searchResults = new Map([['/ws/found.ts', [
       { line: 1, column: 0, matchLength: 3, lineText: 'foo bar' },
       { line: 10, column: 0, matchLength: 3, lineText: 'baz qux' },
     ]]]);
-    state.searchAncestorPaths = new Set(['src']);
+    state.searchAncestorPaths = new Set(['src', 'src/sub']);
     state.searchResultsVersion = 1;
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
-    // dir(22) + file(22) + matchGroup1(18) + matchGroup2(18+6 spacer)
+    // dir(sub) + file + matchGroup1 + matchGroup2
     let expectedOffset = 0;
     for (const row of result.flatRows) {
       expect(row.offsetY).toBe(expectedOffset);
@@ -701,7 +754,7 @@ describe('flattenTree — offsetY correctness', () => {
     const files = Array.from({ length: 5 }, (_, i) => makeFile(`f${i}.ts`, { path: `/ws/f${i}.ts` }));
     const root = makeDir('src', { files, totalFiles: 5 });
     const state = makeState();
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const last = result.flatRows[result.flatRows.length - 1];
     expect(result.totalHeight).toBe(last.offsetY + last.height);
@@ -711,33 +764,43 @@ describe('flattenTree — offsetY correctness', () => {
 describe('flattenTree — search matches', () => {
   it('file with search results → MatchGroupFlatRow after FileFlatRow', () => {
     const file = makeFile('app.ts', { path: '/ws/app.ts' });
-    const root = makeDir('src', { files: [file], totalFiles: 1 });
+    const child = makeDir('sub', {
+      path: 'src/sub',
+      files: [file],
+      totalFiles: 1,
+    });
+    const root = makeDir('src', { children: [child], totalFiles: 1 });
 
     const state = makeState();
-    state.expanded.set('src', true);
+    state.expanded.set('src/sub', true);
     state.searchResults = new Map([['/ws/app.ts', [
       { line: 5, column: 0, matchLength: 3, lineText: 'const foo = 1;' },
     ]]]);
-    state.searchAncestorPaths = new Set(['src']);
+    state.searchAncestorPaths = new Set(['src', 'src/sub']);
     state.searchResultsVersion = 1;
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     expect(rowTypes(result)).toEqual(['dir', 'file', 'matchGroup']);
   });
 
   it('matchesCollapsed set → no match rows', () => {
     const file = makeFile('app.ts', { path: '/ws/app.ts' });
-    const root = makeDir('src', { files: [file], totalFiles: 1 });
+    const child = makeDir('sub', {
+      path: 'src/sub',
+      files: [file],
+      totalFiles: 1,
+    });
+    const root = makeDir('src', { children: [child], totalFiles: 1 });
 
     const state = makeState();
-    state.expanded.set('src', true);
+    state.expanded.set('src/sub', true);
     state.searchResults = new Map([['/ws/app.ts', [
       { line: 5, column: 0, matchLength: 3, lineText: 'const foo = 1;' },
     ]]]);
     state.matchesCollapsed.add('/ws/app.ts');
-    state.searchAncestorPaths = new Set(['src']);
+    state.searchAncestorPaths = new Set(['src', 'src/sub']);
     state.searchResultsVersion = 1;
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const matchRows = result.flatRows.filter(r => r.type === 'matchGroup');
     expect(matchRows.length).toBe(0);
@@ -745,18 +808,23 @@ describe('flattenTree — search matches', () => {
 
   it('match with context lines → single MatchGroupFlatRow with correct height', () => {
     const file = makeFile('app.ts', { path: '/ws/app.ts' });
-    const root = makeDir('src', { files: [file], totalFiles: 1 });
+    const child = makeDir('sub', {
+      path: 'src/sub',
+      files: [file],
+      totalFiles: 1,
+    });
+    const root = makeDir('src', { children: [child], totalFiles: 1 });
 
     const state = makeState();
-    state.expanded.set('src', true);
+    state.expanded.set('src/sub', true);
     state.searchResults = new Map([['/ws/app.ts', [
       { line: 4, column: 0, matchLength: 0, lineText: 'let x = 1;', isContext: true },
       { line: 5, column: 0, matchLength: 3, lineText: 'const foo = 1;' },
       { line: 6, column: 0, matchLength: 0, lineText: 'let y = 2;', isContext: true },
     ]]]);
-    state.searchAncestorPaths = new Set(['src']);
+    state.searchAncestorPaths = new Set(['src', 'src/sub']);
     state.searchResultsVersion = 1;
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     expect(rowTypes(result)).toEqual(['dir', 'file', 'matchGroup']);
     const mg = result.flatRows[2];
@@ -767,17 +835,22 @@ describe('flattenTree — search matches', () => {
 
   it('gap between non-contiguous match groups → two MatchGroupFlatRows, second has hasGap', () => {
     const file = makeFile('app.ts', { path: '/ws/app.ts' });
-    const root = makeDir('src', { files: [file], totalFiles: 1 });
+    const child = makeDir('sub', {
+      path: 'src/sub',
+      files: [file],
+      totalFiles: 1,
+    });
+    const root = makeDir('src', { children: [child], totalFiles: 1 });
 
     const state = makeState();
-    state.expanded.set('src', true);
+    state.expanded.set('src/sub', true);
     state.searchResults = new Map([['/ws/app.ts', [
       { line: 1, column: 0, matchLength: 3, lineText: 'line one' },
       { line: 50, column: 0, matchLength: 3, lineText: 'line fifty' },
     ]]]);
-    state.searchAncestorPaths = new Set(['src']);
+    state.searchAncestorPaths = new Set(['src', 'src/sub']);
     state.searchResultsVersion = 1;
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     expect(rowTypes(result)).toEqual(['dir', 'file', 'matchGroup', 'matchGroup']);
     const mg1 = result.flatRows[2];
@@ -792,7 +865,12 @@ describe('flattenTree — search matches', () => {
 
   it('match truncation (> threshold groups) → MoreMatchesFlatRow', () => {
     const file = makeFile('app.ts', { path: '/ws/app.ts' });
-    const root = makeDir('src', { files: [file], totalFiles: 1 });
+    const child = makeDir('sub', {
+      path: 'src/sub',
+      files: [file],
+      totalFiles: 1,
+    });
+    const root = makeDir('src', { children: [child], totalFiles: 1 });
 
     const matches: SearchMatch[] = [];
     for (let i = 0; i < 10; i++) {
@@ -800,11 +878,11 @@ describe('flattenTree — search matches', () => {
     }
 
     const state = makeState({ truncateThreshold: 3 });
-    state.expanded.set('src', true);
+    state.expanded.set('src/sub', true);
     state.searchResults = new Map([['/ws/app.ts', matches]]);
-    state.searchAncestorPaths = new Set(['src']);
+    state.searchAncestorPaths = new Set(['src', 'src/sub']);
     state.searchResultsVersion = 1;
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const moreRows = result.flatRows.filter(r => r.type === 'moreMatches');
     expect(moreRows.length).toBe(1);
@@ -815,17 +893,22 @@ describe('flattenTree — search matches', () => {
 
   it('match dedent computed correctly', () => {
     const file = makeFile('app.ts', { path: '/ws/app.ts' });
-    const root = makeDir('src', { files: [file], totalFiles: 1 });
+    const child = makeDir('sub', {
+      path: 'src/sub',
+      files: [file],
+      totalFiles: 1,
+    });
+    const root = makeDir('src', { children: [child], totalFiles: 1 });
 
     const state = makeState();
-    state.expanded.set('src', true);
+    state.expanded.set('src/sub', true);
     state.searchResults = new Map([['/ws/app.ts', [
       { line: 5, column: 4, matchLength: 3, lineText: '    const foo = 1;' },
       { line: 6, column: 6, matchLength: 3, lineText: '      bar();', isContext: true },
     ]]]);
-    state.searchAncestorPaths = new Set(['src']);
+    state.searchAncestorPaths = new Set(['src', 'src/sub']);
     state.searchResultsVersion = 1;
-    const result = flattenTree(state, [root], { showRootNode: true });
+    const result = flattenTree(state, [root]);
 
     const matchRow = result.flatRows.find(r => r.type === 'matchGroup');
     expect(matchRow).toBeDefined();
@@ -841,7 +924,7 @@ describe('flattenTree — workspace header heights', () => {
     const root2 = makeDir('b', { files: [makeFile('y.ts', { path: '/ws/b/y.ts' })], totalFiles: 1 });
 
     const state = makeState();
-    const result = flattenTree(state, [root1, root2], { showRootNode: false });
+    const result = flattenTree(state, [root1, root2]);
 
     const headers = result.flatRows.filter(r => r.type === 'workspaceHeader');
     expect(headers.length).toBe(2);
@@ -850,15 +933,15 @@ describe('flattenTree — workspace header heights', () => {
   });
 });
 
-describe('flattenTree — sidebar mode root-level files', () => {
-  it('sidebar mode renders root-level files at depth 0', () => {
+describe('flattenTree — root-level files', () => {
+  it('renders root-level files at depth 0', () => {
     const root = makeDir('project', {
       files: [makeFile('readme.md', { path: '/ws/readme.md' })],
       totalFiles: 1,
     });
 
     const state = makeState();
-    const result = flattenTree(state, [root], { showRootNode: false });
+    const result = flattenTree(state, [root]);
 
     const fileRows = result.flatRows.filter(r => r.type === 'file');
     expect(fileRows.length).toBe(1);

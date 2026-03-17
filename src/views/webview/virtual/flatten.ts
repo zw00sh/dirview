@@ -3,7 +3,7 @@
 // rendering logic in render-tree.ts and renderer/index.ts exactly.
 
 import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, compactedNode } from '../utils';
-import { ensureRootsExpanded } from '../state';
+
 import { filterTree } from '../filter';
 import { assembleMatchGroups } from '../match-grouping';
 import type { DirNode, FileNode, WebviewState, IndentAncestor, SearchMatch } from '../types';
@@ -31,7 +31,7 @@ export function flattenTree(
   roots: DirNode[],
   opts: FlattenOptions = {},
 ): FlattenResult {
-  const { showRootNode = false, clientWidth = 300 } = opts;
+  const { clientWidth = 300 } = opts;
 
   // ── Step 1: Filter tree ──────────────────────────────────────────────────
   const filtered = filterTree(roots, {
@@ -74,7 +74,6 @@ export function flattenTree(
       offsetY: 0,
       ancestors,
       node: displayNode,
-      originalNode: node,
       isExpanded: shouldExpand,
       hasChildren,
       maxMetric,
@@ -240,97 +239,88 @@ export function flattenTree(
   // ── Root handling ────────────────────────────────────────────────────────
   // Mirrors renderRoots() logic.
 
-  if (showRootNode) {
-    // Tab mode: each root is a visible depth-0 node, always expanded.
-    ensureRootsExpanded(state, filteredRoots);
-    for (const r of filteredRoots) {
-      flattenDirNode(r, 0, []);
+  for (const r of filteredRoots) {
+    if (filteredRoots.length > 1) {
+      flatRows.push({
+        type: 'workspaceHeader',
+        key: 'wsHeader:' + r.name,
+        depth: 0,
+        height: ROW_HEIGHT_WORKSPACE_HEADER,
+        offsetY: 0,
+        name: r.name,
+        ancestors: [],
+      });
     }
-  } else {
-    // Sidebar mode: roots' children at depth 0
-    for (const r of filteredRoots) {
-      if (filteredRoots.length > 1) {
-        flatRows.push({
-          type: 'workspaceHeader',
-          key: 'wsHeader:' + r.name,
-          depth: 0,
-          height: ROW_HEIGHT_WORKSPACE_HEADER,
-          offsetY: 0,
-          name: r.name,
-          ancestors: [],
-        });
-      }
 
-      const sortedChildren = sortDirs(r.children, state.currentSortMode);
-      const sortedFiles = sortFiles(r.files || []);
+    const sortedChildren = sortDirs(r.children, state.currentSortMode);
+    const sortedFiles = sortFiles(r.files || []);
 
-      // Empty dir grouping — only when no filter is active
-      if (!isFiltered && sortedChildren.length > 0) {
-        for (const group of groupEmptyDirs(sortedChildren)) {
-          if (group.type === 'emptyGroup') {
-            if (state.emptyGroupExpanded.has(group.nodes[0].path)) {
-              for (const n of group.nodes) {
-                flattenDirNode(n, 0, []);
-              }
-            } else {
-              flatRows.push({
-                type: 'emptyGroup',
-                key: 'emptyGroup:' + group.nodes[0].path,
-                depth: 0,
-                height: ROW_HEIGHT_EMPTY_GROUP,
-                offsetY: 0,
-                ancestors: [],
-                nodes: group.nodes,
-                maxMetric,
-              });
+    // Empty dir grouping — only when no filter is active
+    if (!isFiltered && sortedChildren.length > 0) {
+      for (const group of groupEmptyDirs(sortedChildren)) {
+        if (group.type === 'emptyGroup') {
+          if (state.emptyGroupExpanded.has(group.nodes[0].path)) {
+            for (const n of group.nodes) {
+              flattenDirNode(n, 0, []);
             }
           } else {
-            flattenDirNode(group.node, 0, []);
+            flatRows.push({
+              type: 'emptyGroup',
+              key: 'emptyGroup:' + group.nodes[0].path,
+              depth: 0,
+              height: ROW_HEIGHT_EMPTY_GROUP,
+              offsetY: 0,
+              ancestors: [],
+              nodes: group.nodes,
+              maxMetric,
+            });
           }
-        }
-      } else {
-        for (const child of sortedChildren) {
-          flattenDirNode(child, 0, []);
+        } else {
+          flattenDirNode(group.node, 0, []);
         }
       }
-
-      // Root-level file truncation — mirrors renderRoots()
-      const isSingleDirRoot = sortedChildren.length === 0;
-      const threshold = state.truncateThreshold;
-      const shouldTruncate = !isFiltered && !isSingleDirRoot && threshold > 0
-        && sortedFiles.length > threshold && !state.truncationExpanded.has(r.path);
-      const shownFiles = shouldTruncate ? sortedFiles.slice(0, threshold) : sortedFiles;
-      const hiddenFiles = shouldTruncate ? sortedFiles.slice(threshold) : [];
-
-      for (const file of shownFiles) {
-        flatRows.push({
-          type: 'file',
-          key: 'file:' + file.path,
-          depth: 0,
-          height: ROW_HEIGHT_FILE,
-          offsetY: 0,
-          ancestors: [],
-          file,
-        });
-        totalVisibleFiles++;
-
-        flattenFileMatches(file, 1, []);
+    } else {
+      for (const child of sortedChildren) {
+        flattenDirNode(child, 0, []);
       }
+    }
 
-      if (hiddenFiles.length > 0) {
-        flatRows.push({
-          type: 'truncated',
-          key: 'truncated:' + r.path,
-          depth: 0,
-          height: ROW_HEIGHT_TRUNCATED,
-          offsetY: 0,
-          ancestors: [],
-          hiddenFiles,
-          dirPath: r.path,
-          maxMetric,
-          clientWidth,
-        });
-      }
+    // Root-level file truncation
+    const isSingleDirRoot = sortedChildren.length === 0;
+    const threshold = state.truncateThreshold;
+    const shouldTruncate = !isFiltered && !isSingleDirRoot && threshold > 0
+      && sortedFiles.length > threshold && !state.truncationExpanded.has(r.path);
+    const shownFiles = shouldTruncate ? sortedFiles.slice(0, threshold) : sortedFiles;
+    const hiddenFiles = shouldTruncate ? sortedFiles.slice(threshold) : [];
+
+    for (const file of shownFiles) {
+      flatRows.push({
+        type: 'file',
+        key: 'file:' + file.path,
+        depth: 0,
+        height: ROW_HEIGHT_FILE,
+        offsetY: 0,
+        ancestors: [],
+        file,
+      });
+      totalVisibleFiles++;
+
+      flattenFileMatches(file, 1, []);
+    }
+
+    if (hiddenFiles.length > 0) {
+      flatRows.push({
+        type: 'truncated',
+        key: 'truncated:' + r.path,
+        depth: 0,
+        height: ROW_HEIGHT_TRUNCATED,
+        offsetY: 0,
+        ancestors: [],
+        hiddenFiles,
+        dirPath: r.path,
+        maxMetric,
+        clientWidth,
+      });
     }
   }
 
