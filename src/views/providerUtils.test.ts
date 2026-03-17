@@ -15,9 +15,13 @@ vi.mock('../highlight/highlighter', () => ({
   }),
 }));
 
-vi.mock('../language/languageMap', () => ({
-  getLangInfo: (_name: string) => ({ name: 'TypeScript', color: '#3178c6' }),
-}));
+vi.mock('../language/languageMap', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../language/languageMap')>();
+  return {
+    ...actual,
+    getLangInfo: (_name: string) => ({ name: 'TypeScript', color: '#3178c6' }),
+  };
+});
 
 import { handleSearchMessage, handleCommonMessage } from './providerUtils';
 import type { SearchService, SearchMatch, SearchResult, SearchOptions } from '../search/searchService';
@@ -335,6 +339,167 @@ describe('handleSearchMessage — clearSearch', () => {
     const returned = handleSearchMessage({ command: 'clearSearch' }, service, (m) => messages.push(m), ['/ws']);
     expect(messages).toEqual([{ type: 'searchResults', matches: null }]);
     expect(returned).toBe(true);
+  });
+});
+
+describe('handleSearchMessage — scannerContext passthrough', () => {
+  let messages: any[];
+  let postMessage: (msg: object) => void;
+
+  beforeEach(() => {
+    messages = [];
+    postMessage = (msg) => messages.push(msg);
+    highlightDeferred = null;
+  });
+
+  it('searchWorkspace receives showIgnored and filesExclude from scannerContext', () => {
+    // Create a service that captures the options passed to searchWorkspace.
+    let capturedOptions: any = null;
+    const service = createFakeSearchService();
+    const origSearchWorkspace = service.searchWorkspace.bind(service);
+    (service as any).searchWorkspace = (_pattern: string, _rootPaths: string[], options: any = {}) => {
+      capturedOptions = options;
+      return origSearchWorkspace(_pattern, _rootPaths, options);
+    };
+
+    handleSearchMessage(
+      { command: 'search', pattern: 'test' },
+      service as any,
+      postMessage,
+      ['/ws'],
+      true,
+      undefined,
+      undefined,
+      { showIgnored: true, filesExclude: ['node_modules', 'dist'] },
+    );
+
+    expect(capturedOptions).toBeDefined();
+    expect(capturedOptions.showIgnored).toBe(true);
+    expect(capturedOptions.filesExclude).toEqual(['node_modules', 'dist']);
+  });
+
+  it('searchFiles receives showIgnored and filesExclude from scannerContext', () => {
+    let capturedOpts: any = null;
+    const service = createFakeSearchService();
+    const origSearchFiles = service.searchFiles.bind(service);
+    (service as any).searchFiles = (_glob: string, _rootPaths: string[], _exclude?: string, options?: any) => {
+      capturedOpts = options;
+      return origSearchFiles(_glob, _rootPaths);
+    };
+
+    handleSearchMessage(
+      { command: 'searchFiles', glob: '*.ts' },
+      service as any,
+      postMessage,
+      ['/ws'],
+      true,
+      undefined,
+      undefined,
+      { showIgnored: false, filesExclude: ['*.log'] },
+    );
+
+    expect(capturedOpts).toBeDefined();
+    expect(capturedOpts.showIgnored).toBe(false);
+    expect(capturedOpts.filesExclude).toEqual(['*.log']);
+  });
+
+  it('searchWorkspace receives undefined showIgnored when no scannerContext', () => {
+    let capturedOptions: any = null;
+    const service = createFakeSearchService();
+    const origSearchWorkspace = service.searchWorkspace.bind(service);
+    (service as any).searchWorkspace = (_pattern: string, _rootPaths: string[], options: any = {}) => {
+      capturedOptions = options;
+      return origSearchWorkspace(_pattern, _rootPaths, options);
+    };
+
+    handleSearchMessage(
+      { command: 'search', pattern: 'test' },
+      service as any,
+      postMessage,
+      ['/ws'],
+    );
+
+    expect(capturedOptions).toBeDefined();
+    expect(capturedOptions.showIgnored).toBeUndefined();
+    expect(capturedOptions.filesExclude).toBeUndefined();
+  });
+});
+
+describe('handleSearchMessage — language filter scopes content search to matching extensions', () => {
+  let postMessage: (msg: object) => void;
+  let messages: any[];
+
+  beforeEach(() => {
+    messages = [];
+    postMessage = (m: object) => messages.push(m);
+  });
+
+  it('content search with langFilters restricts ripgrep to matching file extensions', () => {
+    // Bug: without this, searching for a common pattern like 'a' with a language
+    // filter (e.g. reStructuredText) would hit the MAX_MATCHES truncation limit
+    // on irrelevant C files before ever reaching the .rst files.
+    // Fix: langFilters are resolved to extension globs and passed as langGlobs,
+    // which searchWorkspace combines with the user include via --type-add/--type.
+    let capturedOptions: any = null;
+    const service = createFakeSearchService();
+    const origSearchWorkspace = service.searchWorkspace.bind(service);
+    (service as any).searchWorkspace = (_pattern: string, _rootPaths: string[], options: any = {}) => {
+      capturedOptions = options;
+      return origSearchWorkspace(_pattern, _rootPaths, options);
+    };
+
+    handleSearchMessage(
+      { command: 'search', pattern: 'a', include: '*bpf*', langFilters: ['reStructuredText'] },
+      service as any,
+      postMessage,
+      ['/ws'],
+    );
+
+    expect(capturedOptions).toBeDefined();
+    expect(capturedOptions.langGlobs).toBeDefined();
+    expect(capturedOptions.langGlobs).toContain('*.rst');
+  });
+
+  it('content search without langFilters does not restrict file extensions', () => {
+    let capturedOptions: any = null;
+    const service = createFakeSearchService();
+    const origSearchWorkspace = service.searchWorkspace.bind(service);
+    (service as any).searchWorkspace = (_pattern: string, _rootPaths: string[], options: any = {}) => {
+      capturedOptions = options;
+      return origSearchWorkspace(_pattern, _rootPaths, options);
+    };
+
+    handleSearchMessage(
+      { command: 'search', pattern: 'a', include: '*bpf*' },
+      service as any,
+      postMessage,
+      ['/ws'],
+    );
+
+    expect(capturedOptions).toBeDefined();
+    expect(capturedOptions.langGlobs).toBeUndefined();
+  });
+
+  it('langFilters with multiple languages produces globs for all their extensions', () => {
+    let capturedOptions: any = null;
+    const service = createFakeSearchService();
+    const origSearchWorkspace = service.searchWorkspace.bind(service);
+    (service as any).searchWorkspace = (_pattern: string, _rootPaths: string[], options: any = {}) => {
+      capturedOptions = options;
+      return origSearchWorkspace(_pattern, _rootPaths, options);
+    };
+
+    handleSearchMessage(
+      { command: 'search', pattern: 'test', langFilters: ['reStructuredText', 'C'] },
+      service as any,
+      postMessage,
+      ['/ws'],
+    );
+
+    expect(capturedOptions.langGlobs).toBeDefined();
+    expect(capturedOptions.langGlobs).toContain('*.rst');
+    expect(capturedOptions.langGlobs).toContain('*.c');
+    expect(capturedOptions.langGlobs).toContain('*.h');
   });
 });
 

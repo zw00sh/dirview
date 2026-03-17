@@ -101,6 +101,48 @@ describe('scanWorkspace', () => {
     expect(root.children.map((c: { name: string }) => c.name)).not.toContain('.git');
   });
 
+  it('does not count symlinks as files (remote adapter)', async () => {
+    const folderUri = { fsPath: '/repo', scheme: 'remote' };
+    (vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [
+      { uri: folderUri, name: 'repo' },
+    ];
+    (vscode.workspace.fs.readDirectory as ReturnType<typeof vi.fn>)
+      .mockResolvedValue([
+        ['real.ts', vscode.FileType.File],
+        ['link.ts', vscode.FileType.SymbolicLink],
+        ['dir-link', vscode.FileType.SymbolicLink],
+      ]);
+
+    const result = await scanWorkspace(false);
+    const root = result.roots[0];
+    // Only real.ts should be counted — symlinks without File bit are excluded
+    expect(root.totalFiles).toBe(1);
+    expect(root.files.map((f: { name: string }) => f.name)).toEqual(['real.ts']);
+  });
+
+  it('counts file+symlink combo as a file (symlink to file)', async () => {
+    const folderUri = { fsPath: '/repo', scheme: 'remote' };
+    (vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [
+      { uri: folderUri, name: 'repo' },
+    ];
+    (vscode.workspace.fs.readDirectory as ReturnType<typeof vi.fn>)
+      .mockResolvedValue([
+        ['real.ts', vscode.FileType.File],
+        // File | SymbolicLink — still has the File bit, so isFile should be true
+        // BUT the current implementation strips symlink, so this depends on the adapter
+        // vscode.FileType.File | vscode.FileType.SymbolicLink = 65
+        // isFile = (65 & 1) !== 0 → true, so it should be counted
+        ['linked-file.ts', vscode.FileType.File | vscode.FileType.SymbolicLink],
+      ]);
+
+    const result = await scanWorkspace(false);
+    const root = result.roots[0];
+    // The File bit is still set, so the remote adapter should count it
+    // This tests that the bitwise check correctly extracts File from combined flags
+    expect(root.totalFiles).toBe(2);
+    expect(root.files.map((f: { name: string }) => f.name).sort()).toEqual(['linked-file.ts', 'real.ts']);
+  });
+
   it('detects symlink cycles via visitedPaths', async () => {
     const folderUri = { fsPath: '/repo', scheme: 'remote' };
     (vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [

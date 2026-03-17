@@ -411,6 +411,7 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
         include: fileFilter || undefined,
         exclude: excludeFilter || undefined,
         contextLines: contextLines || undefined,
+        langFilters: state.activeFilters.size > 0 ? [...state.activeFilters] : undefined,
       });
     }
   }

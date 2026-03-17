@@ -65,6 +65,22 @@ export class TabProvider {
     return undefined;
   }
 
+  /** Read enabled files.exclude patterns from VSCode config. */
+  private getFilesExcludePatterns(): string[] {
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders || folders.length === 0) return [];
+    // Merge patterns from all workspace folders (deduped).
+    const patterns = new Set<string>();
+    for (const f of folders) {
+      const config = vscode.workspace.getConfiguration('files', f.uri);
+      const exclude = config.get<Record<string, boolean>>('exclude') ?? {};
+      for (const [p, enabled] of Object.entries(exclude)) {
+        if (enabled) patterns.add(p);
+      }
+    }
+    return [...patterns];
+  }
+
   /** Returns the tab title for a given dirPath.
    *  Root tabs use the workspace name; subtree tabs use the directory basename. */
   private getTabTitle(dirPath: string): string {
@@ -193,7 +209,10 @@ export class TabProvider {
       // When auto-rescan is disabled (large repos), trigger a background rescan after
       // search completes so the tree catches up with filesystem changes ripgrep discovered.
       const rescanAfterSearch = this.lastPayload?.autoRescanEnabled === false ? this.onRefresh : undefined;
-      if (handleSearchMessage(message, svc, (msg) => post(panel.webview, msg), rootPaths, this.rgAvailable, wsRootPaths, rescanAfterSearch)) { return; }
+      // Pass scanner context so ripgrep flags match the scanner's file discovery.
+      const showIgnored = this.lastPayload?.showIgnored ?? false;
+      const filesExclude = showIgnored ? [] : this.getFilesExcludePatterns();
+      if (handleSearchMessage(message, svc, (msg) => post(panel.webview, msg), rootPaths, this.rgAvailable, wsRootPaths, rescanAfterSearch, { showIgnored, filesExclude })) { return; }
 
       if (handleCommonMessage(message, {
         onRefresh: this.onRefresh,

@@ -54,7 +54,7 @@ export type WebviewToBackendMessage =
   | { command: 'toggleIgnored'; show: boolean }
   | { command: 'toggleTruncation'; enabled: boolean }
   | { command: 'toggleStickyHeaders'; enabled: boolean }
-  | { command: 'search'; pattern: string; caseSensitive?: boolean; useRegex?: boolean; include?: string; exclude?: string; contextLines?: number }
+  | { command: 'search'; pattern: string; caseSensitive?: boolean; useRegex?: boolean; include?: string; exclude?: string; contextLines?: number; langFilters?: string[] }
   | { command: 'searchFiles'; glob: string; exclude?: string }
   | { command: 'clearSearch' };
 

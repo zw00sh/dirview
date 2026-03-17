@@ -20,13 +20,12 @@ class RemoteAdapter implements ScanAdapter<vscode.Uri> {
     try {
       const entries = await vscode.workspace.fs.readDirectory(dirUri);
       return entries.map(([name, fileType]) => {
-        const isSymlink = (fileType & vscode.FileType.SymbolicLink) !== 0;
         const isDir = (fileType & vscode.FileType.Directory) !== 0;
         const isFile = (fileType & vscode.FileType.File) !== 0;
         return {
           name,
-          isDir: isDir || (isSymlink && !isFile),
-          isFile: isFile || isSymlink,
+          isDir,
+          isFile,
         };
       });
     } catch {

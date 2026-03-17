@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { SearchService, SearchMatch } from '../search/searchService';
-import { getLangInfo } from '../language/languageMap';
+import { getLangInfo, getGlobsForLanguages } from '../language/languageMap';
 import { highlightGroup } from '../highlight/highlighter';
 import type { WebviewToBackendMessage, BackendToWebviewMessage } from './webview/types';
 
@@ -60,6 +60,7 @@ export function handleSearchMessage(
   hasRipgrep = true,
   workspaceRootPaths?: string[],
   onSearchComplete?: () => void,
+  scannerContext?: { showIgnored?: boolean; filesExclude?: string[] },
 ): boolean {
   // rootPaths scopes the ripgrep search (may be a subdirectory for subtree tabs).
   // workspaceRootPaths is used by the webview to convert absolute file paths to
@@ -212,6 +213,8 @@ export function handleSearchMessage(
       {
         caseSensitive: message.caseSensitive, useRegex: message.useRegex, include: message.include, exclude: message.exclude,
         contextLines: message.contextLines,
+        showIgnored: scannerContext?.showIgnored, filesExclude: scannerContext?.filesExclude,
+        langGlobs: message.langFilters ? getGlobsForLanguages(new Set(message.langFilters)) : undefined,
         onBatch: (batch, totals) => {
           // Send plain-text batch immediately — no waiting for syntax highlighting.
           // All match lineText is preserved; truncation display is managed client-side.
@@ -248,7 +251,7 @@ export function handleSearchMessage(
   if (message.command === 'searchFiles' && message.glob !== undefined) {
     postMessage({ type: 'searchProgress', rootPaths: wsRoots });
     if (hasRipgrep) {
-      const { result } = searchService.searchFiles(message.glob, rootPaths, message.exclude);
+      const { result } = searchService.searchFiles(message.glob, rootPaths, message.exclude, scannerContext);
       result.then((r) => {
         const matchesObj: Record<string, []> = {};
         for (const p of r.matches.keys()) { matchesObj[p] = []; }

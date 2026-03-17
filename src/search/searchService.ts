@@ -27,6 +27,13 @@ export interface SearchOptions {
   exclude?: string;
   /** Number of context lines to show before and after each match (-C N passed to ripgrep). */
   contextLines?: number;
+  /** When true, ripgrep skips .gitignore rules (matches scanner showIgnored mode). */
+  showIgnored?: boolean;
+  /** VSCode files.exclude patterns to pass as --iglob ! exclusions. */
+  filesExclude?: string[];
+  /** Ripgrep --iglob patterns derived from language filter (e.g. ['*.rst', '*.c']).
+   *  When set, ripgrep only searches files matching these extensions. */
+  langGlobs?: string[];
   /** Called with partial results as they arrive. Batches are flushed every BATCH_FLUSH_FILES
    *  new files or BATCH_FLUSH_MS milliseconds, whichever comes first. */
   onBatch?: (batch: Map<string, SearchMatch[]>, totals: { fileCount: number; matchCount: number }) => void;
@@ -35,11 +42,28 @@ export interface SearchOptions {
 const MAX_FILES = 2000;
 const MAX_MATCHES = 20000;
 
+/** Build common ripgrep flags so file discovery matches the scanner.
+ *  --hidden: scanner includes dotfiles, so ripgrep must too.
+ *  --no-ignore: when showIgnored is true, scanner skips .gitignore rules.
+ *  files.exclude patterns: forwarded as --iglob ! exclusions. */
+function commonRgFlags(opts: { showIgnored?: boolean; filesExclude?: string[] } = {}): string[] {
+  const flags: string[] = ['--hidden'];
+  if (opts.showIgnored) { flags.push('--no-ignore'); }
+  if (opts.filesExclude) {
+    for (const p of opts.filesExclude) { flags.push('--glob', '!' + p); }
+  }
+  return flags;
+}
+
 // Normalize a single glob pattern: bare '*' → '**' so it matches recursively
 // (ripgrep's --iglob treats '*' as single-level only).
 function normalizeGlob(g: string): string {
   const t = g.trim();
-  return t === '*' ? '**' : t;
+  // Bare * → ** for recursive matching, but bare ** is a no-op for rg --files
+  // (it already returns all files). Passing --iglob ** would override rg's
+  // built-in .git exclusion, so we skip it entirely.
+  if (t === '*' || t === '**') return '';
+  return t;
 }
 
 export class SearchService {
@@ -99,12 +123,35 @@ export class SearchService {
     const generation = this.generation;
     const onBatch = options.onBatch;
 
-    const args: string[] = ['--json', '--max-filesize', '1M', '-e', pattern];
+    const args: string[] = ['--json', '--max-filesize', '1M', ...commonRgFlags(options), '-e', pattern];
     if (!options.caseSensitive) { args.push('-i'); }
     if (!options.useRegex) { args.push('--fixed-strings'); }
-    if (options.include) {
-      for (const g of options.include.split(',')) { const t = normalizeGlob(g); if (t) args.push('--iglob', t); }
+    // When both language globs and user include globs are active, use --type-add
+    // to combine them with AND semantics (ripgrep OR's multiple --iglob patterns).
+    // Each type-add pattern is: <include-prefix><ext>, e.g. '*bpf*.rst'.
+    // When only one is present, use --iglob directly.
+    const langGlobs = options.langGlobs && options.langGlobs.length > 0 ? options.langGlobs : null;
+    const includeGlobs = options.include
+      ? options.include.split(',').map(normalizeGlob).filter(Boolean)
+      : [];
+
+    if (langGlobs && includeGlobs.length > 0) {
+      // Cartesian product: each include × each lang glob → type-add pattern
+      for (const lg of langGlobs) {
+        // lg is '*.ext' or 'Filename'. Combine with include prefix.
+        for (const ig of includeGlobs) {
+          const combined = lg.startsWith('*') ? ig + lg.slice(1) : ig + '/' + lg;
+          args.push('--type-add', 'langfilter:' + combined);
+        }
+      }
+      args.push('--type', 'langfilter');
+    } else if (langGlobs) {
+      for (const g of langGlobs) { args.push('--type-add', 'langfilter:' + g); }
+      args.push('--type', 'langfilter');
+    } else if (includeGlobs.length > 0) {
+      for (const g of includeGlobs) { args.push('--iglob', g); }
     }
+
     if (options.exclude) {
       for (const g of options.exclude.split(',')) { const t = normalizeGlob(g); if (t) args.push('--iglob', '!' + t); }
     }
@@ -268,11 +315,12 @@ export class SearchService {
     glob: string,
     rootPaths: string[],
     exclude?: string,
+    options: { showIgnored?: boolean; filesExclude?: string[] } = {},
   ): { result: Promise<SearchResult>; cancel: () => void } {
     this.cancel();
     const generation = this.generation;
 
-    const args: string[] = ['--files'];
+    const args: string[] = ['--files', ...commonRgFlags(options)];
     // Support comma-separated include globs
     for (const g of glob.split(',')) { const t = normalizeGlob(g); if (t) args.push('--iglob', t); }
     if (exclude) {

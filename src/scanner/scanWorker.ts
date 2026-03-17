@@ -21,7 +21,7 @@ class LocalAdapter implements ScanAdapter<string> {
       return entries.map(d => ({
         name: d.name,
         isDir: d.isDirectory(),
-        isFile: d.isFile() || d.isSymbolicLink(),
+        isFile: d.isFile(),
       }));
     } catch {
       return null;

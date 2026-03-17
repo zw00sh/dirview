@@ -83,6 +83,27 @@ for (const [langName, lang] of Object.entries(languages)) {
   }
 }
 
+/** Returns ripgrep --iglob patterns that match all files belonging to the given languages.
+ *  Combines extensions (e.g. '*.rst') and exact filenames (e.g. 'Makefile'). */
+export function getGlobsForLanguages(langNames: Set<string>): string[] {
+  if (langNames.size === 0) return [];
+  const globs: string[] = [];
+  for (const [langName, lang] of Object.entries(languages)) {
+    if (!langNames.has(langName)) continue;
+    if (lang.extensions) {
+      for (const ext of lang.extensions) {
+        globs.push('*' + ext);
+      }
+    }
+    if (lang.filenames) {
+      for (const fn of lang.filenames) {
+        globs.push(fn);
+      }
+    }
+  }
+  return globs;
+}
+
 export function getLangInfo(filename: string): LangInfo {
   const lower = filename.toLowerCase();
 
