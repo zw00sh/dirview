@@ -430,6 +430,10 @@ function toggleFilter(langName: string) {
   vscode.postMessage({ command: 'filter', langs: [...state.activeFilters] });
   searchBar.updateFilterWarning(state.activeFilters.size);
   updateLegendActiveAlert();
+  // Re-run the content search so ripgrep's language scope (--type-add) matches
+  // the updated filter. Without this, removing a language filter would leave
+  // stale results scoped to the old language set.
+  if (state.searchResults) { searchBar.triggerSearch(); return; }
   schedulePostFilterStatusUpdate();
   state.rerender();
 }
@@ -440,6 +444,8 @@ function clearAllFilters() {
   vscode.postMessage({ command: 'filter', langs: [] });
   searchBar.updateFilterWarning(0);
   updateLegendActiveAlert();
+  // Re-run the content search so ripgrep drops the language scope.
+  if (state.searchResults) { searchBar.triggerSearch(); return; }
   schedulePostFilterStatusUpdate();
   state.rerender();
 }

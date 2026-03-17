@@ -59,6 +59,8 @@ export interface Harness {
   setExcludeGlob(glob: string): void;
   setLanguageFilter(langs: string[]): void;
   clearLanguageFilter(): void;
+  /** Re-trigger the active content search with current language filter scope. */
+  retriggerSearch(): Promise<void>;
   clearSearch(): Promise<void>;
   /** Wait for a pending search to complete. */
   waitForSearchComplete(): Promise<void>;
@@ -316,6 +318,9 @@ export async function createHarness(options: HarnessOptions): Promise<Harness> {
     hasRipgrep: hasRipgrep,
   });
 
+  // Track last search pattern so language filter changes can re-trigger.
+  let lastSearchPattern = '';
+
   // ── Harness API ──────────────────────────────────────────────────────────
 
   return {
@@ -325,6 +330,7 @@ export async function createHarness(options: HarnessOptions): Promise<Harness> {
     bridge,
 
     async search(pattern: string): Promise<void> {
+      lastSearchPattern = pattern;
       const waitPromise = bridge.waitForSearchComplete();
       bridge.handleWebviewMessage({
         command: 'search',
@@ -358,6 +364,23 @@ export async function createHarness(options: HarnessOptions): Promise<Harness> {
       state.activeFilters = new Set(langs);
       if (state.activeFilters.size > 0) { state.expanded.clear(); }
       state.searchResultsVersion++;
+      rerender();
+    },
+
+    /** Re-trigger the active search with updated language filter scope.
+     *  Must be called after setLanguageFilter/clearLanguageFilter when a content
+     *  search is active, mirroring the tab.ts toggleFilter/clearAllFilters fix. */
+    async retriggerSearch(): Promise<void> {
+      if (!lastSearchPattern) return;
+      const waitPromise = bridge.waitForSearchComplete();
+      bridge.handleWebviewMessage({
+        command: 'search',
+        pattern: lastSearchPattern,
+        useRegex: false,
+        langFilters: state.activeFilters.size > 0 ? [...state.activeFilters] : undefined,
+      });
+      await waitPromise;
+      await bridge.flush();
       rerender();
     },
 

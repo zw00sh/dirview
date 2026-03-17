@@ -65,6 +65,42 @@ describe('search with language filter', () => {
     h.dispose();
   }, 30000);
 
+  it('removing language filter and re-triggering search returns broader results', async () => {
+    // Bug: when a language filter was removed via the pill 'x', the search didn't
+    // re-fire, leaving stale results scoped to the old language extensions.
+    const h = await createHarness({ workspace: 'test-repos/source', handlers });
+
+    const stats = h.roots[0]?.stats || [];
+    if (stats.length < 2) { h.dispose(); return; }
+
+    // Pick a language and search with it active.
+    const targetLang = stats[0].name;
+    h.setLanguageFilter([targetLang]);
+    await h.search('e');
+
+    const filteredResults = h.state.searchResults;
+    expect(filteredResults).not.toBeNull();
+    const filteredPaths = new Set(filteredResults!.keys());
+    expect(filteredPaths.size).toBeGreaterThan(0);
+
+    // Clear the language filter and re-trigger the search.
+    // This mirrors what tab.ts now does when the pill 'x' is clicked.
+    h.clearLanguageFilter();
+    await h.retriggerSearch();
+
+    const unfilteredResults = h.state.searchResults;
+    expect(unfilteredResults).not.toBeNull();
+    expect(unfilteredResults!.size).toBeGreaterThan(0);
+
+    // The unfiltered search should include files of OTHER languages that
+    // weren't in the filtered set (proving the search actually re-fired).
+    const unfilteredPaths = new Set(unfilteredResults!.keys());
+    const newPaths = [...unfilteredPaths].filter(p => !filteredPaths.has(p));
+    expect(newPaths.length).toBeGreaterThan(0);
+
+    h.dispose();
+  }, 30000);
+
   it('language filter + search, then clear filter finds results in more languages', async () => {
     const h = await createHarness({ workspace: 'test-repos/source', handlers });
 
