@@ -44,7 +44,7 @@ const treeSection = document.getElementById('tree-section')!;
 const treeHeaderEl = document.getElementById('tree-header')!;
 const root = document.getElementById('root')!;
 const treeHeaderTitle = document.getElementById('tree-header-title')!;
-const treeFooter = document.getElementById('tree-footer')!;
+const treeHeaderBreadcrumb = document.getElementById('tree-header-breadcrumb')!;
 const sortBtn = document.getElementById('tab-sort')!;
 const toggleStickyBtn = document.getElementById('tab-toggle-sticky')!;
 const toggleTruncationBtn = document.getElementById('tab-toggle-truncation')!;
@@ -112,8 +112,42 @@ const renderer = createRenderer(state, {
     barMinWidth: 24,
     barSqrt: true,
   },
-  onNavigate: (path: string) => vscode.postMessage({ command: 'navigateToDir', path }),
+  onNavigate: (path: string) => navigateTo(path),
 });
+
+// ── Navigation history ────────────────────────────────────────────────────
+// Tracks the sequence of dirPaths for mouse back/forward navigation.
+const navHistory: string[] = [''];
+let navIndex = 0;
+let navigatingViaHistory = false;
+
+function navigateTo(path: string): void {
+  // Trim forward history when navigating from a non-tip position.
+  if (navIndex < navHistory.length - 1) {
+    navHistory.length = navIndex + 1;
+  }
+  navHistory.push(path);
+  navIndex = navHistory.length - 1;
+  vscode.postMessage({ command: 'navigateToDir', path });
+}
+
+function navigateBack(): void {
+  if (navIndex <= 0) { return; }
+  navIndex--;
+  navigatingViaHistory = true;
+  vscode.postMessage({ command: 'navigateToDir', path: navHistory[navIndex] });
+}
+
+function navigateForward(): void {
+  if (navIndex >= navHistory.length - 1) { return; }
+  navIndex++;
+  navigatingViaHistory = true;
+  vscode.postMessage({ command: 'navigateToDir', path: navHistory[navIndex] });
+}
+
+// Note: mouse back/forward buttons (3/4) don't reach VS Code webviews.
+// Navigation history is used by the footer breadcrumb and could be wired
+// to keyboard shortcuts if VS Code exposes them in future.
 
 // (showIgnored, truncationEnabled, isLocal now in tabUI)
 // The directory path this tab is rooted at ('' = workspace root).
@@ -163,22 +197,18 @@ function updateRefreshBtn(autoRescanEnabled: boolean) {
 }
 
 function updateNavigation() {
-  // Header: current root name, ALL CAPS
+  // Header title: current root name, ALL CAPS
   const displayName = state.dirPath
     ? state.dirPath.split('/').pop()!
     : (state.workspaceFolderName || 'Tree');
   treeHeaderTitle.textContent = displayName.toUpperCase();
 
-  // Footer: breadcrumb from workspace root, hidden at workspace root
-  treeFooter.innerHTML = '';
-  if (!state.dirPath) {
-    treeFooter.style.display = 'none';
-    return;
-  }
-  treeFooter.style.display = '';
+  // Breadcrumb: inline in the header after the title, hidden at workspace root
+  treeHeaderBreadcrumb.innerHTML = '';
+  if (!state.dirPath) { return; }
 
-  // Dot separator matching the tree header
-  treeFooter.appendChild(h('span', { className: 'tab-tree-header-separator', textContent: '\u00B7' }));
+  // Dot separator between title and breadcrumb
+  treeHeaderBreadcrumb.appendChild(h('span', { className: 'tab-tree-header-separator', textContent: '\u00B7' }));
 
   const segments = state.dirPath.split('/');
   const hasRootName = !!state.workspaceFolderName;
@@ -186,7 +216,7 @@ function updateNavigation() {
 
   for (let i = 0; i < allNames.length; i++) {
     if (i > 0) {
-      treeFooter.appendChild(h('span', { className: 'path-sep', textContent: ' / ' }));
+      treeHeaderBreadcrumb.appendChild(h('span', { className: 'path-sep', textContent: ' / ' }));
     }
     const offset = hasRootName ? i - 1 : i;
     const segPath = offset < 0 ? '' : segments.slice(0, offset + 1).join('/');
@@ -194,10 +224,11 @@ function updateNavigation() {
       className: 'path-segment',
       textContent: allNames[i],
     });
-    seg.addEventListener('click', () => {
-      vscode.postMessage({ command: 'navigateToDir', path: segPath });
+    seg.addEventListener('click', (e: MouseEvent) => {
+      e.stopPropagation();
+      navigateTo(segPath);
     });
-    treeFooter.appendChild(seg);
+    treeHeaderBreadcrumb.appendChild(seg);
   }
 }
 
@@ -560,6 +591,16 @@ const sharedHandler = createMessageHandler(state, scanBar, root, {
       const dirChanged = state.dirPath !== message.dirPath;
       state.dirPath = message.dirPath;
       searchBar.setScopeWarning(message.dirPath);
+      // Record in navigation history unless this update was triggered by back/forward.
+      if (dirChanged && !navigatingViaHistory) {
+        // External navigation (e.g. open-in-tab button from sidebar) — add to history.
+        if (navHistory[navIndex] !== message.dirPath) {
+          if (navIndex < navHistory.length - 1) { navHistory.length = navIndex + 1; }
+          navHistory.push(message.dirPath);
+          navIndex = navHistory.length - 1;
+        }
+      }
+      navigatingViaHistory = false;
       // Re-run the search against the new root when the directory scope changes.
       if (dirChanged && state.searchResults) { searchBar.triggerSearch(); }
     }

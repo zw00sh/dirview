@@ -220,20 +220,24 @@ body {
   background: var(--vscode-editor-background);
 }
 
-/* Footer breadcrumb for subdirectory navigation */
-.tab-tree-footer {
-  flex-shrink: 0;
-  height: 22px;
-  padding: 0 8px 0 4px;
-  display: flex;
+/* Inline breadcrumb in the tree header for subdirectory navigation */
+.tab-tree-header-breadcrumb {
+  display: inline-flex;
   align-items: center;
   gap: 4px;
-  border-top: 1px solid var(--vscode-sideBar-border, rgba(128,128,128,0.2));
-  color: var(--vscode-foreground);
-  cursor: default;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
-.tab-tree-footer .path-segment {
+.tab-tree-header-breadcrumb .path-segment {
   cursor: pointer;
+  font-size: 11px;
+  opacity: 0.7;
+}
+.tab-tree-header-breadcrumb .path-sep {
+  font-size: 11px;
+  opacity: 0.3;
 }
 
 /* Yellow warning border when search filter input is focused in a scoped tab */
