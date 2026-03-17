@@ -42,7 +42,6 @@ const searchActiveAlert = document.getElementById('search-active-alert')!;
 const legendActiveAlert = document.getElementById('legend-active-alert')!;
 const treeSection = document.getElementById('tree-section')!;
 const treeHeaderEl = document.getElementById('tree-header')!;
-const treeChevronEl = document.getElementById('tree-chevron')!;
 const root = document.getElementById('root')!;
 const sortBtn = document.getElementById('tab-sort')!;
 const toggleStickyBtn = document.getElementById('tab-toggle-sticky')!;
@@ -66,7 +65,6 @@ searchContentEl.appendChild(searchBar.el);
 // Consolidated tab-local UI state.
 const tabUI = {
   searchCollapsed: false,
-  treeCollapsed: false,
   legendCollapsed: false,
   legendShowPct: false,
   showIgnored: false,
@@ -74,9 +72,8 @@ const tabUI = {
   isLocal: true,
   stickyEnabled: true,
 };
-// Initialise chevrons to match expanded state (chevron rotated 90° = expanded).
+// Initialise chevron to match expanded state (chevron rotated 90° = expanded).
 searchChevronEl.style.transform = 'rotate(90deg)';
-treeChevronEl.style.transform = 'rotate(90deg)';
 
 // Cmd+F / Ctrl+F: expand and focus the search section.
 window.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -326,17 +323,10 @@ function toggleSearch() {
   searchHeaderEl.setAttribute('aria-expanded', String(!tabUI.searchCollapsed));
   updateSearchActiveAlert();
 }
-function toggleTree() {
-  tabUI.treeCollapsed = !tabUI.treeCollapsed;
-  root.style.display = tabUI.treeCollapsed ? 'none' : '';
-  treeChevronEl.style.transform = tabUI.treeCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
-  treeHeaderEl.setAttribute('aria-expanded', String(!tabUI.treeCollapsed));
-}
 legendHeader.addEventListener('click', toggleLegend);
 searchHeaderEl.addEventListener('click', toggleSearch);
-treeHeaderEl.addEventListener('click', toggleTree);
 // Keyboard support: Enter/Space toggles sections
-for (const [el, fn] of [[legendHeader, toggleLegend], [searchHeaderEl, toggleSearch], [treeHeaderEl, toggleTree]] as const) {
+for (const [el, fn] of [[legendHeader, toggleLegend], [searchHeaderEl, toggleSearch]] as const) {
   el.addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); }
   });
