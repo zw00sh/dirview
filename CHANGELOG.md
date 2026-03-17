@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.4.1] — 2026-03-18
+
+### Fixed
+- **Sticky header shadow flicker** — shadow no longer flickers when it aligns exactly with a tree item boundary. The stuck-row threshold now uses an inclusive comparison to prevent rapid toggling at the pixel boundary.
+
 ## [1.4.0] — 2026-03-17
 
 ### Added

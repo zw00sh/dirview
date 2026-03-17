@@ -192,6 +192,36 @@ describe('createStickyOverlay — hasStuckRows', () => {
     overlay.destroy();
   });
 
+  it('stays stuck when scrollTop exactly equals the dir row offsetY (no flicker)', () => {
+    const container = makeContainer();
+    // scrollTop exactly equals the dir row's offsetY — boundary case
+    Object.defineProperty(container, 'scrollTop', { value: 22, writable: true, configurable: true });
+
+    const overlay = createStickyOverlay({
+      container,
+      renderRow: (row) => {
+        const el = document.createElement('div');
+        const inner = document.createElement('div');
+        inner.className = 'dir-row';
+        el.appendChild(inner);
+        return el;
+      },
+    });
+
+    const dirRow = makeDirRow({ path: 'src', key: 'dir:src', depth: 0, offsetY: 22 });
+    const fileRow = makeFileRow({
+      key: 'file:src/a.ts',
+      depth: 1,
+      offsetY: 44,
+      ancestors: [{ path: 'src' }],
+    });
+
+    // visibleStart=1: file row is first visible, dir is at exact scroll boundary
+    overlay.update([dirRow, fileRow], 1);
+    expect(overlay.hasStuckRows()).toBe(true);
+    overlay.destroy();
+  });
+
   it('returns false with empty flat rows', () => {
     const container = makeContainer();
     const overlay = createStickyOverlay({

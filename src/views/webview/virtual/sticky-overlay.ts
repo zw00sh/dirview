@@ -94,7 +94,7 @@ export function createStickyOverlay(config: StickyOverlayConfig): StickyOverlay 
       const row = flatRows[i];
       if (row.type === 'dir' && ancestorPaths.has(row.node.path)) {
         // This dir is an ancestor — check if it's scrolled above the viewport
-        if (row.offsetY < scrollTop) {
+        if (row.offsetY <= scrollTop) {
           stuckRows.push(row);
         }
         ancestorPaths.delete(row.node.path);
