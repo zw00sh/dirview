@@ -469,13 +469,16 @@ function legendStats(): LangStat[] {
 
 function updateLegend(stats?: LangStat[]) {
   const s = stats ?? legendStats();
-  if (!s || s.length === 0) {
+  // Hide legend only when there's no data at all (no scan yet).
+  // When baseStats exist, show the legend even if current stats are empty
+  // (all items render at 0 via the frozen base order).
+  if ((!s || s.length === 0) && baseLegendStats.length === 0) {
     legendSection.style.display = 'none';
     return;
   }
   legendSection.style.display = '';
   legendEl.style.display = tabUI.legendCollapsed ? 'none' : '';
-  renderLegend(legendEl, s, state.activeFilters, toggleFilter, tabUI.legendShowPct);
+  renderLegend(legendEl, s, state.activeFilters, toggleFilter, tabUI.legendShowPct, baseLegendStats.length > 0 ? baseLegendStats : undefined);
 }
 
 // ── Tree ────────────────────────────────────────────────────────────────

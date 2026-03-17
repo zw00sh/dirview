@@ -45,6 +45,14 @@ body {
   opacity: 0.5;
 }
 
+.legend-item.zero-count {
+  opacity: 0.35;
+  cursor: default;
+}
+.legend-item.zero-count:hover {
+  background: none;
+}
+
 .legend-swatch {
   width: 10px;
   height: 10px;

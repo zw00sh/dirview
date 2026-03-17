@@ -35,6 +35,13 @@ export interface SearchOptions {
 const MAX_FILES = 2000;
 const MAX_MATCHES = 20000;
 
+// Normalize a single glob pattern: bare '*' → '**' so it matches recursively
+// (ripgrep's --iglob treats '*' as single-level only).
+function normalizeGlob(g: string): string {
+  const t = g.trim();
+  return t === '*' ? '**' : t;
+}
+
 export class SearchService {
   private currentProcess: child_process.ChildProcess | null = null;
   private rgPath: string;
@@ -96,10 +103,10 @@ export class SearchService {
     if (!options.caseSensitive) { args.push('-i'); }
     if (!options.useRegex) { args.push('--fixed-strings'); }
     if (options.include) {
-      for (const g of options.include.split(',')) { const t = g.trim(); if (t) args.push('--iglob', t); }
+      for (const g of options.include.split(',')) { const t = normalizeGlob(g); if (t) args.push('--iglob', t); }
     }
     if (options.exclude) {
-      for (const g of options.exclude.split(',')) { const t = g.trim(); if (t) args.push('--iglob', '!' + t); }
+      for (const g of options.exclude.split(',')) { const t = normalizeGlob(g); if (t) args.push('--iglob', '!' + t); }
     }
     if (options.contextLines && options.contextLines > 0) { args.push('-C', String(options.contextLines)); }
     args.push(...rootPaths);
@@ -267,9 +274,9 @@ export class SearchService {
 
     const args: string[] = ['--files'];
     // Support comma-separated include globs
-    for (const g of glob.split(',')) { const t = g.trim(); if (t) args.push('--iglob', t); }
+    for (const g of glob.split(',')) { const t = normalizeGlob(g); if (t) args.push('--iglob', t); }
     if (exclude) {
-      for (const g of exclude.split(',')) { const t = g.trim(); if (t) args.push('--iglob', '!' + t); }
+      for (const g of exclude.split(',')) { const t = normalizeGlob(g); if (t) args.push('--iglob', '!' + t); }
     }
     args.push(...rootPaths);
     const proc = child_process.spawn(this.rgPath, args);
@@ -278,7 +285,6 @@ export class SearchService {
     const result = new Promise<SearchResult>((resolve, reject) => {
       const matches = new Map<string, SearchMatch[]>();
       let fileCount = 0;
-      let truncated = false;
       let buffer = '';
 
       proc.stdout.on('data', (chunk: Buffer) => {
@@ -288,7 +294,9 @@ export class SearchService {
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed) { continue; }
-          if (fileCount >= MAX_FILES) { truncated = true; continue; }
+          // No file cap for glob-only file filtering — show all matching files.
+          // The cap only applies to content search (searchWorkspace) where inline
+          // match rendering is expensive.
           matches.set(trimmed, []);
           fileCount++;
         }
@@ -297,7 +305,7 @@ export class SearchService {
       proc.on('close', () => {
         if (this.currentProcess === proc) { this.currentProcess = null; }
         if (generation !== this.generation) { return; }
-        resolve({ matches, fileCount, matchCount: 0, truncated });
+        resolve({ matches, fileCount, matchCount: 0, truncated: false });
       });
 
       proc.on('error', (err: Error) => {

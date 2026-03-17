@@ -197,27 +197,43 @@ export function computeStats(roots: DirNode[]): LangStat[] {
 
 // Render a filterable language legend into a container element.
 // showPct: when true, displays percentage instead of raw file count.
+// baseStats: when provided, all base languages are rendered in their original (frozen) order.
+//   Languages with 0 current count are dimmed/non-interactive (unless actively filtered).
+//   This prevents layout reflow when search/filter results change.
 // Returns nothing; mutates legendEl in-place.
-export function renderLegend(legendEl: HTMLElement, stats: LangStat[], activeFilters: Set<string>, onToggle: (lang: string) => void, showPct: boolean): void {
+export function renderLegend(legendEl: HTMLElement, stats: LangStat[], activeFilters: Set<string>, onToggle: (lang: string) => void, showPct: boolean, baseStats?: LangStat[]): void {
   legendEl.innerHTML = '';
   const items = document.createElement('div');
   items.className = 'legend-items';
 
   // Delegated click handler — one listener on the container instead of per-item.
+  // Skip zero-count items unless they are actively filtered (user can deactivate their own filter).
   items.addEventListener('click', (e) => {
     const item = (e.target as HTMLElement).closest<HTMLElement>('.legend-item[data-lang]');
-    if (item) { onToggle(item.dataset.lang!); }
+    if (item && !item.classList.contains('zero-count')) { onToggle(item.dataset.lang!); }
   });
 
-  for (const lang of stats) {
+  // Build a lookup from current stats for quick count access.
+  const currentCounts = new Map<string, LangStat>();
+  for (const s of stats) { currentCounts.set(s.name, s); }
+
+  const renderList = baseStats ?? stats;
+  for (const lang of renderList) {
+    const current = currentCounts.get(lang.name);
+    const count = current ? current.count : 0;
+    const pct = current ? current.pct : '0';
     const isActive = activeFilters.has(lang.name);
     const isInactive = activeFilters.size > 0 && !isActive;
+    const isZero = count === 0 && !isActive;
     const item = document.createElement('div');
-    item.className = 'legend-item' + (isActive ? ' active' : '') + (isInactive ? ' inactive' : '');
+    item.className = 'legend-item'
+      + (isActive ? ' active' : '')
+      + (isInactive ? ' inactive' : '')
+      + (isZero ? ' zero-count' : '');
     item.dataset.lang = lang.name;
-    const displayValue = showPct ? lang.pct + '%' : String(lang.count);
+    const displayValue = showPct ? pct + '%' : String(count);
     item.innerHTML =
-      `<span class="legend-swatch" style="background:${lang.color}"></span>` +
+      `<span class="legend-swatch" style="background:${isZero ? 'var(--vscode-descriptionForeground)' : lang.color}"></span>` +
       `<span class="legend-name">${escHtml(lang.name)}</span>` +
       `<span class="legend-count">${displayValue}</span>`;
     items.appendChild(item);
