@@ -322,7 +322,8 @@
     "watch:dev": "node scripts/watchAll.js --dev",
     "watch:tsc": "tsc -watch -p ./",
     "copy-webview": "node scripts/copyWebview.js",
-    "test": "vitest run",
+    "test": "vitest run --exclude 'src/e2e/**'",
+    "test:e2e": "vitest run src/e2e",
     "debug-eval": "node scripts/debug-eval.js"
   },
   "devDependencies": {
