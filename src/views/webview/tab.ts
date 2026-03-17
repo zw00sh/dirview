@@ -331,6 +331,10 @@ const scroller = createVirtualScroller({
   treeClass: '',
   onRender: (visibleStart, _visibleEnd) => {
     overlay.update(currentFlatRows, visibleStart);
+    // Show shadow under tree header when scrolled, unless sticky overlay has taken over.
+    const scrolled = root.scrollTop > 0;
+    const hasStuck = overlay.hasStuckRows();
+    treeHeaderEl.classList.toggle('scrolled', scrolled && !hasStuck);
   },
 });
 

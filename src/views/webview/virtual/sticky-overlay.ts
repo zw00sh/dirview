@@ -15,6 +15,8 @@ export interface StickyOverlayConfig {
 export interface StickyOverlay {
   /** Update the overlay based on current flat rows and scroll position. */
   update(flatRows: FlatRow[], visibleStart: number): void;
+  /** Whether any directory rows are currently stuck in the overlay. */
+  hasStuckRows(): boolean;
   /** Enable or disable the overlay. */
   setEnabled(enabled: boolean): void;
   /** Remove the overlay from DOM and clean up. */
@@ -145,5 +147,9 @@ export function createStickyOverlay(config: StickyOverlayConfig): StickyOverlay 
     overlayEl.remove();
   }
 
-  return { update, setEnabled, destroy };
+  function hasStuckRows(): boolean {
+    return lastStuckKeys.length > 0;
+  }
+
+  return { update, hasStuckRows, setEnabled, destroy };
 }
