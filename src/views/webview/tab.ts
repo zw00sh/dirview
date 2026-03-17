@@ -174,7 +174,7 @@ updateRefreshBtn(true);
 function renderFlatRow(r: Renderer, row: FlatRow): HTMLElement {
   switch (row.type) {
     case 'dir':
-      return r.renderDirRow(row.node, row.depth, row.maxMetric, row.ancestors, row.clientWidth);
+      return r.renderDirRow(row.originalNode, row.depth, row.maxMetric, row.ancestors, row.clientWidth);
     case 'file':
       return r.renderFileNode(row.file, row.depth, row.ancestors);
     case 'truncated':

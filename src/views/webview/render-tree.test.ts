@@ -175,6 +175,41 @@ describe('onNavigate dir-name click', () => {
     expect(navigate).toHaveBeenCalledWith('src');
   });
 
+  it('includes compacted segments in breadcrumb when subtab root has single-child chain', () => {
+    // Regression: subtab root with single-child chain (api→src→controllers) would
+    // only show the breadcrumb (workspace/dirPath) and swallow the compacted dirs.
+    const state = createState();
+    state.dirPath = 'directus';
+    state.workspaceFolderName = 'apigateway';
+    const navigate = vi.fn();
+
+    // directus → api → src → controllers (single-child chain, no files until controllers)
+    const file = { name: 'files.ts', path: '/ws/directus/api/src/controllers/files.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 100 };
+    const controllers = makeDir('directus/api/src/controllers', 'controllers', { files: [file], totalFiles: 1, stats: [] });
+    const src = makeDir('directus/api/src', 'src', { children: [controllers], totalFiles: 1, stats: [] });
+    const api = makeDir('directus/api', 'api', { children: [src], totalFiles: 1, stats: [] });
+    const root = makeDir('directus', 'directus', { children: [api], totalFiles: 1, stats: [] });
+
+    const renderer = makeRenderer(state, { onNavigate: navigate });
+    renderer.beforeRender();
+    const li = renderer.renderDirRow(root, 0, 10, [], 300);
+
+    const nameEl = li.querySelector('.dir-name');
+    const segments = nameEl.querySelectorAll('.path-segment');
+    // apigateway / directus / api / src / controllers = 5 segments
+    expect(segments.length).toBe(5);
+    expect(segments[0].textContent).toBe('apigateway');
+    expect(segments[1].textContent).toBe('directus');
+    expect(segments[2].textContent).toBe('api');
+    expect(segments[3].textContent).toBe('src');
+    expect(segments[4].textContent).toBe('controllers');
+
+    // The compacted segments should have context menus for right-click
+    expect(segments[2].getAttribute('data-vscode-context')).toContain('directus/api');
+    expect(segments[3].getAttribute('data-vscode-context')).toContain('directus/api/src');
+    expect(segments[4].getAttribute('data-vscode-context')).toContain('directus/api/src/controllers');
+  });
+
   it('does not render breadcrumb at depth 0 when state.dirPath is empty (workspace root)', () => {
     const state = createState();
     state.dirPath = '';

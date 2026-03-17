@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.2] — 2026-03-17
+
+### Fixed
+- Subtab breadcrumb now includes compacted intermediate directories. Previously, opening a subdirectory tab and searching would show files directly under the breadcrumb root, swallowing single-child directory chains (e.g. `api / src / controllers` was hidden).
+
 ## [1.3.1] — 2026-03-17
 
 ### Added

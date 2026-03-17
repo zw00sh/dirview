@@ -290,6 +290,22 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
         const segPath = offset < 0 ? '' : segments.slice(0, offset + 1).join('/');
         nameEl.appendChild(h('span', { className: 'path-segment', textContent: allNames[i], dataset: { navigatePath: segPath } }));
       }
+      // Append any compacted segments beyond the root node (index 0 is already in the breadcrumb).
+      // Without this, single-child chains like api/src/controllers are swallowed when the
+      // breadcrumb renders only the subtab's dirPath.
+      for (let i = 1; i < compactSegments.length; i++) {
+        nameEl.appendChild(h('span', { className: 'path-sep', textContent: ' / ' }));
+        nameEl.appendChild(h('span', {
+          className: 'path-segment',
+          textContent: compactSegments[i].name,
+          attr: { 'data-vscode-context': JSON.stringify({
+            webviewSection: 'directory',
+            path: compactSegments[i].path,
+            rootName: state.workspaceFolderName || state.currentRootName,
+            preventDefaultContextMenuItems: true,
+          }) },
+        }));
+      }
     } else if (compactSegments.length === 1) {
       nameEl.textContent = compactSegments[0].name;
     } else {
