@@ -72,6 +72,19 @@ export function registerCommands(
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand('dirview.openFolderInTab', (uri?: vscode.Uri) => {
+      if (!uri) { tab.openOrFocus(); return; }
+      // Convert absolute URI to workspace-relative path
+      const folder = vscode.workspace.workspaceFolders?.find(f =>
+        uri.fsPath.startsWith(f.uri.fsPath)
+      );
+      if (!folder) { tab.openOrFocus(); return; }
+      const rel = path.relative(folder.uri.fsPath, uri.fsPath);
+      tab.openForDir(rel || '');
+    })
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand('dirview.toggleTruncation', async () => {
       await config.setTruncationEnabled(true);
       const threshold = getTruncateThreshold();

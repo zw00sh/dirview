@@ -2,7 +2,7 @@
   "name": "dirview",
   "displayName": "Directory Breakdown",
   "description": "Visualize per-directory file type composition as GitHub-style colored proportional bars",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "publisher": "zwoosh",
   "license": "MIT",
   "repository": {
@@ -113,6 +113,11 @@
         "command": "dirview.openInTab",
         "title": "Open Breakdown Tab",
         "category": "Directory Breakdown",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "dirview.openFolderInTab",
+        "title": "View Breakdown",
         "icon": "$(open-preview)"
       },
       {
@@ -253,6 +258,13 @@
           "group": "navigation@1"
         }
       ],
+      "explorer/context": [
+        {
+          "command": "dirview.openFolderInTab",
+          "when": "explorerResourceIsFolder && config.dirview.showExplorerContext",
+          "group": "navigation@99"
+        }
+      ],
       "webview/context": [
         {
           "command": "dirview.contextCopyPath",
@@ -311,6 +323,16 @@
           "type": "boolean",
           "default": true,
           "description": "Allow opening multiple tabs for the same directory. When disabled, opening a directory that already has a tab will focus the existing tab."
+        },
+        "dirview.showStatusBarButton": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the Breakdown button in the status bar."
+        },
+        "dirview.showExplorerContext": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show 'View Breakdown' in the Explorer right-click menu."
         }
       }
     }

@@ -59,8 +59,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.workspace.onDidChangeWorkspaceFolders(() => coordinator.scan())
   );
 
+  // Status bar button to open breakdown tab
+  const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  statusBarItem.text = '$(graph)';
+  statusBarItem.tooltip = 'Open Breakdown Tab';
+  statusBarItem.command = 'dirview.openInTab';
+  if (vscode.workspace.getConfiguration('dirview').get<boolean>('showStatusBarButton', true)) {
+    statusBarItem.show();
+  }
+  context.subscriptions.push(statusBarItem);
+
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('dirview.showStatusBarButton')) {
+        if (vscode.workspace.getConfiguration('dirview').get<boolean>('showStatusBarButton', true)) {
+          statusBarItem.show();
+        } else {
+          statusBarItem.hide();
+        }
+      }
       if (e.affectsConfiguration('dirview.truncateThreshold')) {
         const threshold = coordinator.getTruncateThreshold();
         sidebarProvider.updateTruncateThreshold(threshold);

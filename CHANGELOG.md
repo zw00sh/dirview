@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0] — 2026-03-18
+
+### Added
+- **Status bar button** — graph icon in the status bar opens the breakdown tab. Configurable via `dirview.showStatusBarButton`.
+- **Explorer context menu** — right-click any folder in the file explorer to "View Breakdown" in a new tab rooted at that folder. Configurable via `dirview.showExplorerContext`.
+- **Colored tab icon** — breakdown tabs now show a vibrant multi-colored bar icon instead of the monochrome theme icon.
+
 ## [1.4.1] — 2026-03-18
 
 ### Fixed

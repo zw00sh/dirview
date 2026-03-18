@@ -193,10 +193,7 @@ export class TabProvider {
     const searchService = new SearchService(vscode.env.appRoot);
     this.searchServices.set(id, searchService);
 
-    panel.iconPath = {
-      light: vscode.Uri.joinPath(this.extensionUri, 'media', 'dirview-icon-light.svg'),
-      dark: vscode.Uri.joinPath(this.extensionUri, 'media', 'dirview-icon-dark.svg'),
-    };
+    panel.iconPath = vscode.Uri.joinPath(this.extensionUri, 'media', 'dirview-icon-color.svg');
     panel.webview.html = this.getHtml(panel.webview);
 
     panel.webview.onDidReceiveMessage((message: WebviewToBackendMessage) => {
