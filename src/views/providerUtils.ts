@@ -289,15 +289,20 @@ export function handleSearchMessage(
 }
 
 /** Wires visibility-change and initial-replay for a WebviewView.
- *  getCachedMessage() is called each time; if it returns undefined the replay is skipped. */
+ *  getCachedMessage() is called each time; if it returns undefined the replay is skipped.
+ *  onAfterReplay() is called after the cached message is posted, to replay additional state (e.g. filters). */
 export function setupVisibilityReplay(
   webviewView: vscode.WebviewView,
-  getCachedMessage: () => BackendToWebviewMessage | undefined
+  getCachedMessage: () => BackendToWebviewMessage | undefined,
+  onAfterReplay?: () => void,
 ): void {
   webviewView.onDidChangeVisibility(() => {
     if (webviewView.visible) {
       const msg = getCachedMessage();
-      if (msg) { webviewView.webview.postMessage(msg); }
+      if (msg) {
+        webviewView.webview.postMessage(msg);
+        onAfterReplay?.();
+      }
     }
   });
 
@@ -305,7 +310,10 @@ export function setupVisibilityReplay(
   if (initial) {
     setTimeout(() => {
       const msg = getCachedMessage();
-      if (msg) { webviewView.webview.postMessage(msg); }
+      if (msg) {
+        webviewView.webview.postMessage(msg);
+        onAfterReplay?.();
+      }
     }, 100);
   }
 }

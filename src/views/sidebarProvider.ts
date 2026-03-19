@@ -9,6 +9,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private extensionUri: vscode.Uri;
   private lastUpdate: ScanUpdatePayload | undefined;
+  private lastFilterLangs: string[] = [];
   private disposables: vscode.Disposable[] = [];
   onRefresh?: () => void;
   onOpenDirInTab?: (dirPath: string) => void;
@@ -49,6 +50,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       if (!this.lastUpdate) { return undefined; }
       const { roots, autoRescanEnabled, sortMode, truncateThreshold, sidebarStickyHeadersEnabled: stickyHeadersEnabled, isLocal } = this.lastUpdate;
       return { type: 'update', roots, autoRescanEnabled, sortMode, truncateThreshold, stickyHeadersEnabled, isLocal };
+    }, () => {
+      // Replay language filter after the update so the tree renders filtered.
+      if (this.lastFilterLangs.length > 0) {
+        post(webviewView.webview, { type: 'filter', langs: this.lastFilterLangs });
+      }
     });
   }
 
@@ -88,6 +94,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }
 
   setFilter(langs: string[]): void {
+    this.lastFilterLangs = langs;
     if (this.view) { post(this.view.webview, { type: 'filter', langs }); }
   }
 

@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createVscodeMock } from '../test-utils/vscode-mock';
 
 // --- Mocks ---
@@ -23,7 +23,7 @@ vi.mock('../language/languageMap', async (importOriginal) => {
   };
 });
 
-import { handleSearchMessage, handleCommonMessage } from './providerUtils';
+import { handleSearchMessage, handleCommonMessage, setupVisibilityReplay } from './providerUtils';
 import type { SearchService, SearchMatch, SearchResult, SearchOptions } from '../search/searchService';
 import * as vscode from 'vscode';
 
@@ -536,6 +536,91 @@ describe('handleSearchMessage — miscellaneous', () => {
     for (let i = 0; i < 7; i++) {
       expect(sentMatches[i].lineText).toBe(`line ${i + 1}`);
     }
+  });
+});
+
+// --- setupVisibilityReplay ---
+
+describe('setupVisibilityReplay', () => {
+  let mockWebviewView: any;
+  let postMessageCalls: any[];
+  let visibilityCallbacks: Array<() => void>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    postMessageCalls = [];
+    visibilityCallbacks = [];
+    mockWebviewView = {
+      visible: true,
+      webview: {
+        postMessage: (msg: any) => postMessageCalls.push(msg),
+      },
+      onDidChangeVisibility: (cb: () => void) => {
+        visibilityCallbacks.push(cb);
+        return { dispose: () => {} };
+      },
+    };
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('calls onAfterReplay after posting cached message on initial setup', () => {
+    const afterReplayCalls: number[] = [];
+
+    setupVisibilityReplay(
+      mockWebviewView,
+      () => ({ type: 'update', roots: [], autoRescanEnabled: true, sortMode: 'files', truncateThreshold: 3, stickyHeadersEnabled: false }),
+      () => afterReplayCalls.push(postMessageCalls.length),
+    );
+
+    vi.advanceTimersByTime(200);
+
+    expect(postMessageCalls).toHaveLength(1);
+    expect(postMessageCalls[0].type).toBe('update');
+    // onAfterReplay was called after the message was posted
+    expect(afterReplayCalls).toHaveLength(1);
+    expect(afterReplayCalls[0]).toBe(1); // called when 1 message had been posted
+  });
+
+  it('calls onAfterReplay after posting on visibility change', () => {
+    const afterReplayCalls: number[] = [];
+
+    setupVisibilityReplay(
+      mockWebviewView,
+      () => ({ type: 'update', roots: [], autoRescanEnabled: true, sortMode: 'files', truncateThreshold: 3, stickyHeadersEnabled: false }),
+      () => afterReplayCalls.push(postMessageCalls.length),
+    );
+
+    vi.advanceTimersByTime(200);
+    postMessageCalls.length = 0;
+    afterReplayCalls.length = 0;
+
+    // Simulate sidebar closed then reopened
+    mockWebviewView.visible = true;
+    visibilityCallbacks[0]();
+
+    expect(postMessageCalls).toHaveLength(1);
+    expect(afterReplayCalls).toHaveLength(1);
+  });
+
+  it('does not call onAfterReplay when no cached message', () => {
+    const afterReplayCalls: number[] = [];
+
+    setupVisibilityReplay(
+      mockWebviewView,
+      () => undefined,
+      () => afterReplayCalls.push(1),
+    );
+
+    vi.advanceTimersByTime(200);
+    expect(afterReplayCalls).toHaveLength(0);
+
+    // Visibility change with no cached message
+    mockWebviewView.visible = true;
+    visibilityCallbacks[0]();
+    expect(afterReplayCalls).toHaveLength(0);
   });
 });
 

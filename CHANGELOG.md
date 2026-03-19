@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.5.1] — 2026-03-19
+
+### Fixed
+- **Sidebar language filter lost on reopen** — selecting a language filter in the languages panel, then closing and reopening the sidebar, now correctly re-applies the filter. Previously the tree rendered unfiltered because the filter state was not replayed to the new webview.
+
 ## [1.5.0] — 2026-03-18
 
 ### Added
