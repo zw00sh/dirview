@@ -2,7 +2,7 @@
   "name": "dirview",
   "displayName": "Directory Breakdown",
   "description": "Visualize per-directory file type composition as GitHub-style colored proportional bars",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "publisher": "zwoosh",
   "license": "MIT",
   "repository": {
@@ -333,6 +333,11 @@
           "type": "boolean",
           "default": true,
           "description": "Show 'View Breakdown' in the Explorer right-click menu."
+        },
+        "dirview.showIgnored": {
+          "type": "boolean",
+          "default": true,
+          "description": "Default visibility of files excluded by .gitignore and files.exclude. The toolbar toggle overrides this per workspace. VCS directories (.git, .hg, etc.) are always hidden."
         }
       }
     }

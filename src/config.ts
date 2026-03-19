@@ -13,7 +13,9 @@ export class Config {
   }
 
   get showIgnored(): boolean {
-    return this.context.workspaceState.get<boolean>('dirview.showIgnored', false);
+    const override = this.context.workspaceState.get<boolean>('dirview.showIgnored');
+    if (override !== undefined) return override;
+    return vscode.workspace.getConfiguration('dirview').get<boolean>('showIgnored', true);
   }
 
   async setShowIgnored(value: boolean): Promise<void> {

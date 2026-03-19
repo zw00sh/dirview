@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.6.0] — 2026-03-19
+
+### Added
+- **Show ignored files by default** — new `dirview.showIgnored` setting (default `true`) controls whether gitignored/excluded files are visible. The toolbar toggle button overrides this per workspace.
+
 ## [1.5.1] — 2026-03-19
 
 ### Fixed
