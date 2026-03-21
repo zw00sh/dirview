@@ -3,7 +3,7 @@
 // render path used by tab.ts. The non-virtual sidebar path uses render-tree.ts
 // → renderRoots() → renderer methods directly. Both paths must be kept in sync.
 
-import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, compactedNode } from '../utils';
+import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, computeMaxFileMetric, compactedNode } from '../utils';
 
 import { filterTree } from '../filter';
 import { assembleMatchGroups } from '../match-grouping';
@@ -44,8 +44,9 @@ export function flattenTree(
   const isFiltered = filtered.isFiltered;
   const filteredRoots = filtered.roots;
 
-  // ── Step 2: Compute max metric ───────────────────────────────────────────
+  // ── Step 2: Compute max metrics ──────────────────────────────────────────
   const maxMetric = computeMaxMetric(filteredRoots, state.currentSortMode, false);
+  const maxFileMetric = computeMaxFileMetric(filteredRoots, state.currentSortMode);
 
   // ── Step 3: Recursive walk ───────────────────────────────────────────────
   const flatRows: FlatRow[] = [];
@@ -140,6 +141,8 @@ export function flattenTree(
         ancestors: nextAncestors,
         file,
         hasMatches: fileHasMatches,
+        maxFileMetric,
+        clientWidth,
       });
       totalVisibleFiles++;
 
@@ -313,6 +316,8 @@ export function flattenTree(
         ancestors: [],
         file,
         hasMatches: fileHasMatches,
+        maxFileMetric,
+        clientWidth,
       });
       totalVisibleFiles++;
 

@@ -28,6 +28,11 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
   // each full re-render. Used by delegated event handlers to avoid per-element closures.
   const nodeMap: Map<string, NodeMapEntry> = new Map();
 
+  // Per-render file metric max — set via setMaxFileMetric() before each render pass.
+  // Used by renderFileNode to scale file bars globally.
+  let _maxFileMetric = 0;
+  let _clientWidth = 0;
+
   // Build the shared context object that extracted modules access.
   const ctx: RendererContext = {
     state,
@@ -62,7 +67,7 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
   // Wire up renderIndentGuides on the context so extracted modules can use it.
   ctx.renderIndentGuides = renderIndentGuides;
 
-  function renderFileNode(file: FileNode, depth: number, ancestors: IndentAncestor[], hasMatchesOverride?: boolean): HTMLLIElement {
+  function renderFileNode(file: FileNode, depth: number, ancestors: IndentAncestor[], hasMatchesOverride?: boolean, maxFileMetric?: number, clientWidth?: number): HTMLLIElement {
     // Virtual path passes pre-computed hasMatches from FlatRow; non-virtual path falls back to state lookup.
     const hasMatches = hasMatchesOverride ?? !!(state.searchResults?.has(file.path) && state.searchResults.get(file.path)!.length > 0);
     const row = h('div', {
@@ -104,11 +109,28 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
 
     row.appendChild(h('div', { className: 'bar-spacer' }));
 
-    row.appendChild(h('span', {
-      className: 'file-dot',
-      style: { backgroundColor: file.langColor },
-      title: file.langName,
-    }));
+    // File bar: proportional to the file's metric relative to the global max file metric.
+    // Uses sizeBytes in files/name/size modes, lineCount in lines mode.
+    // Sqrt scaling matches directory bar scaling for consistency.
+    if (maxFileMetric && maxFileMetric > 0) {
+      const isLines = state.currentSortMode === 'lines';
+      const fileMetric = isLines ? (file.lineCount || 0) : (file.sizeBytes || 0);
+      const pct = fileMetric / maxFileMetric;
+      const barWrapWidth = computeBarWidth(pct, clientWidth || 0, root, opts, 9);
+
+      row.appendChild(h('div', { className: 'bar-wrap', style: { width: barWrapWidth + 'px' } },
+        h('div', { className: 'bar' },
+          h('div', { className: 'bar-segment', style: { width: '100%', backgroundColor: file.langColor } }),
+        ),
+      ));
+    } else {
+      // Fallback: colored dot when no metric context available
+      row.appendChild(h('span', {
+        className: 'file-dot',
+        style: { backgroundColor: file.langColor },
+        title: file.langName,
+      }));
+    }
 
     if (!opts.hideCounts) {
       const isLines = state.currentSortMode === 'lines';
@@ -180,7 +202,7 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
       const totalCount = hiddenFiles.length;
       const metric = sortMode === 'size' ? totalTruncBytes : sortMode === 'lines' ? totalTruncLines : totalCount;
       const pct = metric / maxMetric;
-      const barWrapWidth = computeBarWidth(pct, clientWidth, root, opts);
+      const barWrapWidth = computeBarWidth(pct, clientWidth, root, opts, 9);
 
       row.appendChild(h('div', { className: 'bar-wrap', style: { width: barWrapWidth + 'px' } },
         h('div', { className: 'bar' },
@@ -346,7 +368,7 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
       const sm = state.currentSortMode;
       const metric = sm === 'size' ? displayNode.sizeBytes : sm === 'lines' ? displayNode.totalLines : displayNode.totalFiles;
       const pct = metric / maxMetric;
-      const barWrapWidth = computeBarWidth(pct, clientWidth, root, opts);
+      const barWrapWidth = computeBarWidth(pct, clientWidth, root, opts, 9);
 
       row.appendChild(h('div', { className: 'bar-wrap', style: { width: barWrapWidth + 'px' } },
         h('div', { className: 'bar' },
@@ -445,7 +467,7 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
         const hiddenFiles = shouldTruncate ? sortedFiles.slice(state.truncateThreshold) : [];
 
         for (const file of shownFiles) {
-          childrenEl.appendChild(renderFileNode(file, depth + 1, nextAncestors));
+          childrenEl.appendChild(renderFileNode(file, depth + 1, nextAncestors, undefined, _maxFileMetric, _clientWidth));
           const fileAncestors: IndentAncestor[] = [...nextAncestors, { path: file.path, isFileMatch: true }];
           _renderFileMatches(ctx, childrenEl, file, depth + 2, fileAncestors);
         }
@@ -465,6 +487,12 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     // Called at the start of each full renderTree pass to flush stale node references.
     beforeRender() {
       nodeMap.clear();
+    },
+    // Sets the global file metric context for the current render pass.
+    // Used by the non-virtual path (renderDirNode) to pass file bar scaling to renderFileNode.
+    setFileMetricContext(maxFileMetric: number, clientWidth: number) {
+      _maxFileMetric = maxFileMetric;
+      _clientWidth = clientWidth;
     },
     renderIndentGuides,
     renderFileNode,

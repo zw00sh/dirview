@@ -3,7 +3,7 @@
 // the virtual-scroll path in flatten.ts → scroller.ts instead. Both paths must be
 // kept in sync for consistent behavior.
 
-import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, emptyState } from '../utils';
+import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, computeMaxFileMetric, emptyState } from '../utils';
 import { filterTree } from '../filter';
 import { patchTreeChildren } from './dom-patch';
 import { h } from '../h';
@@ -17,11 +17,13 @@ export function renderRoots(
   state: WebviewState,
   treeEl: HTMLElement,
   maxMetric: number,
+  maxFileMetric: number,
   clientWidth: number,
   isFiltered: boolean,
   opts?: { cssClass?: string },
 ): void {
   const roots = state.lastRoots!;
+  renderer.setFileMetricContext(maxFileMetric, clientWidth);
 
   for (const r of roots) {
     state.currentRootName = r.name;
@@ -56,7 +58,7 @@ export function renderRoots(
     const shownFiles = shouldTruncate ? sortedFiles.slice(0, state.truncateThreshold) : sortedFiles;
     const hiddenFiles = shouldTruncate ? sortedFiles.slice(state.truncateThreshold) : [];
     for (const file of shownFiles) {
-      treeEl.appendChild(renderer.renderFileNode(file, 0, []));
+      treeEl.appendChild(renderer.renderFileNode(file, 0, [], undefined, maxFileMetric, clientWidth));
       renderer.renderFileMatches(treeEl, file, 1, []);
     }
     if (hiddenFiles.length > 0) {
@@ -96,6 +98,7 @@ export function renderTree(
   state.lastFilteredMatchCount = filtered.totalVisibleMatches;
 
   const maxMetric = computeMaxMetric(filtered.roots, state.currentSortMode, false);
+  const maxFileMetric = computeMaxFileMetric(filtered.roots, state.currentSortMode);
   const clientWidth = rootEl.clientWidth;
   const treeClass = 'tree' +
     (opts && opts.cssClass ? ' ' + opts.cssClass : '') +
@@ -109,12 +112,12 @@ export function renderTree(
     // Incremental path: build the new tree off-screen, then reconcile with existing DOM.
     existingTree.className = treeClass;
     const newTreeEl = h('ul', { className: treeClass });
-    renderRoots(renderer, state, newTreeEl, maxMetric, clientWidth, filtered.isFiltered, opts);
+    renderRoots(renderer, state, newTreeEl, maxMetric, maxFileMetric, clientWidth, filtered.isFiltered, opts);
     patchTreeChildren(existingTree, newTreeEl);
   } else {
     // First render (or after loading/error cleared the container): full creation.
     const treeEl = h('ul', { className: treeClass });
-    renderRoots(renderer, state, treeEl, maxMetric, clientWidth, filtered.isFiltered, opts);
+    renderRoots(renderer, state, treeEl, maxMetric, maxFileMetric, clientWidth, filtered.isFiltered, opts);
     rootEl.appendChild(treeEl);
   }
 

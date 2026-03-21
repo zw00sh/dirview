@@ -171,8 +171,9 @@ export interface RendererContext {
 
 export interface Renderer {
   beforeRender(): void;
+  setFileMetricContext(maxFileMetric: number, clientWidth: number): void;
   renderIndentGuides(depth: number, ancestors: IndentAncestor[]): HTMLSpanElement;
-  renderFileNode(file: FileNode, depth: number, ancestors: IndentAncestor[], hasMatches?: boolean): HTMLLIElement;
+  renderFileNode(file: FileNode, depth: number, ancestors: IndentAncestor[], hasMatches?: boolean, maxFileMetric?: number, clientWidth?: number): HTMLLIElement;
   renderMatchLine(file: FileNode, matchGroup: SearchMatch[], depth: number, ancestors: IndentAncestor[], dedent?: number): HTMLLIElement;
   renderContextLine(file: FileNode, match: SearchMatch, depth: number, ancestors: IndentAncestor[], dedent?: number): HTMLLIElement;
   renderMoreMatchesRow(count: number, depth: number, ancestors: IndentAncestor[], filePath: string): HTMLLIElement;

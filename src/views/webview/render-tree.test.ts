@@ -335,3 +335,70 @@ describe('renderFileNode — binary file display', () => {
     expect(meta.textContent).toBe(formatBytes(4096));
   });
 });
+
+describe('renderFileNode — file proportional bar', () => {
+  function renderFileWithMetric(sortMode: string, file: any, maxFileMetric: number) {
+    const state = createState();
+    state.currentSortMode = sortMode as any;
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    return renderer.renderFileNode(file, 1, [], undefined, maxFileMetric, 300);
+  }
+
+  const fileA = { name: 'big.ts', path: '/ws/big.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 5000, lineCount: 200 };
+  const fileB = { name: 'small.ts', path: '/ws/small.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 1000, lineCount: 40 };
+
+  it('renders a bar-wrap with bar-segment in all modes when maxFileMetric is provided', () => {
+    for (const mode of ['files', 'name', 'size', 'lines']) {
+      const li = renderFileWithMetric(mode, fileA, 10000);
+      const barWrap = li.querySelector('.bar-wrap');
+      const segment = li.querySelector('.bar-segment');
+      expect(barWrap).not.toBeNull();
+      expect(segment).not.toBeNull();
+    }
+  });
+
+  it('smaller files get narrower bars', () => {
+    const liA = renderFileWithMetric('size', fileA, 10000);
+    const liB = renderFileWithMetric('size', fileB, 10000);
+    const widthA = parseFloat(liA.querySelector('.bar-wrap').style.width);
+    const widthB = parseFloat(liB.querySelector('.bar-wrap').style.width);
+    expect(widthA).toBeGreaterThan(widthB);
+  });
+
+  it('falls back to a dot when maxFileMetric is not provided', () => {
+    const state = createState();
+    state.currentSortMode = 'size' as any;
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderFileNode(fileA, 1, []);
+    expect(li.querySelector('.bar-wrap')).toBeNull();
+    expect(li.querySelector('.file-dot')).not.toBeNull();
+  });
+
+  it('uses file language color for the bar segment', () => {
+    const li = renderFileWithMetric('size', fileA, 10000);
+    const segment = li.querySelector('.bar-segment') as HTMLElement;
+    // jsdom normalizes hex to rgb
+    expect(segment.style.backgroundColor).toBeTruthy();
+    expect(segment.style.backgroundColor).not.toBe('');
+  });
+
+  it('uses lineCount metric in lines mode', () => {
+    // fileA: 200 lines, fileB: 40 lines, max 400
+    const liA = renderFileWithMetric('lines', fileA, 400);
+    const liB = renderFileWithMetric('lines', fileB, 400);
+    const widthA = parseFloat(liA.querySelector('.bar-wrap').style.width);
+    const widthB = parseFloat(liB.querySelector('.bar-wrap').style.width);
+    expect(widthA).toBeGreaterThan(widthB);
+  });
+
+  it('uses sizeBytes metric in name mode', () => {
+    // fileA: 5000 bytes, fileB: 1000 bytes, max 10000
+    const liA = renderFileWithMetric('name', fileA, 10000);
+    const liB = renderFileWithMetric('name', fileB, 10000);
+    const widthA = parseFloat(liA.querySelector('.bar-wrap').style.width);
+    const widthB = parseFloat(liB.querySelector('.bar-wrap').style.width);
+    expect(widthA).toBeGreaterThan(widthB);
+  });
+});

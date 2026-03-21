@@ -191,6 +191,7 @@ body {
   min-height: var(--row-height);
   cursor: default;
   overflow: hidden;
+  background: rgba(0, 0, 0, 0.15);
 }
 
 .file-row.clickable {
@@ -301,9 +302,12 @@ body {
 
 .bar-segment {
   height: 100%;
-  min-width: 2px;
   transition: opacity 0.1s;
   cursor: default;
+}
+
+.bar-segment:only-child {
+  border-radius: inherit;
 }
 
 .bar-segment:hover {
@@ -430,6 +434,11 @@ body {
   white-space: nowrap;
   min-width: 48px;
   text-align: right;
+}
+
+/* Truncated row shading — represents grouped files, matches file row background */
+.truncated-row {
+  background: rgba(0, 0, 0, 0.15);
 }
 
 /* Truncated rows and empty group/dir rows — uniform dim color */

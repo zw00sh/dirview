@@ -46,6 +46,8 @@ export interface FileFlatRow extends FlatRowBase {
   /** Whether this file has search matches (pre-computed at flatten time so the renderer
    *  doesn't need to read global search state). */
   hasMatches: boolean;
+  maxFileMetric: number;
+  clientWidth: number;
 }
 
 export interface TruncatedFlatRow extends FlatRowBase {

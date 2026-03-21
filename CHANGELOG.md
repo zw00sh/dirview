@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.7.0] — 2026-03-21
+
+### Added
+- **Lines of code sort mode** — new fourth sort mode counts newlines per file during local scans. Cycle through `files → name → size → lines` via the sort button. Bar segments, tooltips, and legend adapt to show the active metric in all modes.
+- **Binary file detection** — files with null bytes in the first 8KB are marked binary and display "BIN" in lines mode instead of a line count.
+- **Metric-aware bar segments** — proportional bars now reflect the active sort metric: file count proportions in files/name mode, byte proportions in size mode, line proportions in lines mode.
+- **Skeleton loading placeholders** — shimmer-animated skeleton rows replace the "Scanning workspace…" splash during loading. Skeletons are embedded as static HTML for instant paint before JS loads. Both tree and language legend views have tailored skeletons.
+
+### Fixed
+- **File sizes always zero** — fixed a pre-existing bug where the scanner worker received mismatched property names, causing `getFileSizes` to fail silently and return zeros for every file. Size mode now displays real file sizes.
+
 ## [1.6.0] — 2026-03-19
 
 ### Added

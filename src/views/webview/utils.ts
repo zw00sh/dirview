@@ -289,9 +289,32 @@ export function renderLegend(legendEl: HTMLElement, stats: LangStat[], activeFil
 
 // Computes the bar width in pixels for a proportional bar.
 // Deduplicates identical computation previously in renderDirNode and renderTruncatedRow.
-export function computeBarWidth(pct: number, clientWidth: number, rootEl: HTMLElement, opts: RendererOptions): number {
+export function computeBarWidth(pct: number, clientWidth: number, rootEl: HTMLElement, opts: RendererOptions, minBarWidth = 0): number {
   const cw = clientWidth || rootEl.clientWidth || opts.barFallbackWidth || 300;
   const maxBarWidth = Math.min(cw * (opts.barFactor || 0.4), opts.barMaxWidth || 200);
-  const minBarWidth = opts.barMinWidth || 12;
   return Math.max((opts.barSqrt ? Math.sqrt(pct) : pct) * maxBarWidth, minBarWidth);
+}
+
+// Simple reference-equality cache for computeMaxFileMetric.
+let _maxFileMetricCache: { roots: DirNode[] | null; sortMode: SortMode | null; value: number } = { roots: null, sortMode: null, value: 1 };
+
+// Computes the max file-level metric across the entire tree for file bar scaling.
+// Uses sizeBytes for files/name/size modes, lineCount for lines mode.
+export function computeMaxFileMetric(roots: DirNode[], sortMode: SortMode): number {
+  if (_maxFileMetricCache.roots === roots && _maxFileMetricCache.sortMode === sortMode) {
+    return _maxFileMetricCache.value;
+  }
+  let max = 0;
+  const useLines = sortMode === 'lines';
+  function walk(node: DirNode): void {
+    for (const f of node.files || []) {
+      const val = useLines ? f.lineCount : f.sizeBytes;
+      if (val > max) { max = val; }
+    }
+    for (const c of node.children) { walk(c); }
+  }
+  for (const r of roots) { walk(r); }
+  const value = max || 1;
+  _maxFileMetricCache = { roots, sortMode, value };
+  return value;
 }
