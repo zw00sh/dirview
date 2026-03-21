@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ScanUpdatePayload } from '../scanner/types';
 import { SortMode } from '../config';
 import { buildWebviewHtml } from './buildWebviewHtml';
+import { skeletonTreeHtml } from './skeletonHtml';
 import { handleCommonMessage, setupVisibilityReplay, post } from './providerUtils';
 import type { WebviewToBackendMessage } from './webview/types';
 
@@ -121,6 +122,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       styles: ['style.css', 'sidebar.css'],
       title: 'Directory Breakdown',
       bodyAttrs: `data-vscode-context='{"preventDefaultContextMenuItems": true}'`,
+      rootHtml: skeletonTreeHtml,
     });
   }
 }

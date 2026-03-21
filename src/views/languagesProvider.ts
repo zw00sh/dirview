@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ScanUpdatePayload } from '../scanner/types';
 import { buildWebviewHtml } from './buildWebviewHtml';
+import { skeletonLegendHtml } from './skeletonHtml';
 import { post } from './providerUtils';
 import type { WebviewToBackendMessage } from './webview/types';
 
@@ -93,6 +94,7 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
       scripts: ['languages.js'],
       styles: ['languages.css'],
       title: 'Languages',
+      rootHtml: skeletonLegendHtml,
     });
   }
 }

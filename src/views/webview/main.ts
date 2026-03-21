@@ -7,6 +7,7 @@ import {
   createMessageHandler,
   isFiltered,
   emptyState,
+  skeletonState,
 } from './index';
 import { flattenTree } from './virtual/flatten';
 import { createVirtualScroller } from './virtual/scroller';
@@ -212,5 +213,5 @@ window.addEventListener('message', (event: MessageEvent) => {
   sharedMsgHandler(event);
 });
 
-root.appendChild(emptyState('initializing'));
+// Skeleton is pre-rendered in the HTML for instant paint; just show the progress bar.
 scanBar.show(true);

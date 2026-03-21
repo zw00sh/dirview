@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   escHtml, formatBytes, formatLines, sortDirs, sortFiles, computeMaxMetric, groupEmptyDirs,
-  computeStats, buildAncestorPaths, emptyState,
+  computeStats, buildAncestorPaths, emptyState, skeletonState, skeletonLegendState,
 } from './index';
 
 import './test-helpers';
@@ -348,5 +348,63 @@ describe('emptyState', () => {
     const el = emptyState('noData');
     expect(el.className).toBe('empty-state');
     expect(el.querySelector('.empty-state-text')!.textContent).toBe('No data yet.');
+  });
+});
+
+// --- skeletonState ---
+describe('skeletonState', () => {
+  it('returns a div with classes empty-state and skeleton', () => {
+    const el = skeletonState();
+    expect(el.tagName).toBe('DIV');
+    expect(el.classList.contains('empty-state')).toBe(true);
+    expect(el.classList.contains('skeleton')).toBe(true);
+  });
+
+  it('contains multiple skeleton rows', () => {
+    const el = skeletonState();
+    const rows = el.querySelectorAll('.skeleton-row');
+    expect(rows.length).toBeGreaterThan(5);
+  });
+
+  it('each row has a label and bar', () => {
+    const el = skeletonState();
+    const rows = el.querySelectorAll('.skeleton-row');
+    for (const row of rows) {
+      expect(row.querySelector('.skeleton-label')).not.toBeNull();
+      expect(row.querySelector('.skeleton-bar')).not.toBeNull();
+    }
+  });
+
+  it('rows have varying indent via paddingLeft', () => {
+    const el = skeletonState();
+    const rows = el.querySelectorAll('.skeleton-row') as NodeListOf<HTMLElement>;
+    const paddings = new Set(Array.from(rows).map(r => r.style.paddingLeft));
+    expect(paddings.size).toBeGreaterThan(1);
+  });
+});
+
+// --- skeletonLegendState ---
+describe('skeletonLegendState', () => {
+  it('returns a div with classes empty-state, skeleton, and skeleton-legend', () => {
+    const el = skeletonLegendState();
+    expect(el.tagName).toBe('DIV');
+    expect(el.classList.contains('empty-state')).toBe(true);
+    expect(el.classList.contains('skeleton')).toBe(true);
+    expect(el.classList.contains('skeleton-legend')).toBe(true);
+  });
+
+  it('contains multiple skeleton pills', () => {
+    const el = skeletonLegendState();
+    const pills = el.querySelectorAll('.skeleton-pill');
+    expect(pills.length).toBeGreaterThan(5);
+  });
+
+  it('each pill has a swatch and label', () => {
+    const el = skeletonLegendState();
+    const pills = el.querySelectorAll('.skeleton-pill');
+    for (const pill of pills) {
+      expect(pill.querySelector('.skeleton-swatch')).not.toBeNull();
+      expect(pill.querySelector('.skeleton-pill-label')).not.toBeNull();
+    }
   });
 });

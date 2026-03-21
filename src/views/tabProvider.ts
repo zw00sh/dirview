@@ -3,6 +3,7 @@ import * as path from 'path';
 import { Config } from '../config';
 import { DirNode, ScanUpdatePayload } from '../scanner/types';
 import { buildWebviewHtml } from './buildWebviewHtml';
+import { skeletonTreeHtml, skeletonLegendHtml } from './skeletonHtml';
 import { handleCommonMessage, handleSearchMessage, post } from './providerUtils';
 import { SearchService } from '../search/searchService';
 import type { WebviewToBackendMessage } from './webview/types';
@@ -338,14 +339,14 @@ export class TabProvider {
       title: 'Breakdown',
       bodyClass: 'tab-view',
       bodyAttrs: `data-vscode-context='{"preventDefaultContextMenuItems": true}'`,
-      bodyHtml: `  <div id="legend-section" class="tab-legend-section" style="display:none">
+      bodyHtml: `  <div id="legend-section" class="tab-legend-section">
     <div id="legend-header" class="tab-legend-header" tabindex="0" role="button" aria-expanded="true">
       <span id="legend-chevron" class="tab-legend-header-chevron"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M6.146 3.146a.5.5 0 0 0 0 .707l4.146 4.146-4.146 4.146a.5.5 0 0 0 .707.707l4.5-4.5a.5.5 0 0 0 0-.707l-4.5-4.5a.5.5 0 0 0-.707 0Z"/></svg></span>
       <span class="tab-legend-header-title">Languages</span>
       <span id="legend-active-alert" class="tab-legend-active-alert" title="Language filter is active" style="display:none"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M7.56 1h.88l6.54 12.26-.44.74H1.44l-.42-.74L7.56 1zm.44 1.7L2.43 13H13.57L8 2.7zM8.5 11v1h-1v-1h1zm-1-1V6h1v4h-1z"/></svg></span>
       <button id="legend-display-toggle" class="tab-action" style="margin-left:auto" title="Show percentages" aria-label="Show percentages"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><text x="8" y="12.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-weight="600" font-size="13" fill="currentColor">%</text></svg></button>
     </div>
-    <div id="legend" class="tab-legend-wrap"></div>
+    <div id="legend" class="tab-legend-wrap">${skeletonLegendHtml}</div>
   </div>
   <div id="search-section" class="tab-search-section">
     <div id="search-header" class="tab-search-header" tabindex="0" role="button" aria-expanded="true">
@@ -369,7 +370,7 @@ export class TabProvider {
       <button class="tab-action" id="tab-collapse-all" title="Collapse All" aria-label="Collapse All"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M14 4.27c.6.35 1 .99 1 1.73v5c0 2.21-1.79 4-4 4H6c-.74 0-1.38-.4-1.73-1H11c1.65 0 3-1.35 3-3V4.27ZM9.5 7a.5.5 0 0 1 0 1h-4a.5.5 0 0 1 0-1h4Z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M11 2c1.103 0 2 .897 2 2v7c0 1.103-.897 2-2 2H4c-1.103 0-2-.897-2-2V4c0-1.103.897-2 2-2h7ZM4 3c-.551 0-1 .449-1 1v7c0 .552.449 1 1 1h7c.551 0 1-.448 1-1V4c0-.551-.449-1-1-1H4Z"/></svg></button>
     </div>
   </div>
-  <div id="root"></div>
+  <div id="root">${skeletonTreeHtml}</div>
   </div>`,
       skipRoot: true,
     });

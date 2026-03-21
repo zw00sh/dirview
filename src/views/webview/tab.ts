@@ -12,6 +12,7 @@ import {
   tieredCollapseAll,
   isFiltered,
   emptyState,
+  skeletonState,
   SVG_EYE,
   SVG_EYE_CLOSED,
   SVG_FOLD,
@@ -675,5 +676,5 @@ window.addEventListener('message', (event: MessageEvent) => {
   sharedHandler(event);
 });
 
-root.appendChild(emptyState('initializing'));
+// Skeleton is pre-rendered in the HTML for instant paint; just show the progress bar.
 scanBar.show(true);

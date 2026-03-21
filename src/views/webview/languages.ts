@@ -3,6 +3,7 @@ import {
   computeStats,
   renderLegend,
   emptyState,
+  skeletonLegendState,
 } from './index';
 import type { LangStat } from './types';
 
@@ -57,4 +58,4 @@ window.addEventListener('message', (event: MessageEvent) => {
   }
 });
 
-root.appendChild(emptyState('initializing'));
+// Skeleton is pre-rendered in the HTML for instant paint.

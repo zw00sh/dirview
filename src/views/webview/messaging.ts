@@ -1,6 +1,6 @@
 // Message handler for backend → webview communication.
 
-import { emptyState } from './utils';
+import { emptyState, skeletonState } from './utils';
 import { tieredExpandAll, tieredCollapseAll } from './state';
 import { expandMatchedDirs, updateSearchStatus, scheduleSearchRender, expandBatchFiles, buildAncestorPaths } from './search';
 
@@ -26,7 +26,7 @@ export function createMessageHandler(
     loading() {
       scanBar.show(false);
       rootEl.innerHTML = '';
-      rootEl.appendChild(emptyState('scanning'));
+      rootEl.appendChild(skeletonState());
       if (deps.onLoading) { deps.onLoading(); }
     },
     update(message: BackendToWebviewMessage & { type: 'update' }) {

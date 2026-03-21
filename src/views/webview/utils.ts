@@ -37,6 +37,40 @@ export function emptyState(variant: EmptyStateVariant, message?: string): HTMLEl
   );
 }
 
+export function skeletonState(): HTMLElement {
+  // [indentLevel, labelWidthPct, barWidthPct] — mimics a typical tree layout
+  const rows: [number, number, number][] = [
+    [0, 28, 90], [1, 22, 70], [2, 18, 45], [2, 24, 35], [2, 15, 20],
+    [1, 20, 55], [2, 26, 40], [2, 14, 25],
+    [0, 32, 80], [1, 19, 50], [2, 22, 30], [2, 16, 15],
+    [1, 25, 60], [2, 20, 35],
+  ];
+  return h('div', { className: 'empty-state skeleton' },
+    ...rows.map(([indent, labelW, barW]) =>
+      h('div', { className: 'skeleton-row', style: { paddingLeft: (indent * 16 + 4) + 'px' } },
+        h('span', { className: 'skeleton-label', style: { width: labelW + '%' } }),
+        h('span', { className: 'skeleton-spacer' }),
+        h('span', { className: 'skeleton-bar', style: { width: barW + '%' } }),
+      )
+    ),
+  );
+}
+
+export function skeletonLegendState(): HTMLElement {
+  // Varying label widths to mimic language names of different lengths
+  const pills = [52, 38, 64, 30, 46, 56, 34, 48, 42, 60, 36, 50];
+  return h('div', { className: 'empty-state skeleton skeleton-legend' },
+    h('div', { className: 'skeleton-pills' },
+      ...pills.map(w =>
+        h('span', { className: 'skeleton-pill' },
+          h('span', { className: 'skeleton-swatch' }),
+          h('span', { className: 'skeleton-pill-label', style: { width: w + 'px' } }),
+        )
+      ),
+    ),
+  );
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes === 0) { return '0 B'; }
   if (bytes < 1024) { return bytes + ' B'; }

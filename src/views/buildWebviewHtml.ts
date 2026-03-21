@@ -8,6 +8,7 @@ export interface BuildWebviewHtmlOptions {
   bodyClass?: string;
   bodyAttrs?: string;
   bodyHtml?: string;   // inserted before <div id="root">
+  rootHtml?: string;   // inserted inside <div id="root"> (visible before JS loads)
   skipRoot?: boolean;  // if true, omit the auto-generated <div id="root">
 }
 
@@ -46,7 +47,7 @@ ${styleLinks}
   <title>${options.title}</title>
 </head>
 <body${bodyClassAttr}${bodyExtraAttrs}>${bodyHtml}
-${options.skipRoot ? '' : '  <div id="root"></div>\n'}
+${options.skipRoot ? '' : `  <div id="root">${options.rootHtml ?? ''}</div>\n`}
 ${scriptTags}
 </body>
 </html>`;
