@@ -2,8 +2,8 @@ import * as vscode from 'vscode';
 import type { SortMode } from './views/webview/types';
 
 export type { SortMode };
-const SORT_CYCLE: readonly SortMode[] = ['files', 'name', 'size'] as const;
-const SORT_CYCLE_NO_SIZE: readonly SortMode[] = ['files', 'name'] as const;
+const SORT_CYCLE: readonly SortMode[] = ['files', 'name', 'size', 'lines'] as const;
+const SORT_CYCLE_REMOTE: readonly SortMode[] = ['files', 'name'] as const;
 
 export class Config {
   private context: vscode.ExtensionContext;
@@ -37,7 +37,7 @@ export class Config {
   }
 
   async cycleSortMode(isLocal = true): Promise<SortMode> {
-    const cycle = isLocal ? SORT_CYCLE : SORT_CYCLE_NO_SIZE;
+    const cycle = isLocal ? SORT_CYCLE : SORT_CYCLE_REMOTE;
     const current = this.sortMode;
     const idx = cycle.indexOf(current);
     const next = cycle[(idx + 1) % cycle.length];

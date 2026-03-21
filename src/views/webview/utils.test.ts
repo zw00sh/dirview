@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import {
-  escHtml, formatBytes, sortDirs, sortFiles, computeMaxMetric, groupEmptyDirs,
+  escHtml, formatBytes, formatLines, sortDirs, sortFiles, computeMaxMetric, groupEmptyDirs,
   computeStats, buildAncestorPaths, emptyState,
 } from './index';
 
@@ -33,9 +33,9 @@ describe('formatBytes', () => {
 // --- sortDirs ---
 describe('sortDirs', () => {
   const dirs = [
-    { name: 'b', totalFiles: 5, sizeBytes: 200 },
-    { name: 'a', totalFiles: 10, sizeBytes: 100 },
-    { name: 'c', totalFiles: 1, sizeBytes: 300 },
+    { name: 'b', totalFiles: 5, sizeBytes: 200, totalLines: 50 },
+    { name: 'a', totalFiles: 10, sizeBytes: 100, totalLines: 200 },
+    { name: 'c', totalFiles: 1, sizeBytes: 300, totalLines: 10 },
   ];
 
   it('sorts by file count desc in "files" mode', () => {
@@ -51,6 +51,11 @@ describe('sortDirs', () => {
   it('sorts by size desc in "size" mode', () => {
     const result = sortDirs(dirs, 'size');
     expect(result.map(d => d.name)).toEqual(['c', 'b', 'a']);
+  });
+
+  it('sorts by totalLines desc in "lines" mode', () => {
+    const result = sortDirs(dirs, 'lines');
+    expect(result.map(d => d.name)).toEqual(['a', 'b', 'c']);
   });
 
   it('does not mutate input', () => {
@@ -80,10 +85,21 @@ describe('sortFiles', () => {
   });
 });
 
+// --- formatLines ---
+describe('formatLines', () => {
+  it('returns "0" for 0', () => expect(formatLines(0)).toBe('0'));
+  it('returns raw number for < 1000', () => expect(formatLines(999)).toBe('999'));
+  it('returns K for thousands', () => expect(formatLines(1500)).toBe('2K'));
+  it('returns K for exact thousand', () => expect(formatLines(1000)).toBe('1K'));
+  it('returns M for millions', () => expect(formatLines(1500000)).toBe('1.5M'));
+  it('returns M without .0 for round millions', () => expect(formatLines(2000000)).toBe('2M'));
+  it('returns K for 999999', () => expect(formatLines(999999)).toBe('1000K'));
+});
+
 // --- computeMaxMetric ---
 describe('computeMaxMetric', () => {
-  function makeNode(totalFiles: number, sizeBytes: number, children: any[] = []) {
-    return { totalFiles, sizeBytes, children };
+  function makeNode(totalFiles: number, sizeBytes: number, children: any[] = [], totalLines = 0) {
+    return { totalFiles, sizeBytes, totalLines, children };
   }
 
   it('returns max totalFiles among non-root nodes', () => {
@@ -104,6 +120,16 @@ describe('computeMaxMetric', () => {
       ]),
     ];
     expect(computeMaxMetric(roots, 'size', false)).toBe(900);
+  });
+
+  it('returns max totalLines in lines mode', () => {
+    const roots = [
+      makeNode(100, 1000, [
+        makeNode(60, 600, [], 3000),
+        makeNode(40, 900, [], 5000),
+      ], 8000),
+    ];
+    expect(computeMaxMetric(roots, 'lines', false)).toBe(5000);
   });
 
   it('walks nested children', () => {
@@ -215,6 +241,25 @@ describe('computeStats', () => {
 
   it('handles empty roots', () => {
     expect(computeStats([])).toEqual([]);
+  });
+
+  it('aggregates sizeBytes and lineCount from stats', () => {
+    const roots = [
+      makeRoot([
+        { name: 'TypeScript', color: '#3178c6', count: 10, sizeBytes: 5000, lineCount: 200 },
+        { name: 'CSS', color: '#563d7c', count: 3, sizeBytes: 1000, lineCount: 50 },
+      ], 13),
+      makeRoot([
+        { name: 'TypeScript', color: '#3178c6', count: 5, sizeBytes: 2500, lineCount: 100 },
+      ], 5),
+    ];
+    const result = computeStats(roots);
+    const ts = result.find(r => r.name === 'TypeScript');
+    expect(ts.sizeBytes).toBe(7500);
+    expect(ts.lineCount).toBe(300);
+    const css = result.find(r => r.name === 'CSS');
+    expect(css.sizeBytes).toBe(1000);
+    expect(css.lineCount).toBe(50);
   });
 });
 

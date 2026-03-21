@@ -44,6 +44,13 @@ export function formatBytes(bytes: number): string {
   return Math.round(bytes / (1024 * 1024)) + ' MB';
 }
 
+export function formatLines(lines: number): string {
+  if (lines === 0) { return '0'; }
+  if (lines < 1000) { return String(lines); }
+  if (lines < 1000000) { return Math.round(lines / 1000) + 'K'; }
+  return (lines / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+}
+
 // WeakMap caches keyed by the original array reference: Map<mode, sortedArray>.
 // This avoids redundant .slice().sort() on every render for unchanged data.
 // Note: filterTree() shallow-clones arrays, so these caches miss on filtered trees
@@ -60,6 +67,8 @@ export function sortDirs(dirs: DirNode[], mode: SortMode): DirNode[] {
     copy.sort((a, b) => a.name.localeCompare(b.name));
   } else if (mode === 'size') {
     copy.sort((a, b) => b.sizeBytes - a.sizeBytes);
+  } else if (mode === 'lines') {
+    copy.sort((a, b) => b.totalLines - a.totalLines);
   } else {
     // 'files' — by total file count desc
     copy.sort((a, b) => b.totalFiles - a.totalFiles);
@@ -91,7 +100,7 @@ export function computeMaxMetric(roots: DirNode[], sortMode: SortMode, includeRo
   }
   let max = 0;
   function walk(node: DirNode): void {
-    const val = sortMode === 'size' ? node.sizeBytes : node.totalFiles;
+    const val = sortMode === 'size' ? node.sizeBytes : sortMode === 'lines' ? node.totalLines : node.totalFiles;
     if (val > max) { max = val; }
     for (const c of node.children) { walk(c); }
   }
@@ -181,17 +190,18 @@ let _computeStatsCache: { roots: DirNode[] | null; value: LangStat[] | null } = 
 // Aggregate language stats from root nodes. Shared between tab.js and languagesProvider.ts.
 export function computeStats(roots: DirNode[]): LangStat[] {
   if (_computeStatsCache.roots === roots) { return _computeStatsCache.value!; }
-  const counts = new Map<string, { color: string; count: number }>();
+  const counts = new Map<string, { color: string; count: number; sizeBytes: number; lineCount: number }>();
   let total = 0;
   for (const r of roots) {
     for (const s of r.stats) {
       const ex = counts.get(s.name);
-      if (ex) { ex.count += s.count; } else { counts.set(s.name, { color: s.color, count: s.count }); }
+      if (ex) { ex.count += s.count; ex.sizeBytes += (s.sizeBytes || 0); ex.lineCount += (s.lineCount || 0); }
+      else { counts.set(s.name, { color: s.color, count: s.count, sizeBytes: s.sizeBytes || 0, lineCount: s.lineCount || 0 }); }
     }
     total += r.totalFiles;
   }
   const value: LangStat[] = Array.from(counts.entries())
-    .map(([name, { color, count }]) => ({ name, color, count, pct: total > 0 ? ((count / total) * 100).toFixed(1) : '0' }))
+    .map(([name, { color, count, sizeBytes, lineCount }]) => ({ name, color, count, sizeBytes, lineCount, pct: total > 0 ? ((count / total) * 100).toFixed(1) : '0' }))
     .sort((a, b) => b.count - a.count);
   _computeStatsCache = { roots, value };
   return value;

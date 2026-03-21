@@ -8,7 +8,7 @@ export type { DirNode, FileNode, FileTypeStats } from '../../scanner/types';
 import type { DirNode, FileNode, FileTypeStats } from '../../scanner/types';
 
 // Redefined here (can't import from config.ts which depends on vscode).
-export type SortMode = 'files' | 'name' | 'size';
+export type SortMode = 'files' | 'name' | 'size' | 'lines';
 
 // ── Search match ──────────────────────────────────────────────────────────────
 
@@ -189,6 +189,8 @@ export interface LangStat {
   name: string;
   color: string;
   count: number;
+  sizeBytes: number;
+  lineCount: number;
   pct: string;
 }
 
@@ -249,6 +251,8 @@ export interface MessageHandlerDeps {
 
 export interface TooltipNode {
   totalFiles: number;
+  sizeBytes: number;
+  totalLines: number;
   stats: FileTypeStats[];
 }
 

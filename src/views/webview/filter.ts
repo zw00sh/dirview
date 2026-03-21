@@ -106,30 +106,36 @@ export function filterTree(roots: DirNode[], inputs: FilterInputs): FilteredTree
   // Recompute stats/totalFiles/sizeBytes on a filtered clone from its
   // filtered files + already-recomputed children (bottom-up).
   function recomputeNodeStats(clone: DirNode): void {
-    const counts = new Map<string, { color: string; count: number }>();
+    const counts = new Map<string, { color: string; count: number; sizeBytes: number; lineCount: number }>();
     let totalFiles = 0;
     let sizeBytes = 0;
+    let totalLines = 0;
 
     for (const f of clone.files || []) {
       const ex = counts.get(f.langName);
-      if (ex) { ex.count++; } else { counts.set(f.langName, { color: f.langColor, count: 1 }); }
+      if (ex) { ex.count++; ex.sizeBytes += f.sizeBytes || 0; ex.lineCount += f.lineCount || 0; }
+      else { counts.set(f.langName, { color: f.langColor, count: 1, sizeBytes: f.sizeBytes || 0, lineCount: f.lineCount || 0 }); }
       totalFiles++;
       sizeBytes += f.sizeBytes || 0;
+      totalLines += f.lineCount || 0;
     }
     for (const c of clone.children) {
       for (const s of c.stats) {
         const ex = counts.get(s.name);
-        if (ex) { ex.count += s.count; } else { counts.set(s.name, { color: s.color, count: s.count }); }
+        if (ex) { ex.count += s.count; ex.sizeBytes += s.sizeBytes || 0; ex.lineCount += s.lineCount || 0; }
+        else { counts.set(s.name, { color: s.color, count: s.count, sizeBytes: s.sizeBytes || 0, lineCount: s.lineCount || 0 }); }
       }
       totalFiles += c.totalFiles;
       sizeBytes += c.sizeBytes;
+      totalLines += c.totalLines;
     }
 
     clone.stats = Array.from(counts.entries())
-      .map(([name, { color, count }]) => ({ name, color, count }))
+      .map(([name, { color, count, sizeBytes, lineCount }]) => ({ name, color, count, sizeBytes, lineCount }))
       .sort((a, b) => b.count - a.count);
     clone.totalFiles = totalFiles;
     clone.sizeBytes = sizeBytes;
+    clone.totalLines = totalLines;
   }
 
   // Memoize per-node results for this filterTree call

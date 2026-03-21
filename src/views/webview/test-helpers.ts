@@ -11,8 +11,8 @@ afterEach(() => { document.body.innerHTML = ''; });
   setState: () => {},
 });
 
-export function makeDir(path: string, name: string, { children = [], files = [], totalFiles = 0, sizeBytes = 0, stats = [] }: { children?: any[]; files?: any[]; totalFiles?: number; sizeBytes?: number; stats?: any[] } = {}) {
-  return { path, name, children, files, totalFiles, sizeBytes, stats };
+export function makeDir(path: string, name: string, { children = [], files = [], totalFiles = 0, sizeBytes = 0, totalLines = 0, stats = [] }: { children?: any[]; files?: any[]; totalFiles?: number; sizeBytes?: number; totalLines?: number; stats?: any[] } = {}) {
+  return { path, name, children, files, totalFiles, sizeBytes, totalLines, stats };
 }
 
 export function makeRenderer(state: any, { onExpandChanged }: { onExpandChanged?: any } = {}) {

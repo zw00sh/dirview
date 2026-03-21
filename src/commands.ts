@@ -63,6 +63,7 @@ export function registerCommands(
     vscode.commands.registerCommand('dirview.cycleSortFiles', cycleSortHandler),
     vscode.commands.registerCommand('dirview.cycleSortName', cycleSortHandler),
     vscode.commands.registerCommand('dirview.cycleSortSize', cycleSortHandler),
+    vscode.commands.registerCommand('dirview.cycleSortLines', cycleSortHandler),
   );
 
   context.subscriptions.push(

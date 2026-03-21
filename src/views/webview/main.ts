@@ -169,7 +169,7 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   state.truncateThreshold = savedThreshold;
 
   currentFlatRows = flatRows;
-  scroller.setTreeClass('sidebar' + (state.currentSortMode === 'size' ? ' sort-size' : ''));
+  scroller.setTreeClass('sidebar' + (state.currentSortMode === 'size' || state.currentSortMode === 'lines' ? ' sort-size' : ''));
   scroller.update(flatRows, totalHeight);
 
   const filteredEmpty = state._isFiltered && flatRows.length === 0;

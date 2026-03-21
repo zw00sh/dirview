@@ -19,6 +19,7 @@ import {
   SVG_SORT_FILES,
   SVG_SORT_NAME,
   SVG_SORT_SIZE,
+  SVG_SORT_LINES,
   SVG_STICKY,
   SVG_STICKY_OFF,
 } from './index';
@@ -163,9 +164,9 @@ const SVG_PCT = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://w
 const SVG_HASH = '<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><text x="8" y="12.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', sans-serif" font-weight="600" font-size="13" fill="currentColor">#</text></svg>';
 
 function getSortTitle(mode: SortMode): string {
-  const sortNames: Record<SortMode, string> = { files: 'by file count', name: 'by name', size: 'by size' };
+  const sortNames: Record<SortMode, string> = { files: 'by file count', name: 'by name', size: 'by size', lines: 'by lines of code' };
   const base = 'Sort: ' + (sortNames[mode] || 'by file count');
-  if (!tabUI.isLocal) { return base + ' (size unavailable on remote filesystems)'; }
+  if (!tabUI.isLocal) { return base + ' (size/lines unavailable on remote filesystems)'; }
   return base;
 }
 
@@ -355,13 +356,13 @@ toggleTruncationBtn.addEventListener('click', () => {
 });
 sortBtn.addEventListener('click', () => {
   if (!state.lastRoots) { return; }
-  const modes: SortMode[] = tabUI.isLocal ? ['files', 'name', 'size'] : ['files', 'name'];
+  const modes: SortMode[] = tabUI.isLocal ? ['files', 'name', 'size', 'lines'] : ['files', 'name'];
   const next = modes[(modes.indexOf(state.currentSortMode) + 1) % modes.length];
   state.currentSortMode = next;
   sortBtn.title = getSortTitle(next);
   sortBtn.setAttribute('aria-label', sortBtn.title);
-  sortBtn.innerHTML = ({ files: SVG_SORT_FILES, name: SVG_SORT_NAME, size: SVG_SORT_SIZE } as Record<SortMode, string>)[next] || SVG_SORT_FILES;
-  scroller.setTreeClass(next === 'size' ? 'sort-size' : '');
+  sortBtn.innerHTML = ({ files: SVG_SORT_FILES, name: SVG_SORT_NAME, size: SVG_SORT_SIZE, lines: SVG_SORT_LINES } as Record<SortMode, string>)[next] || SVG_SORT_FILES;
+  scroller.setTreeClass(next === 'size' || next === 'lines' ? 'sort-size' : '');
   state.rerender();
 });
 toggleIgnoredBtn.addEventListener('click', () => {
@@ -510,7 +511,7 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
 
   sortBtn.title = getSortTitle(state.currentSortMode);
   sortBtn.setAttribute('aria-label', sortBtn.title);
-  sortBtn.innerHTML = ({ files: SVG_SORT_FILES, name: SVG_SORT_NAME, size: SVG_SORT_SIZE } as Record<SortMode, string>)[state.currentSortMode] || SVG_SORT_FILES;
+  sortBtn.innerHTML = ({ files: SVG_SORT_FILES, name: SVG_SORT_NAME, size: SVG_SORT_SIZE, lines: SVG_SORT_LINES } as Record<SortMode, string>)[state.currentSortMode] || SVG_SORT_FILES;
 
   // Legend stats are updated after flattenTree (below) so they reflect filtered roots.
   searchBar.updateFilterWarning(state.activeFilters.size);
@@ -570,7 +571,7 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   // Check if filtered tree is empty (no matching files/dirs)
   const filteredEmpty = state._isFiltered && flatRows.length === 0;
 
-  scroller.setTreeClass(state.currentSortMode === 'size' ? 'sort-size' : '');
+  scroller.setTreeClass(state.currentSortMode === 'size' || state.currentSortMode === 'lines' ? 'sort-size' : '');
   scroller.update(flatRows, totalHeight);
 
   // Show/hide "no results" empty state — include scope hint when in a subdirectory tab

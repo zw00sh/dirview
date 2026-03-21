@@ -1,7 +1,7 @@
 // Delegated event handlers for the tree renderer.
 // Extracted from createRenderer to keep the main file focused on rendering logic.
 
-import { compactedNode, compactedPath, hasExpandedDescendant, escHtml } from '../utils';
+import { compactedNode, compactedPath, hasExpandedDescendant, escHtml, formatBytes, formatLines } from '../utils';
 import { walkExpand, walkCollapse } from '../state';
 import type { DirNode, RendererContext } from '../types';
 
@@ -240,18 +240,30 @@ export function setupDelegatedEvents(ctx: RendererContext): void {
     if (!entry || !entry.node.totalFiles) { tooltip.style.display = 'none'; return; }
 
     const node = entry.node;
-    // Populate tooltip content.
+    // Populate tooltip content — metric-aware based on sort mode.
     tooltip.innerHTML = '';
-    const total = node.totalFiles;
+    const sm = state.currentSortMode;
     for (const s of node.stats) {
-      const segPct = (s.count / total) * 100;
+      let pctStr: string;
+      let countStr: string;
+      if (sm === 'lines' && node.totalLines > 0) {
+        pctStr = ((s.lineCount / node.totalLines) * 100).toFixed(1).replace(/\.0$/, '') + '%';
+        countStr = formatLines(s.lineCount) + ' line' + (s.lineCount !== 1 ? 's' : '');
+      } else if (sm === 'size' && node.sizeBytes > 0) {
+        pctStr = ((s.sizeBytes / node.sizeBytes) * 100).toFixed(1).replace(/\.0$/, '') + '%';
+        countStr = formatBytes(s.sizeBytes);
+      } else {
+        const total = node.totalFiles;
+        pctStr = total > 0 ? ((s.count / total) * 100).toFixed(1).replace(/\.0$/, '') + '%' : '0%';
+        countStr = s.count + ' file' + (s.count !== 1 ? 's' : '');
+      }
       const tRow = document.createElement('div');
       tRow.className = 'bar-tooltip-row';
       tRow.innerHTML =
         `<span class="bar-tooltip-swatch" style="background:${s.color}"></span>` +
         `<span class="bar-tooltip-name">${escHtml(s.name)}</span>` +
-        `<span class="bar-tooltip-pct">${segPct.toFixed(1).replace(/\.0$/, '')}%</span>` +
-        `<span class="bar-tooltip-count">${s.count} file${s.count !== 1 ? 's' : ''}</span>`;
+        `<span class="bar-tooltip-pct">${pctStr}</span>` +
+        `<span class="bar-tooltip-count">${countStr}</span>`;
       tooltip.appendChild(tRow);
     }
 

@@ -44,12 +44,35 @@ class LocalAdapter implements ScanAdapter<string> {
     return this.signal.aborted;
   }
 
-  async getFileSizes(files: Array<{ name: string; path: string }>) {
+  async getFileMetrics(files: Array<{ name: string; path: string }>) {
     return parallelMap(
       files,
       async ({ path: filePath }) => {
-        try { return (await fs.promises.stat(filePath)).size; }
-        catch { return 0; }
+        let fd: fs.promises.FileHandle | null = null;
+        try {
+          fd = await fs.promises.open(filePath, 'r');
+          const stat = await fd.stat();
+          const sizeBytes = stat.size;
+          if (sizeBytes === 0) { return { sizeBytes: 0, lineCount: 0 }; }
+          const readLen = Math.min(sizeBytes, 1024 * 1024); // cap at 1MB
+          const buf = Buffer.allocUnsafe(readLen);
+          await fd.read(buf, 0, readLen, 0);
+          // Binary detection: check first 8KB for null bytes
+          const checkLen = Math.min(readLen, 8192);
+          for (let i = 0; i < checkLen; i++) {
+            if (buf[i] === 0) { return { sizeBytes, lineCount: 0, isBinary: true }; }
+          }
+          // Count newlines
+          let lineCount = 0;
+          for (let i = 0; i < readLen; i++) {
+            if (buf[i] === 0x0A) { lineCount++; }
+          }
+          return { sizeBytes, lineCount };
+        } catch {
+          return { sizeBytes: 0, lineCount: 0 };
+        } finally {
+          await fd?.close();
+        }
       },
       50
     );

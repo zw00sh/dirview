@@ -71,7 +71,7 @@ describe('filterTree with searchResults', () => {
   });
 });
 
-// --- filterTree: stats/totalFiles/sizeBytes recomputation ---
+// --- filterTree: stats/totalFiles/sizeBytes/totalLines recomputation ---
 describe('filterTree recomputes stats on filtered nodes', () => {
   function ft(roots: DirNode[], opts: Partial<Parameters<typeof filterTree>[1]> = {}) {
     return filterTree(roots, {
@@ -101,8 +101,30 @@ describe('filterTree recomputes stats on filtered nodes', () => {
     expect(result.roots[0].totalFiles).toBe(2);
     expect(result.roots[0].sizeBytes).toBe(200);
     expect(result.roots[0].stats).toEqual([
-      { name: 'TypeScript', color: '#3178c6', count: 2 },
+      { name: 'TypeScript', color: '#3178c6', count: 2, sizeBytes: 200, lineCount: 0 },
     ]);
+  });
+
+  it('recomputes totalLines to reflect only filtered files', () => {
+    const dir = makeDir('src', 'src', {
+      totalFiles: 3,
+      sizeBytes: 300,
+      totalLines: 150,
+      stats: [
+        { name: 'TypeScript', color: '#3178c6', count: 2, sizeBytes: 200, lineCount: 100 },
+        { name: 'JavaScript', color: '#f1e05a', count: 1, sizeBytes: 100, lineCount: 50 },
+      ],
+      files: [
+        { name: 'api.ts', path: '/ws/src/api.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 100, lineCount: 60 },
+        { name: 'utils.ts', path: '/ws/src/utils.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 100, lineCount: 40 },
+        { name: 'auth.js', path: '/ws/src/auth.js', langName: 'JavaScript', langColor: '#f1e05a', sizeBytes: 100, lineCount: 50 },
+      ],
+    });
+    const result = ft([dir], { activeFilters: new Set(['TypeScript']) });
+    expect(result.roots[0].totalLines).toBe(100);
+    // Stats should also have lineCount
+    const tsStat = result.roots[0].stats.find((s: any) => s.name === 'TypeScript');
+    expect(tsStat.lineCount).toBe(100);
   });
 
   it('recomputes stats from filtered children recursively', () => {
@@ -135,7 +157,7 @@ describe('filterTree recomputes stats on filtered nodes', () => {
     expect(result.roots[0].totalFiles).toBe(2); // index.ts + handler.ts
     expect(result.roots[0].sizeBytes).toBe(250);
     expect(result.roots[0].stats).toEqual([
-      { name: 'TypeScript', color: '#3178c6', count: 2 },
+      { name: 'TypeScript', color: '#3178c6', count: 2, sizeBytes: 250, lineCount: 0 },
     ]);
     expect(result.roots[0].children[0].totalFiles).toBe(1);
     expect(result.roots[0].children[0].sizeBytes).toBe(100);
@@ -174,7 +196,7 @@ describe('filterTree recomputes stats on filtered nodes', () => {
     expect(result.roots[0].totalFiles).toBe(2);
     expect(result.roots[0].sizeBytes).toBe(200);
     expect(result.roots[0].stats).toEqual([
-      { name: 'TypeScript', color: '#3178c6', count: 2 },
+      { name: 'TypeScript', color: '#3178c6', count: 2, sizeBytes: 200, lineCount: 0 },
     ]);
   });
 });

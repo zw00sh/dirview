@@ -49,8 +49,8 @@ class RemoteAdapter implements ScanAdapter<vscode.Uri> {
     return this.signal?.aborted ?? false;
   }
 
-  async getFileSizes(files: Array<{ name: string; path: vscode.Uri }>) {
-    return new Array(files.length).fill(0);
+  async getFileMetrics(files: Array<{ name: string; path: vscode.Uri }>) {
+    return new Array(files.length).fill({ sizeBytes: 0, lineCount: 0 });
   }
 }
 

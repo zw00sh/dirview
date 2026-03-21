@@ -3,7 +3,7 @@
  * Used by both the worker thread (local scans) and main thread (remote scans)
  * via I/O adapters that abstract filesystem operations.
  */
-import type { DirNode } from './types';
+import type { DirNode, FileNode } from './types';
 import type { IgnoreFilterBase } from './ignoreFilterBase';
 import type { Ignore } from 'ignore';
 import { getLangInfo } from '../language/languageMap';
@@ -30,13 +30,13 @@ export interface ScanAdapter<TPath> {
   loadLocalIgnore(filter: IgnoreFilterBase, dirPath: TPath): Promise<Ignore>;
   /** Check if the scan has been aborted. */
   isAborted(): boolean;
-  /** Get file sizes for a batch of files. Returns sizes in input order.
-   *  Remote adapters return all zeros (no stat available). */
-  getFileSizes(files: Array<{ name: string; path: TPath }>): Promise<number[]>;
+  /** Get file metrics (size + line count) for a batch of files.
+   *  Remote adapters return all zeros (no stat/content available). */
+  getFileMetrics(files: Array<{ name: string; path: TPath }>): Promise<Array<{ sizeBytes: number; lineCount: number; isBinary?: boolean }>>;
 }
 
 export function emptyNode(name: string, relPath: string): DirNode {
-  return { name, path: relPath, stats: [], totalFiles: 0, sizeBytes: 0, files: [], children: [] };
+  return { name, path: relPath, stats: [], totalFiles: 0, sizeBytes: 0, totalLines: 0, files: [], children: [] };
 }
 
 export async function scanDirCore<TPath>(
@@ -56,7 +56,7 @@ export async function scanDirCore<TPath>(
   visitedPaths.add(key);
 
   const node: DirNode = {
-    name, path: relPath, stats: [], totalFiles: 0, sizeBytes: 0, files: [], children: [],
+    name, path: relPath, stats: [], totalFiles: 0, sizeBytes: 0, totalLines: 0, files: [], children: [],
   };
 
   if (maxDepth > 0 && depth > maxDepth) { return node; }
@@ -92,37 +92,41 @@ export async function scanDirCore<TPath>(
 
   if (adapter.isAborted()) { return node; }
 
-  const typeCounts = new Map<string, { color: string; count: number }>();
+  const typeCounts = new Map<string, { color: string; count: number; sizeBytes: number; lineCount: number }>();
 
   for (const child of childResults) {
     node.children.push(child);
     node.totalFiles += child.totalFiles;
     node.sizeBytes += child.sizeBytes;
+    node.totalLines += child.totalLines;
     for (const s of child.stats) {
       const existing = typeCounts.get(s.name);
-      if (existing) { existing.count += s.count; }
-      else { typeCounts.set(s.name, { color: s.color, count: s.count }); }
+      if (existing) { existing.count += s.count; existing.sizeBytes += s.sizeBytes; existing.lineCount += s.lineCount; }
+      else { typeCounts.set(s.name, { color: s.color, count: s.count, sizeBytes: s.sizeBytes, lineCount: s.lineCount }); }
     }
   }
 
-  const fileSizes = await adapter.getFileSizes(pendingFiles);
+  const fileMetrics = await adapter.getFileMetrics(pendingFiles.map(f => ({ name: f.entryName, path: f.entryPath })));
 
   for (let i = 0; i < pendingFiles.length; i++) {
     const { entryName, entryPath } = pendingFiles[i];
-    const sizeBytes = fileSizes[i];
+    const { sizeBytes, lineCount, isBinary } = fileMetrics[i];
     const lang = getLangInfo(entryName);
     node.totalFiles++;
     node.sizeBytes += sizeBytes;
+    node.totalLines += lineCount;
 
-    node.files.push({ name: entryName, path: adapter.pathKey(entryPath), langName: lang.name, langColor: lang.color, sizeBytes });
+    const fileNode: FileNode = { name: entryName, path: adapter.pathKey(entryPath), langName: lang.name, langColor: lang.color, sizeBytes, lineCount };
+    if (isBinary) { fileNode.isBinary = true; }
+    node.files.push(fileNode);
 
     const existing = typeCounts.get(lang.name);
-    if (existing) { existing.count++; }
-    else { typeCounts.set(lang.name, { color: lang.color, count: 1 }); }
+    if (existing) { existing.count++; existing.sizeBytes += sizeBytes; existing.lineCount += lineCount; }
+    else { typeCounts.set(lang.name, { color: lang.color, count: 1, sizeBytes, lineCount }); }
   }
 
   node.stats = Array.from(typeCounts.entries())
-    .map(([n, { color, count }]) => ({ name: n, color, count }))
+    .map(([n, { color, count, sizeBytes, lineCount }]) => ({ name: n, color, count, sizeBytes, lineCount }))
     .sort((a, b) => b.count - a.count);
 
   node.children.sort((a, b) => a.name.localeCompare(b.name));

@@ -3,7 +3,7 @@
 
 import { SVG_CHEVRON, SVG_PLUS, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_OPEN_IN_TAB } from '../icons';
 import {
-  escHtml, formatBytes, sortDirs, sortFiles, groupEmptyDirs,
+  escHtml, formatBytes, formatLines, sortDirs, sortFiles, groupEmptyDirs,
   compactedNode, compactedPath, computeBarWidth,
 } from '../utils';
 import { setupDelegatedEvents } from './events';
@@ -111,9 +111,16 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     }));
 
     if (!opts.hideCounts) {
+      const isLines = state.currentSortMode === 'lines';
+      let countText: string;
+      if (isLines) {
+        countText = file.isBinary ? 'BIN' : (file.lineCount > 0 ? formatLines(file.lineCount) : '');
+      } else {
+        countText = file.sizeBytes > 0 ? formatBytes(file.sizeBytes) : '';
+      }
       row.appendChild(h('span', {
         className: 'file-count',
-        textContent: file.sizeBytes > 0 ? formatBytes(file.sizeBytes) : '',
+        textContent: countText,
       }));
     }
 
@@ -131,24 +138,30 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     row.appendChild(h('span', { className: 'chevron', innerHTML: SVG_PLUS }));
 
     // Colored dots for unique language types among hidden files
-    const langMap = new Map<string, { color: string; count: number; sizeBytes: number }>();
+    const langMap = new Map<string, { color: string; count: number; sizeBytes: number; lineCount: number }>();
     for (const f of hiddenFiles) {
       if (f.langName) {
         const ex = langMap.get(f.langName);
-        if (ex) { ex.count++; ex.sizeBytes += (f.sizeBytes || 0); }
-        else { langMap.set(f.langName, { color: f.langColor, count: 1, sizeBytes: f.sizeBytes || 0 }); }
+        if (ex) { ex.count++; ex.sizeBytes += (f.sizeBytes || 0); ex.lineCount += (f.lineCount || 0); }
+        else { langMap.set(f.langName, { color: f.langColor, count: 1, sizeBytes: f.sizeBytes || 0, lineCount: f.lineCount || 0 }); }
       }
     }
-    const isSizeSort = state.currentSortMode === 'size';
+    const sortMode = state.currentSortMode;
     const langs = Array.from(langMap.entries()).sort((a, b) =>
-      isSizeSort ? b[1].sizeBytes - a[1].sizeBytes : b[1].count - a[1].count
+      sortMode === 'size' ? b[1].sizeBytes - a[1].sizeBytes
+        : sortMode === 'lines' ? b[1].lineCount - a[1].lineCount
+        : b[1].count - a[1].count
     );
 
     // Register synthetic node for tooltip hover
+    const totalTruncBytes = hiddenFiles.reduce((s, f) => s + (f.sizeBytes || 0), 0);
+    const totalTruncLines = hiddenFiles.reduce((s, f) => s + (f.lineCount || 0), 0);
     nodeMap.set(truncKey, {
       node: {
         totalFiles: hiddenFiles.length,
-        stats: langs.map(([name, { color, count }]) => ({ name, color, count })),
+        sizeBytes: totalTruncBytes,
+        totalLines: totalTruncLines,
+        stats: langs.map(([name, { color, count, sizeBytes, lineCount }]) => ({ name, color, count, sizeBytes, lineCount })),
       },
       hasChildren: false as const,
     });
@@ -165,32 +178,33 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     // Proportional bar showing language makeup of hidden files
     if (langs.length > 0 && maxMetric > 0) {
       const totalCount = hiddenFiles.length;
-      const totalBytes = hiddenFiles.reduce((s, f) => s + (f.sizeBytes || 0), 0);
-      const metric = state.currentSortMode === 'size' ? totalBytes : totalCount;
+      const metric = sortMode === 'size' ? totalTruncBytes : sortMode === 'lines' ? totalTruncLines : totalCount;
       const pct = metric / maxMetric;
       const barWrapWidth = computeBarWidth(pct, clientWidth, root, opts);
 
       row.appendChild(h('div', { className: 'bar-wrap', style: { width: barWrapWidth + 'px' } },
         h('div', { className: 'bar' },
-          ...langs.map(([, { color, count, sizeBytes }]) => {
-            const segMetric = isSizeSort ? sizeBytes : count;
-            const segTotal = isSizeSort ? totalBytes : totalCount;
+          ...langs.map(([, { color, count, sizeBytes, lineCount }]) => {
+            const segMetric = sortMode === 'size' ? sizeBytes : sortMode === 'lines' ? lineCount : count;
+            const segTotal = sortMode === 'size' ? totalTruncBytes : sortMode === 'lines' ? totalTruncLines : totalCount;
             return h('div', { className: 'bar-segment', style: { width: (segMetric / segTotal) * 100 + '%', backgroundColor: color } });
           }),
         ),
       ));
     }
 
-    // Right column: file count or size depending on sort mode
+    // Right column: file count, size, or lines depending on sort mode
     if (!opts.hideCounts) {
-      const totalBytes = hiddenFiles.reduce((s, f) => s + (f.sizeBytes || 0), 0);
       const metaEl = h('span', { className: 'file-count' });
-      if (state.currentSortMode === 'size') {
-        metaEl.textContent = totalBytes > 0 ? formatBytes(totalBytes) : '';
+      if (sortMode === 'size') {
+        metaEl.textContent = totalTruncBytes > 0 ? formatBytes(totalTruncBytes) : '';
+        metaEl.title = hiddenFiles.length + ' files';
+      } else if (sortMode === 'lines') {
+        metaEl.textContent = totalTruncLines > 0 ? formatLines(totalTruncLines) : '';
         metaEl.title = hiddenFiles.length + ' files';
       } else {
         metaEl.textContent = String(hiddenFiles.length);
-        metaEl.title = totalBytes > 0 ? formatBytes(totalBytes) : '';
+        metaEl.title = totalTruncBytes > 0 ? formatBytes(totalTruncBytes) : '';
       }
       row.appendChild(metaEl);
     }
@@ -329,26 +343,35 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     row.insertBefore(actionsEl, barSpacer);
 
     if (displayNode.totalFiles > 0) {
-      const metric = state.currentSortMode === 'size' ? displayNode.sizeBytes : displayNode.totalFiles;
+      const sm = state.currentSortMode;
+      const metric = sm === 'size' ? displayNode.sizeBytes : sm === 'lines' ? displayNode.totalLines : displayNode.totalFiles;
       const pct = metric / maxMetric;
       const barWrapWidth = computeBarWidth(pct, clientWidth, root, opts);
 
       row.appendChild(h('div', { className: 'bar-wrap', style: { width: barWrapWidth + 'px' } },
         h('div', { className: 'bar' },
-          ...displayNode.stats.map(s =>
-            h('div', { className: 'bar-segment', style: { width: (s.count / displayNode.totalFiles) * 100 + '%', backgroundColor: s.color } })
-          ),
+          ...displayNode.stats.map(s => {
+            const segW = sm === 'size'
+              ? (displayNode.sizeBytes > 0 ? (s.sizeBytes / displayNode.sizeBytes) * 100 : 0)
+              : sm === 'lines'
+              ? (displayNode.totalLines > 0 ? (s.lineCount / displayNode.totalLines) * 100 : 0)
+              : (s.count / displayNode.totalFiles) * 100;
+            return h('div', { className: 'bar-segment', style: { width: segW + '%', backgroundColor: s.color } });
+          }),
         ),
       ));
     }
 
-    // Right column: file count or size depending on sort mode.
+    // Right column: file count, size, or lines depending on sort mode.
     // Empty dirs always show "—" for visual alignment, even when hideCounts is set.
     if (!opts.hideCounts || displayNode.totalFiles === 0) {
       const metaEl = h('span', { className: 'file-count' });
       if (displayNode.totalFiles > 0) {
         if (state.currentSortMode === 'size') {
           metaEl.textContent = formatBytes(displayNode.sizeBytes);
+          metaEl.title = displayNode.totalFiles + ' files';
+        } else if (state.currentSortMode === 'lines') {
+          metaEl.textContent = formatLines(displayNode.totalLines);
           metaEl.title = displayNode.totalFiles + ' files';
         } else {
           metaEl.textContent = String(displayNode.totalFiles);

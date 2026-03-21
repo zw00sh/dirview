@@ -72,7 +72,8 @@ function walkDir(dirAbsPath, relativePath, maxDepth, currentDepth) {
   const children = [];
   let totalFiles = 0;
   let sizeBytes = 0;
-  const statMap = new Map(); // langName -> { name, color, count }
+  let totalLines = 0;
+  const statMap = new Map(); // langName -> { name, color, count, sizeBytes, lineCount }
 
   for (const entry of entries) {
     if (entry.name.startsWith('.') && VCS_DIRS.has(entry.name)) continue;
@@ -87,31 +88,56 @@ function walkDir(dirAbsPath, relativePath, maxDepth, currentDepth) {
         children.push(child);
         totalFiles += child.totalFiles;
         sizeBytes += child.sizeBytes;
+        totalLines += child.totalLines;
         // Merge child stats
         for (const s of child.stats) {
           const existing = statMap.get(s.name);
-          if (existing) { existing.count += s.count; }
+          if (existing) { existing.count += s.count; existing.sizeBytes += s.sizeBytes; existing.lineCount += s.lineCount; }
           else { statMap.set(s.name, { ...s }); }
         }
       }
     } else if (entry.isFile()) {
       let fileSizeBytes = 0;
+      let lineCount = 0;
+      let isBinary = false;
       try {
-        fileSizeBytes = fs.statSync(entryAbsPath).size;
+        const stat = fs.statSync(entryAbsPath);
+        fileSizeBytes = stat.size;
+        if (fileSizeBytes > 0) {
+          const fd = fs.openSync(entryAbsPath, 'r');
+          try {
+            const readLen = Math.min(fileSizeBytes, 1024 * 1024);
+            const buf = Buffer.allocUnsafe(readLen);
+            fs.readSync(fd, buf, 0, readLen, 0);
+            const checkLen = Math.min(readLen, 8192);
+            for (let i = 0; i < checkLen; i++) {
+              if (buf[i] === 0) { isBinary = true; break; }
+            }
+            if (!isBinary) {
+              for (let i = 0; i < readLen; i++) {
+                if (buf[i] === 0x0A) lineCount++;
+              }
+            }
+          } finally { fs.closeSync(fd); }
+        }
       } catch { /* skip unreadable */ }
       const lang = getLangInfo(entry.name);
-      files.push({
+      const fileNode = {
         name: entry.name,
         path: entryAbsPath,
         langName: lang.name,
         langColor: lang.color,
         sizeBytes: fileSizeBytes,
-      });
+        lineCount,
+      };
+      if (isBinary) fileNode.isBinary = true;
+      files.push(fileNode);
       totalFiles++;
       sizeBytes += fileSizeBytes;
+      totalLines += lineCount;
       const existing = statMap.get(lang.name);
-      if (existing) { existing.count++; }
-      else { statMap.set(lang.name, { name: lang.name, color: lang.color, count: 1 }); }
+      if (existing) { existing.count++; existing.sizeBytes += fileSizeBytes; existing.lineCount += lineCount; }
+      else { statMap.set(lang.name, { name: lang.name, color: lang.color, count: 1, sizeBytes: fileSizeBytes, lineCount }); }
     }
   }
 
@@ -124,6 +150,7 @@ function walkDir(dirAbsPath, relativePath, maxDepth, currentDepth) {
     stats,
     totalFiles,
     sizeBytes,
+    totalLines,
     files,
     children,
   };
