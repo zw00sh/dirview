@@ -133,14 +133,6 @@ export function createStickyOverlay(config: StickyOverlayConfig): StickyOverlay 
       }
       overlayEl.appendChild(el);
     }
-
-    // Cancel the overlay's flow contribution with a negative margin so the
-    // tree below stays at a fixed position regardless of overlay content.
-    // This prevents scroll-anchoring adjustments that cause oscillation.
-    // Use offsetHeight (rendered box height) not scrollHeight (which includes
-    // overflow from the ::after shadow pseudo-element).
-    const contentHeight = overlayEl.offsetHeight;
-    overlayEl.style.marginBottom = contentHeight > 0 ? -contentHeight + 'px' : '';
   }
 
   function setEnabled(en: boolean): void {
