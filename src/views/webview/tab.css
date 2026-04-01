@@ -25,12 +25,12 @@ body {
   flex-direction: column;
 }
 
-/* ── Sticky header overlay (tab only) ─────────────────────────────────── */
+/* ── Sticky header overlay ────────────────────────────────────────────── */
 .virtual-sticky-overlay {
   position: sticky;
   top: 0;
   z-index: 200;
-  background: var(--vscode-editor-background);
+  overflow: hidden;
 }
 
 .virtual-sticky-overlay:empty {

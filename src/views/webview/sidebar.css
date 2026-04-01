@@ -21,7 +21,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 200;
-  background: var(--vscode-sideBar-background);
+  overflow: hidden;
 }
 
 .virtual-sticky-overlay:empty {

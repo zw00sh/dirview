@@ -188,9 +188,11 @@ function updateTruncationBtn() {
 // (stickyEnabled now in tabUI)
 
 function updateStickyBtn() {
-  toggleStickyBtn.innerHTML = tabUI.stickyEnabled ? SVG_STICKY : SVG_STICKY_OFF;
-  toggleStickyBtn.title = tabUI.stickyEnabled ? 'Disable Sticky Headers' : 'Enable Sticky Headers';
-  toggleStickyBtn.setAttribute('aria-label', toggleStickyBtn.title);
+  // Sticky headers disabled pending visual polish — hide the button.
+  toggleStickyBtn.style.display = 'none';
+  // toggleStickyBtn.innerHTML = tabUI.stickyEnabled ? SVG_STICKY : SVG_STICKY_OFF;
+  // toggleStickyBtn.title = tabUI.stickyEnabled ? 'Disable Sticky Headers' : 'Enable Sticky Headers';
+  // toggleStickyBtn.setAttribute('aria-label', toggleStickyBtn.title);
 }
 
 function updateRefreshBtn(autoRescanEnabled: boolean) {

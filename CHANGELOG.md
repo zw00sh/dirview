@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.7.1] — 2026-04-01
+
+### Added
+- **Proportional file bars** — file rows now show a proportional bar reflecting the active metric, with darkened file/truncated rows for visual contrast.
+- **Rebuilt sticky scroll algorithm** — rewrote sticky headers from scratch to match VSCode's native explorer behavior: iterative ancestor walk with widget-height-aware cascading, smooth push-out (accordion) animation at section boundaries, and 40% viewport height cap. Includes 36 unit tests.
+
+### Changed
+- **Sticky headers disabled** — the rebuilt sticky headers feature is disabled pending visual polish. The toolbar icons are hidden in both sidebar and tab views. The implementation is complete and tested but not yet user-facing.
+
 ## [1.7.0] — 2026-03-21
 
 ### Added

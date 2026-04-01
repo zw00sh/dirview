@@ -2,7 +2,7 @@
   "name": "dirview",
   "displayName": "Directory Breakdown",
   "description": "Visualize per-directory file type composition as GitHub-style colored proportional bars",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "publisher": "zwoosh",
   "license": "MIT",
   "repository": {
@@ -233,16 +233,6 @@
           "group": "navigation@4"
         },
         {
-          "command": "dirview.toggleStickyHeaders",
-          "when": "view == dirview.sidebar && !dirview.stickyHeadersEnabled",
-          "group": "navigation@2"
-        },
-        {
-          "command": "dirview.toggleStickyHeadersOff",
-          "when": "view == dirview.sidebar && dirview.stickyHeadersEnabled",
-          "group": "navigation@2"
-        },
-        {
           "command": "dirview.openInTab",
           "when": "view == dirview.sidebar",
           "group": "navigation@8"
@@ -361,9 +351,11 @@
     "copy-webview": "node scripts/copyWebview.js",
     "test": "vitest run --exclude 'src/e2e/**'",
     "test:e2e": "vitest run src/e2e",
+    "test:pw": "npx playwright test",
     "debug-eval": "node scripts/debug-eval.js"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/minimatch": "^5.1.2",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",

@@ -46,21 +46,26 @@ export class Config {
     return next;
   }
 
+  // Sticky headers disabled pending visual polish. Hardcoded to false so the
+  // overlay is never created. To re-enable: restore the getters to read from
+  // workspaceState and uncomment the menu entries in package.json.
   get sidebarStickyHeadersEnabled(): boolean {
-    return this.context.workspaceState.get<boolean>('dirview.sidebarStickyHeadersEnabled', true);
+    return false;
+    // return this.context.workspaceState.get<boolean>('dirview.sidebarStickyHeadersEnabled', true);
   }
 
-  async setSidebarStickyHeadersEnabled(value: boolean): Promise<void> {
-    await this.context.workspaceState.update('dirview.sidebarStickyHeadersEnabled', value);
-    await vscode.commands.executeCommand('setContext', 'dirview.stickyHeadersEnabled', value);
+  async setSidebarStickyHeadersEnabled(_value: boolean): Promise<void> {
+    // await this.context.workspaceState.update('dirview.sidebarStickyHeadersEnabled', value);
+    // await vscode.commands.executeCommand('setContext', 'dirview.stickyHeadersEnabled', value);
   }
 
   get tabStickyHeadersEnabled(): boolean {
-    return this.context.workspaceState.get<boolean>('dirview.tabStickyHeadersEnabled', true);
+    return false;
+    // return this.context.workspaceState.get<boolean>('dirview.tabStickyHeadersEnabled', true);
   }
 
-  async setTabStickyHeadersEnabled(value: boolean): Promise<void> {
-    await this.context.workspaceState.update('dirview.tabStickyHeadersEnabled', value);
+  async setTabStickyHeadersEnabled(_value: boolean): Promise<void> {
+    // await this.context.workspaceState.update('dirview.tabStickyHeadersEnabled', value);
   }
 
   async init(): Promise<void> {
