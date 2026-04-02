@@ -37,6 +37,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   sidebarProvider.onOpenDirInTab = (dirPath) => tabProvider.openForDir(dirPath);
   tabProvider.onOpenDirInTab = (dirPath) => tabProvider.openForDir(dirPath);
 
+  // Wire sidebar stats → languages panel (drill-down + file filter sync)
+  sidebarProvider.onStatsChange = (scopeRoots, filteredRoots) => languagesProvider.updateFromSidebar(scopeRoots, filteredRoots);
+
   registerCommands(context, config, { sidebar: sidebarProvider, tab: tabProvider, languages: languagesProvider },
     () => coordinator.scan(),
     () => coordinator.getTruncateThreshold(),

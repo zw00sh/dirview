@@ -41,7 +41,8 @@ export type BackendToWebviewMessage =
   | { type: 'searchResults'; matches: Record<string, SearchMatch[]> | null; fileCount?: number; matchCount?: number; truncated?: boolean; error?: string }
   | { type: 'themeChanged' }
   | { type: 'setDisplayMode'; showPct: boolean }
-  | { type: 'languagesUpdate'; roots: Array<{ stats: FileTypeStats[]; totalFiles: number }>; activeFilters: string[]; showPct: boolean };
+  | { type: 'languagesUpdate'; roots: Array<{ stats: FileTypeStats[]; totalFiles: number }>; activeFilters: string[]; showPct: boolean; scoped?: boolean; scopeRoots?: Array<{ stats: FileTypeStats[]; totalFiles: number }> }
+  | { type: 'toggleFileFilter' };
 
 // ── Messages: webview → backend ───────────────────────────────────────────────
 
@@ -56,7 +57,9 @@ export type WebviewToBackendMessage =
   | { command: 'toggleStickyHeaders'; enabled: boolean }
   | { command: 'search'; pattern: string; caseSensitive?: boolean; useRegex?: boolean; include?: string; exclude?: string; contextLines?: number; langFilters?: string[] }
   | { command: 'searchFiles'; glob: string; exclude?: string }
-  | { command: 'clearSearch' };
+  | { command: 'clearSearch' }
+  | { command: 'fileFilterActive'; active: boolean }
+  | { command: 'sidebarStats'; scopeRoots: Array<{ stats: FileTypeStats[]; totalFiles: number }>; filteredRoots: Array<{ stats: FileTypeStats[]; totalFiles: number }> };
 
 // ── VsCode API ────────────────────────────────────────────────────────────────
 

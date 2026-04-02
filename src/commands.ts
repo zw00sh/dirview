@@ -117,6 +117,21 @@ export function registerCommands(
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand('dirview.navigateUp', () => {
+      sidebar.navigateUp();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('dirview.toggleFileFilter', () => {
+      sidebar.toggleFileFilter();
+    }),
+    vscode.commands.registerCommand('dirview.toggleFileFilterOff', () => {
+      sidebar.toggleFileFilter();
+    }),
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand('dirview.expandAll', () => {
       sidebar.expandAll();
     })

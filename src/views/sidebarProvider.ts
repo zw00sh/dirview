@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { ScanUpdatePayload } from '../scanner/types';
+import * as path from 'path';
+import { DirNode, ScanUpdatePayload } from '../scanner/types';
 import { SortMode } from '../config';
 import { buildWebviewHtml } from './buildWebviewHtml';
 import { skeletonTreeHtml } from './skeletonHtml';
@@ -12,11 +13,93 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private lastUpdate: ScanUpdatePayload | undefined;
   private lastFilterLangs: string[] = [];
   private disposables: vscode.Disposable[] = [];
+  private dirPath = '';
   onRefresh?: () => void;
   onOpenDirInTab?: (dirPath: string) => void;
+  onStatsChange?: (scopeRoots: Array<{ stats: import('../scanner/types').FileTypeStats[]; totalFiles: number }>, filteredRoots: Array<{ stats: import('../scanner/types').FileTypeStats[]; totalFiles: number }>) => void;
 
   constructor(extensionUri: vscode.Uri) {
     this.extensionUri = extensionUri;
+  }
+
+  // ── Drill-down helpers ──────────────────────────────────────────────────
+
+  private findInChildren(children: DirNode[], targetPath: string): DirNode | undefined {
+    for (const child of children) {
+      if (child.path === targetPath) return child;
+      const found = this.findInChildren(child.children, targetPath);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  private findNodeByPath(roots: DirNode[], targetPath: string): DirNode | undefined {
+    for (const root of roots) {
+      if (root.path === targetPath) return root;
+      const found = this.findInChildren(root.children, targetPath);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  private getRootsForDir(dirPath: string): DirNode[] | undefined {
+    const roots = this.lastUpdate?.roots;
+    if (!roots) return undefined;
+    if (dirPath === '') return roots;
+    const node = this.findNodeByPath(roots, dirPath);
+    return node ? [node] : [];
+  }
+
+  private getWorkspaceFolderName(dirPath: string): string {
+    const roots = this.lastUpdate?.roots;
+    if (!roots) return '';
+    if (dirPath === '') return roots.length === 1 ? roots[0].name : '';
+    for (const root of roots) {
+      if (dirPath === root.path || this.findInChildren(root.children, dirPath)) {
+        return root.name;
+      }
+    }
+    return roots.length === 1 ? roots[0].name : '';
+  }
+
+  private updateDirPathContext(): void {
+    vscode.commands.executeCommand('setContext', 'dirview.sidebarDrilledDown', this.dirPath !== '');
+  }
+
+  private getTitleForDir(dirPath: string, roots?: DirNode[]): string {
+    if (dirPath) return path.basename(dirPath);
+    if (roots && roots.length === 1) return roots[0].name;
+    return 'Tree';
+  }
+
+  private sendUpdateForCurrentDir(): void {
+    if (!this.view || !this.lastUpdate) return;
+    let roots = this.getRootsForDir(this.dirPath);
+    // If drilled-down directory was deleted, reset to root.
+    if (this.dirPath !== '' && roots !== undefined && roots.length === 0) {
+      this.dirPath = '';
+      this.updateDirPathContext();
+      roots = this.lastUpdate.roots;
+    }
+    const effectiveRoots = roots ?? [];
+    this.view.title = this.getTitleForDir(this.dirPath, effectiveRoots);
+    const { autoRescanEnabled, sortMode, truncateThreshold, sidebarStickyHeadersEnabled: stickyHeadersEnabled, isLocal } = this.lastUpdate;
+    post(this.view.webview, {
+      type: 'update', roots: effectiveRoots, autoRescanEnabled, sortMode, truncateThreshold,
+      stickyHeadersEnabled, isLocal, dirPath: this.dirPath, workspaceFolderName: this.getWorkspaceFolderName(this.dirPath),
+    });
+  }
+
+  navigateUp(): void {
+    if (!this.dirPath) return;
+    const lastSlash = this.dirPath.lastIndexOf('/');
+    this.dirPath = lastSlash > 0 ? this.dirPath.substring(0, lastSlash) : '';
+    this.updateDirPathContext();
+    this.sendUpdateForCurrentDir();
+  }
+
+  toggleFileFilter(): void {
+    if (this.view) { post(this.view.webview, { type: 'toggleFileFilter' }); }
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -25,9 +108,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     // Default title; overridden below if scan data already arrived before this view was shown.
     this.view.title = 'Tree';
     if (this.lastUpdate) {
-      const roots = this.lastUpdate.roots;
-      this.view.title = roots.length === 1 ? roots[0].name : 'Files';
+      const roots = this.getRootsForDir(this.dirPath) ?? this.lastUpdate.roots;
+      this.view.title = this.getTitleForDir(this.dirPath, roots);
     }
+    this.updateDirPathContext();
 
     webviewView.webview.options = {
       enableScripts: true,
@@ -40,17 +124,38 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     this.disposables.push(
       webviewView.webview.onDidReceiveMessage((message: WebviewToBackendMessage) => {
-        handleCommonMessage(message, {
+        if (handleCommonMessage(message, {
           onRefresh: this.onRefresh,
           onOpenDirInTab: this.onOpenDirInTab,
-        });
+        })) { return; }
+        if (message.command === 'navigateToDir') {
+          if (message.path === this.dirPath) return;
+          this.dirPath = message.path;
+          this.updateDirPathContext();
+          this.sendUpdateForCurrentDir();
+          return;
+        }
+        if (message.command === 'fileFilterActive') {
+          vscode.commands.executeCommand('setContext', 'dirview.fileFilterActive', message.active);
+          return;
+        }
+        if (message.command === 'sidebarStats') {
+          this.onStatsChange?.(message.scopeRoots, message.filteredRoots);
+          return;
+        }
       })
     );
 
     setupVisibilityReplay(webviewView, () => {
       if (!this.lastUpdate) { return undefined; }
-      const { roots, autoRescanEnabled, sortMode, truncateThreshold, sidebarStickyHeadersEnabled: stickyHeadersEnabled, isLocal } = this.lastUpdate;
-      return { type: 'update', roots, autoRescanEnabled, sortMode, truncateThreshold, stickyHeadersEnabled, isLocal };
+      const { autoRescanEnabled, sortMode, truncateThreshold, sidebarStickyHeadersEnabled: stickyHeadersEnabled, isLocal } = this.lastUpdate;
+      let roots = this.getRootsForDir(this.dirPath);
+      if (this.dirPath !== '' && roots !== undefined && roots.length === 0) {
+        this.dirPath = '';
+        this.updateDirPathContext();
+        roots = this.lastUpdate.roots;
+      }
+      return { type: 'update', roots: roots ?? [], autoRescanEnabled, sortMode, truncateThreshold, stickyHeadersEnabled, isLocal, dirPath: this.dirPath, workspaceFolderName: this.getWorkspaceFolderName(this.dirPath) };
     }, () => {
       // Replay language filter after the update so the tree renders filtered.
       if (this.lastFilterLangs.length > 0) {
@@ -65,13 +170,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   update(payload: ScanUpdatePayload): void {
     this.lastUpdate = payload;
-    const { roots, autoRescanEnabled, sortMode, truncateThreshold } = payload;
     if (this.view) {
-      this.view.title = roots.length === 1 ? roots[0].name : 'Files';
+      this.sendUpdateForCurrentDir();
     }
-    const stickyHeadersEnabled = payload.sidebarStickyHeadersEnabled;
-    const isLocal = payload.isLocal;
-    if (this.view) { post(this.view.webview, { type: 'update', roots, autoRescanEnabled, sortMode, truncateThreshold, stickyHeadersEnabled, isLocal }); }
   }
 
   updateTruncateThreshold(truncateThreshold: number): void {

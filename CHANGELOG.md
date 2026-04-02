@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.8.0] — 2026-04-02
+
+### Added
+- **Sidebar drill-down** — click a directory name to navigate into it. The sidebar title updates to the current directory, and an up-arrow button appears to navigate to the parent. Languages panel syncs to reflect the drilled-down scope.
+- **Sidebar file filter** — a filter icon in the sidebar title bar toggles a glob input. Accepts comma-separated patterns (e.g. `*.ts, src/**`). Client-side matching filters the tree instantly. Icon shows active state when filter is applied but input hidden. Languages panel dims filtered-out languages.
+- **Directory name hover underline** — directory names now show an underline on hover to indicate drill-down interactivity.
+
+### Changed
+- **Tooltip triggers on bar area only** — the per-directory language breakdown tooltip now appears when hovering the proportional bar (and surrounding padding), not the entire directory row. The hover target extends above and below the bar for easy access.
+
 ## [1.7.1] — 2026-04-01
 
 ### Added

@@ -2,7 +2,7 @@
   "name": "dirview",
   "displayName": "Directory Breakdown",
   "description": "Visualize per-directory file type composition as GitHub-style colored proportional bars",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "publisher": "zwoosh",
   "license": "MIT",
   "repository": {
@@ -183,10 +183,40 @@
       {
         "command": "dirview.contextCopyLineText",
         "title": "Copy Line Text"
+      },
+      {
+        "command": "dirview.navigateUp",
+        "title": "Navigate Up",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "dirview.toggleFileFilter",
+        "title": "Filter Files",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "dirview.toggleFileFilterOff",
+        "title": "Filter Files (active)",
+        "icon": "$(filter-filled)"
       }
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "dirview.navigateUp",
+          "when": "view == dirview.sidebar && dirview.sidebarDrilledDown",
+          "group": "navigation@-2"
+        },
+        {
+          "command": "dirview.toggleFileFilter",
+          "when": "view == dirview.sidebar && !dirview.fileFilterActive",
+          "group": "navigation@-1"
+        },
+        {
+          "command": "dirview.toggleFileFilterOff",
+          "when": "view == dirview.sidebar && dirview.fileFilterActive",
+          "group": "navigation@-1"
+        },
         {
           "command": "dirview.refresh",
           "when": "view == dirview.sidebar && !dirview.autoRescanEnabled",

@@ -205,13 +205,15 @@ Note: `test-repos/` contains sample repositories used for visual testing of the 
 - `dirview.toggleTruncation` / `dirview.toggleTruncationOff` — Toggle file truncation
 - `dirview.toggleStickyHeaders` / `dirview.toggleStickyHeadersOff` — Toggle sticky directory headers
 - `dirview.expandAll` / `dirview.collapseAll` — Expand/collapse all directories
+- `dirview.navigateUp` — Navigate sidebar to parent directory (visible when drilled down)
+- `dirview.toggleFileFilter` / `dirview.toggleFileFilterOff` — Toggle sidebar file filter input visibility
 - `dirview.languagesShowPct` / `dirview.languagesShowCount` — Toggle percentage/count display in languages panel
 - `dirview.contextCopyPath` — Copy file/dir path (context menu)
 - `dirview.contextRevealInExplorer` — Reveal in Explorer (context menu)
 - `dirview.contextOpenFile` — Open file (context menu)
 - `dirview.contextOpenInTerminal` — Open in terminal (context menu)
 - `dirview.contextCopyLineText` — Copy line text (context menu)
-- Context keys: `dirview.showIgnored`, `dirview.truncationEnabled`, `dirview.allExpanded`, `dirview.sortMode`, `dirview.stickyHeadersEnabled`
+- Context keys: `dirview.showIgnored`, `dirview.truncationEnabled`, `dirview.allExpanded`, `dirview.sortMode`, `dirview.stickyHeadersEnabled`, `dirview.sidebarDrilledDown`, `dirview.fileFilterActive`
 - Config: `dirview.autoRescanThreshold` (default 10000), `dirview.maxDepth` (default 0 = unlimited), `dirview.truncateThreshold` (default 3), `dirview.openTabOnStartup` (default false), `dirview.allowDuplicateTabs` (default true)
 
 ## User Actions & Rendering Effects
@@ -240,6 +242,10 @@ Note: `test-repos/` contains sample repositories used for visual testing of the 
 | Expand All (title bar) | `dirview.expandAll` → posts `expandAll` to sidebar webview | 3-tier expand (same as per-dir hover button, applied at workspace root level). Re-renders. |
 | Collapse All (title bar) | `dirview.collapseAll` → posts `collapseAll` to sidebar webview | 3-tier collapse (same as per-dir hover button, applied at workspace root level). Clears truncation/empty-group expanded state. Re-renders. |
 | Refresh (warning banner) | Webview posts `refresh` → `onRefresh` → `doScan()` | Full rescan and update. |
+| Navigate Up (title bar) | `dirview.navigateUp` → `sidebarProvider.navigateUp()` → computes parent path → `sendUpdateForCurrentDir()` | Navigates to parent directory. Hidden at workspace root via `dirview.sidebarDrilledDown` context key. |
+| Click dir name | Webview posts `navigateToDir` → `sidebarProvider` updates `dirPath` → `sendUpdateForCurrentDir()` | Drills down into directory. Title bar updates to directory basename. |
+| Toggle File Filter (title bar) | `dirview.toggleFileFilter[Off]` → `sidebarProvider.toggleFileFilter()` → posts `toggleFileFilter` to webview | Toggles filter input visibility. Icon swaps to filled variant when filter active (`dirview.fileFilterActive` context key). |
+| File filter input | Client-side glob matching against DirNode tree → sets `state.searchResults` + `searchAncestorPaths` | Filters tree to matching files. Status shows file count. Comma-separated globs, debounced 300ms. Escape clears. |
 
 ### Tab-specific actions
 

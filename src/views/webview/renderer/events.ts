@@ -227,13 +227,16 @@ export function setupDelegatedEvents(ctx: RendererContext): void {
     }
   });
 
-  // Delegated tooltip: show on mouseover a dir-row, hide on mouseout.
+  // Delegated tooltip: show on mouseover the bar area, hide on mouseout.
   // Using mouseover/mouseout (bubbling) instead of per-row mouseenter/mouseleave.
   root.addEventListener('mouseover', (e: MouseEvent) => {
-    const row = (e.target as HTMLElement).closest('.dir-row[data-path]') as HTMLElement | null;
+    // Only trigger on the bar-wrap (bar + its padding) or bar-spacer, not the whole row.
+    const barArea = (e.target as HTMLElement).closest('.bar-wrap, .bar-spacer') as HTMLElement | null;
+    if (!barArea) { return; }
+    const row = barArea.closest('.dir-row[data-path]') as HTMLElement | null;
     if (!row) { return; }
-    // Avoid re-triggering when moving between child elements of the same row.
-    if (e.relatedTarget && row.contains(e.relatedTarget as Node)) { return; }
+    // Avoid re-triggering when moving between child elements within the bar area.
+    if (e.relatedTarget && barArea.contains(e.relatedTarget as Node)) { return; }
 
     const path = row.dataset.path!;
     const entry = nodeMap.get(path);
@@ -293,8 +296,14 @@ export function setupDelegatedEvents(ctx: RendererContext): void {
   });
 
   root.addEventListener('mouseout', (e: MouseEvent) => {
-    const row = (e.target as HTMLElement).closest('.dir-row[data-path]') as HTMLElement | null;
-    if (row && !row.contains(e.relatedTarget as Node)) {
+    const barArea = (e.target as HTMLElement).closest('.bar-wrap, .bar-spacer') as HTMLElement | null;
+    if (barArea && !barArea.contains(e.relatedTarget as Node)) {
+      // Also keep tooltip if moving to the adjacent bar-spacer/bar-wrap within the same row.
+      const row = barArea.closest('.dir-row[data-path]');
+      const relTarget = e.relatedTarget as HTMLElement | null;
+      if (row && relTarget && row.contains(relTarget) && relTarget.closest('.bar-wrap, .bar-spacer')) {
+        return;
+      }
       tooltip.style.display = 'none';
     }
   });

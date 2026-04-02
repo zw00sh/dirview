@@ -64,6 +64,16 @@ export class LanguagesProvider implements vscode.WebviewViewProvider {
     if (this.view) { post(this.view.webview, { type: 'languagesUpdate', roots: this.stripRoots(payload.roots), activeFilters: this.activeFilters, showPct: this.showPct }); }
   }
 
+  /** Update the languages panel with sidebar-scoped stats (drill-down or file filter).
+   *  scopeRoots = unfiltered stats for the current directory (baseline).
+   *  filteredRoots = stats after file filter (current view). */
+  updateFromSidebar(
+    scopeRoots: Array<{ stats: import('../scanner/types').FileTypeStats[]; totalFiles: number }>,
+    filteredRoots: Array<{ stats: import('../scanner/types').FileTypeStats[]; totalFiles: number }>,
+  ): void {
+    if (this.view) { post(this.view.webview, { type: 'languagesUpdate', roots: filteredRoots, activeFilters: this.activeFilters, showPct: this.showPct, scoped: true, scopeRoots }); }
+  }
+
   toggleDisplayMode(): void {
     this.showPct = !this.showPct;
     vscode.commands.executeCommand('setContext', 'dirview.languagesShowPct', this.showPct);

@@ -269,6 +269,11 @@ body {
   font-size: var(--vscode-font-size, 13px);
 }
 
+.dir-name:hover {
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* Compacted path rendering: dimmed separator, hoverable segments */
 .path-sep {
   opacity: 0.4;
@@ -289,6 +294,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  padding: 4px 0;
+  margin: -4px 0;
 }
 
 .bar {

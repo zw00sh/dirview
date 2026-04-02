@@ -8,7 +8,10 @@ import {
   isFiltered,
   emptyState,
   skeletonState,
+  SVG_CLOSE,
+  compactedPath,
 } from './index';
+import { globToRegex } from './globMatch';
 import { flattenTree } from './virtual/flatten';
 import { createVirtualScroller } from './virtual/scroller';
 import { createStickyOverlay } from './virtual/sticky-overlay';
@@ -22,6 +25,8 @@ const scanBar = createScanBar();
 const tooltip = createTooltip();
 const state = createState();
 state.scanBar = scanBar;
+state.dirPath = '';
+state.workspaceFolderName = '';
 
 const renderer = createRenderer(state, {
   vscode,
@@ -33,6 +38,9 @@ const renderer = createRenderer(state, {
     barFactor: 0.4,
     barMaxWidth: 200,
     barFallbackWidth: 300,
+  },
+  onNavigate: (path: string) => {
+    vscode.postMessage({ command: 'navigateToDir', path });
   },
 });
 
@@ -127,6 +135,111 @@ const overlay = createStickyOverlay({
   renderRow: (row) => renderFlatRow(renderer, row),
 });
 
+// ── File filter bar ──────────────────────────────────────────────────────
+
+const filterInput = h('input', {
+  type: 'text',
+  className: 'sidebar-filter-input',
+  placeholder: 'Filter files (e.g. *.ts, src/**)',
+  attr: { 'aria-label': 'Filter files by glob pattern' },
+});
+
+const filterClear = h('button', {
+  className: 'sidebar-filter-clear',
+  title: 'Clear Filter (Escape)',
+  innerHTML: SVG_CLOSE,
+  style: { display: 'none' },
+  attr: { 'aria-label': 'Clear Filter' },
+});
+
+const filterStatus = h('span', { className: 'sidebar-filter-status' });
+
+const filterBar = h('div', {
+  className: 'sidebar-filter-bar',
+  style: { display: 'none' },
+}, filterInput, filterClear, filterStatus);
+
+// Insert filter bar before the tree root container.
+root.parentElement!.insertBefore(filterBar, root);
+
+let filterTimer: ReturnType<typeof setTimeout> | null = null;
+let filterBarVisible = false;
+
+function applyFileFilter(pattern: string): void {
+  if (!pattern.trim() || !state.lastRoots) {
+    state.searchResults = null;
+    state.searchAncestorPaths = null;
+    state.fileFilterActive = false;
+    state.searchResultsVersion++;
+    filterStatus.textContent = '';
+    filterClear.style.display = 'none';
+    state.expanded.clear();
+    vscode.postMessage({ command: 'fileFilterActive', active: false });
+    state.rerender();
+    return;
+  }
+
+  const patterns = pattern.split(',').map(p => p.trim()).filter(Boolean);
+  const matchers = patterns.map(p => globToRegex(p));
+
+  const matches = new Map<string, never[]>();
+  const ancestors = new Set<string>();
+
+  function walkTree(node: DirNode): boolean {
+    let hasMatch = false;
+    for (const file of node.files || []) {
+      const name = file.name ?? file.path.split('/').pop() ?? '';
+      for (const { regex, hasSlash } of matchers) {
+        const target = hasSlash ? (node.path + '/' + name) : name;
+        if (regex.test(target)) {
+          matches.set(file.path, []);
+          hasMatch = true;
+          break;
+        }
+      }
+    }
+    for (const child of node.children) {
+      if (walkTree(child)) hasMatch = true;
+    }
+    if (hasMatch) ancestors.add(node.path);
+    return hasMatch;
+  }
+
+  for (const root of state.lastRoots) walkTree(root);
+  ancestors.add('');
+
+  state.searchResults = matches;
+  state.searchAncestorPaths = ancestors;
+  state.fileFilterActive = true;
+  state.searchResultsVersion++;
+
+  state.expanded.clear();
+  for (const dirPath of ancestors) state.expanded.set(dirPath, true);
+
+  filterStatus.textContent = matches.size + ' file' + (matches.size !== 1 ? 's' : '');
+  filterClear.style.display = '';
+  vscode.postMessage({ command: 'fileFilterActive', active: true });
+  state.rerender();
+}
+
+filterInput.addEventListener('input', () => {
+  if (filterTimer) clearTimeout(filterTimer);
+  filterTimer = setTimeout(() => applyFileFilter(filterInput.value), 300);
+});
+
+filterInput.addEventListener('keydown', (e: KeyboardEvent) => {
+  if (e.key === 'Escape') {
+    filterInput.value = '';
+    applyFileFilter('');
+    filterInput.blur();
+  }
+});
+
+filterClear.addEventListener('click', () => {
+  filterInput.value = '';
+  applyFileFilter('');
+});
+
 // ── Render ───────────────────────────────────────────────────────────────
 
 let initialRender = true;
@@ -163,7 +276,7 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
     initialRender = false;
   }
 
-  const { flatRows, totalHeight } = flattenTree(state, roots, {
+  const { flatRows, totalHeight, filteredRoots } = flattenTree(state, roots, {
     clientWidth: root.clientWidth || 300,
   });
 
@@ -172,6 +285,16 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   currentFlatRows = flatRows;
   scroller.setTreeClass('sidebar' + (state.currentSortMode === 'size' || state.currentSortMode === 'lines' ? ' sort-size' : ''));
   scroller.update(flatRows, totalHeight);
+
+  // Send scope + filtered stats to the host so the Languages panel stays in sync.
+  // scopeRoots = unfiltered roots for the current dirPath (the baseline).
+  // filteredRoots = after file/language filter (the current view).
+  const strip = (r: DirNode) => ({ stats: r.stats, totalFiles: r.totalFiles });
+  vscode.postMessage({
+    command: 'sidebarStats',
+    scopeRoots: roots.map(strip),
+    filteredRoots: (filteredRoots || roots).map(strip),
+  });
 
   const filteredEmpty = state._isFiltered && flatRows.length === 0;
   const existingNoResults = root.querySelector(':scope > .empty-state');
@@ -191,6 +314,20 @@ const sharedMsgHandler = createMessageHandler(state, scanBar, root, {
   render,
   onBeforeUpdate: (message: BackendToWebviewMessage & { type: 'update' }) => {
     initialRender = true;
+    const dirChanged = typeof message.dirPath === 'string' && message.dirPath !== state.dirPath;
+    if (typeof message.dirPath === 'string') { state.dirPath = message.dirPath; }
+    if (typeof message.workspaceFolderName === 'string') { state.workspaceFolderName = message.workspaceFolderName; }
+    // When navigating into a directory, expand its direct children one level.
+    if (dirChanged && state.dirPath) {
+      state.expanded.clear();
+      const roots = message.roots as DirNode[];
+      for (const root of roots) {
+        state.expanded.set(root.path, true);
+        for (const child of root.children) {
+          state.expanded.set(compactedPath(child), true);
+        }
+      }
+    }
     if (typeof message.truncateThreshold === 'number') {
       if (message.truncateThreshold !== state.truncateThreshold) {
         state.truncationExpanded.clear();
@@ -202,12 +339,24 @@ const sharedMsgHandler = createMessageHandler(state, scanBar, root, {
       overlay.setEnabled(message.stickyHeadersEnabled);
     }
   },
+  onAfterRender: () => {
+    // Re-apply file filter after new scan data arrives.
+    if (filterInput.value.trim() && state.lastRoots) {
+      applyFileFilter(filterInput.value);
+    }
+  },
 });
 
 window.addEventListener('message', (event: MessageEvent) => {
   const message = event.data;
   if (message.type === 'updateStickyHeaders') {
     overlay.setEnabled(message.enabled);
+    return;
+  }
+  if (message.type === 'toggleFileFilter') {
+    filterBarVisible = !filterBarVisible;
+    filterBar.style.display = filterBarVisible ? '' : 'none';
+    if (filterBarVisible) { filterInput.focus(); }
     return;
   }
   sharedMsgHandler(event);

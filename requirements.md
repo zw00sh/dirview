@@ -156,6 +156,26 @@ Uses the same 3-tier logic as per-directory buttons, applied at the workspace ro
 
 Collapse All also clears truncation-expanded and empty-group-expanded state. When search is active, Collapse All also collapses all file match groups. Expand All expands all file match groups.
 
+## Sidebar Drill-down
+
+- Clicking a directory **name** (not the row background) navigates into that directory, making it the new root of the sidebar tree.
+- The sidebar title bar updates to show the current directory's basename (e.g. "views" instead of "Tree").
+- An **up button** (arrow-up icon) appears in the title bar when drilled down. Clicking it navigates to the immediate parent directory. At the workspace root the button is hidden.
+- Drill-down is view-local to the sidebar. It does not affect the tab or languages panel.
+- When a rescan occurs while drilled down, the sidebar re-extracts the subtree for the current directory. If the directory was deleted, it resets to the workspace root.
+
+## Sidebar File Filter
+
+- A **filter icon** (funnel) in the sidebar title bar toggles the file filter input.
+- When a filter is active but the input is hidden, the icon swaps to a filled variant to indicate filtering is in effect.
+- The filter input accepts comma-separated glob patterns (e.g. `*.ts, src/**/*.test.*`).
+- Filtering is **client-side**: it matches FileNode names (or workspace-relative paths for patterns containing `/`) against the glob patterns. No ripgrep or search service is involved.
+- Matching is case-insensitive. Supported syntax: `*` (any non-slash), `**` (any including `/`), `?` (single non-slash), `{a,b}` (brace expansion).
+- When a filter is applied, the tree shows only matching files and their ancestor directories. Directory stats recalculate to reflect only filtered files (same pipeline as language filtering).
+- The file filter intersects with language filters: both must match for a file to be visible.
+- Clearing the filter (X button or Escape key) removes the filter and restores the full tree.
+- When new scan data arrives while a filter is active, the filter is re-applied against the updated tree.
+
 ## Language Filtering
 
 ### Languages Panel
