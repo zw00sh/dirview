@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.8.2] — 2026-04-10
+
+### Changed
+- **File row open icon is interactive** — the open-externally icon on file rows is now clickable (opens the file, same as clicking the row). Hover shows a highlighted background matching directory action buttons.
+
 ## [1.8.1] — 2026-04-10
 
 ### Fixed

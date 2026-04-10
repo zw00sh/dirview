@@ -107,10 +107,11 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     });
     row.appendChild(nameEl);
 
-    // Hover hint icon — non-interactive, just indicates "click to open"
+    // Hover action icon — opens the file (same as clicking the row)
     row.appendChild(h('span', {
       className: 'file-open-hint',
       innerHTML: SVG_OPEN_IN_TAB,
+      dataset: { action: 'openFile', path: file.path },
     }));
 
     row.appendChild(h('div', { className: 'bar-spacer' }));

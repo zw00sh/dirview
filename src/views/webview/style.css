@@ -202,8 +202,13 @@ body {
   align-items: center;
   flex-shrink: 0;
   color: var(--vscode-descriptionForeground);
-  pointer-events: none;
+  cursor: pointer;
   padding: 0 2px;
+  border-radius: 3px;
+}
+.file-open-hint:hover {
+  color: var(--vscode-foreground);
+  background: var(--vscode-toolbar-hoverBackground);
 }
 .file-row:hover .file-open-hint { display: inline-flex; }
 
