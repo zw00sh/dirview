@@ -107,6 +107,12 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     });
     row.appendChild(nameEl);
 
+    // Hover hint icon — non-interactive, just indicates "click to open"
+    row.appendChild(h('span', {
+      className: 'file-open-hint',
+      innerHTML: SVG_OPEN_IN_TAB,
+    }));
+
     row.appendChild(h('div', { className: 'bar-spacer' }));
 
     // File bar: proportional to the file's metric relative to the global max file metric.

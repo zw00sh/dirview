@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.8.1] — 2026-04-10
+
+### Fixed
+- **Light theme support** — replaced hardcoded `rgba(0,0,0,...)` backgrounds and scroll shadows with theme-aware values. File/truncated row backgrounds, toolbar scroll shadows, and hover fallbacks now adapt correctly to light, dark, and high-contrast themes.
+
+### Changed
+- **File row hover icon** — file rows now show an open-externally icon on hover (matching the directory row pattern) to indicate clickability.
+- **File row background** — removed the dimmed resting background from file rows for a cleaner look; hover highlight now provides the visual distinction.
+
 ## [1.8.0] — 2026-04-02
 
 ### Added
