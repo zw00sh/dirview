@@ -1,7 +1,7 @@
 // Core tree renderer for dirview webviews.
 // ES module — imported by main.ts, tab.ts, etc.
 
-import { SVG_CHEVRON, SVG_PLUS, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_OPEN_IN_TAB } from '../icons';
+import { SVG_CHEVRON, SVG_PLUS, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_OPEN_IN_TAB, SVG_ROOT_FOLDER, SVG_ROOT_FOLDER_OPENED } from '../icons';
 import {
   escHtml, formatBytes, formatLines, sortDirs, sortFiles, groupEmptyDirs,
   compactedNode, compactedPath, computeBarWidth,
@@ -262,22 +262,30 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
   // Renders just the directory row (<li> with <div class="dir-row">) without children.
   // Used by the virtual scroller to render flat dir rows. Also called internally by
   // renderDirNode() which adds the children <ul> on top.
-  function renderDirRow(node: DirNode, depth: number, maxMetric: number, ancestors: IndentAncestor[], clientWidth: number): HTMLLIElement {
+  // `isWorkspaceRoot` is true when this row represents a top-level workspace folder
+  // in a multi-root workspace — gets a workspace icon and a CSS marker class.
+  function renderDirRow(node: DirNode, depth: number, maxMetric: number, ancestors: IndentAncestor[], clientWidth: number, isWorkspaceRoot = false): HTMLLIElement {
     // Compact folders: collapse chain of dirs with exactly 1 child dir and 0 files.
     // Tree is pre-filtered, so children/files are already the visible set.
+    // Workspace root rows are NOT compacted — the root must always remain its own row.
     let displayNode: DirNode = node;
     let displayName: string = node.name;
     const compactSegments: Array<{ name: string; path: string }> = [{ name: node.name, path: node.path }];
-    while (displayNode.children.length === 1 && (displayNode.files || []).length === 0) {
-      displayName += ' / ' + displayNode.children[0].name;
-      compactSegments.push({ name: displayNode.children[0].name, path: displayNode.children[0].path });
-      displayNode = displayNode.children[0];
+    if (!isWorkspaceRoot) {
+      while (displayNode.children.length === 1 && (displayNode.files || []).length === 0) {
+        displayName += ' / ' + displayNode.children[0].name;
+        compactSegments.push({ name: displayNode.children[0].name, path: displayNode.children[0].path });
+        displayNode = displayNode.children[0];
+      }
     }
 
     const li = h('li', { dataset: { nodePath: displayNode.path } });
 
-    // Explicit entry, or implicitly expanded when filtered.
-    const shouldExpand = state.expanded.get(displayNode.path) ?? !!state._isFiltered;
+    // Workspace root rows default to expanded; other dirs default to collapsed (or
+    // implicitly expanded when filtered). Matches flatten.ts logic for consistency.
+    const shouldExpand = isWorkspaceRoot
+      ? (state.expanded.get(displayNode.path) ?? true)
+      : (state.expanded.get(displayNode.path) ?? !!state._isFiltered);
 
     const sortedChildren: DirNode[] = sortDirs(displayNode.children, state.currentSortMode);
     const sortedFiles: FileNode[] = sortFiles(displayNode.files || []);
@@ -286,13 +294,15 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
 
     // Dir row
     const row = h('div', {
-      className: 'dir-row' + (displayNode.totalFiles === 0 ? ' empty-dir' : ''),
+      className: 'dir-row'
+        + (displayNode.totalFiles === 0 ? ' empty-dir' : '')
+        + (isWorkspaceRoot ? ' dir-row-workspace-root' : ''),
       attr: {
         'data-path': displayNode.path,
         'data-vscode-context': JSON.stringify({
           webviewSection: 'directory',
           path: displayNode.path,
-          rootName: state.workspaceFolderName || state.currentRootName,
+          rootName: isWorkspaceRoot ? displayNode.name : (state.workspaceFolderName || state.currentRootName),
           preventDefaultContextMenuItems: true,
         }),
       },
@@ -310,11 +320,20 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
       row.appendChild(renderIndentGuides(depth, ancestors));
     }
 
-    // Chevron
-    row.appendChild(h('span', {
-      className: 'chevron' + (hasChildren ? (shouldExpand ? ' open' : '') : ' leaf'),
-      innerHTML: SVG_CHEVRON,
-    }));
+    // Chevron — workspace root rows replace the chevron with the codicon
+    // root-folder / root-folder-opened glyph (state-dependent), since the icon
+    // both marks the row as a workspace folder AND conveys expand state.
+    if (isWorkspaceRoot) {
+      row.appendChild(h('span', {
+        className: 'chevron workspace-root-icon' + (hasChildren ? (shouldExpand ? ' open' : '') : ' leaf'),
+        innerHTML: shouldExpand ? SVG_ROOT_FOLDER_OPENED : SVG_ROOT_FOLDER,
+      }));
+    } else {
+      row.appendChild(h('span', {
+        className: 'chevron' + (hasChildren ? (shouldExpand ? ' open' : '') : ' leaf'),
+        innerHTML: SVG_CHEVRON,
+      }));
+    }
 
     // Name — for compacted paths, render each segment separately with dimmed separators
     // and per-segment data-vscode-context for RMB "copy path" etc on individual segments.
@@ -421,9 +440,9 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     return li;
   }
 
-  function renderDirNode(node: DirNode, depth: number, maxMetric: number, ancestors: IndentAncestor[], clientWidth: number): HTMLLIElement {
+  function renderDirNode(node: DirNode, depth: number, maxMetric: number, ancestors: IndentAncestor[], clientWidth: number, isWorkspaceRoot = false): HTMLLIElement {
     // Render the <li> + <div class="dir-row"> via renderDirRow (shared with virtual scroller).
-    const li = renderDirRow(node, depth, maxMetric, ancestors, clientWidth);
+    const li = renderDirRow(node, depth, maxMetric, ancestors, clientWidth, isWorkspaceRoot);
 
     // Retrieve the display node from nodeMap — renderDirRow registered it under the
     // compacted path which is stored as li's data-node-path.
@@ -432,8 +451,11 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     const displayNode = entry.node as DirNode;
     const hasChildren = entry.hasChildren;
 
-    // Explicit entry, or implicitly expanded when filtered.
-    const shouldExpand = state.expanded.get(displayNode.path) ?? !!state._isFiltered;
+    // Workspace root rows default to expanded; other dirs default to collapsed (or
+    // implicitly expanded when filtered). Matches flatten.ts and renderDirRow.
+    const shouldExpand = isWorkspaceRoot
+      ? (state.expanded.get(displayNode.path) ?? true)
+      : (state.expanded.get(displayNode.path) ?? !!state._isFiltered);
 
     const sortedChildren: DirNode[] = sortDirs(displayNode.children, state.currentSortMode);
     const sortedFiles: FileNode[] = sortFiles(displayNode.files || []);

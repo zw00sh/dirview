@@ -4,6 +4,7 @@ import { Config } from './config';
 import { SidebarProvider } from './views/sidebarProvider';
 import { TabProvider } from './views/tabProvider';
 import { LanguagesProvider } from './views/languagesProvider';
+import { resolveDirPath } from './views/resolveDirPath';
 
 interface Providers {
   sidebar: SidebarProvider;
@@ -16,12 +17,6 @@ type WebviewContext =
   | { webviewSection: 'file'; path: string }
   | { webviewSection: 'matchLine'; path: string; lineText?: string }
   | { webviewSection: 'dir'; path: string; rootName: string };
-
-function resolveDirPath(relativePath: string, rootName: string): string | undefined {
-  const folder = vscode.workspace.workspaceFolders?.find(f => f.name === rootName);
-  if (!folder) { return undefined; }
-  return path.join(folder.uri.fsPath, relativePath);
-}
 
 export function registerCommands(
   context: vscode.ExtensionContext,

@@ -45,6 +45,7 @@ const legendActiveAlert = document.getElementById('legend-active-alert')!;
 const treeSection = document.getElementById('tree-section')!;
 const treeHeaderEl = document.getElementById('tree-header')!;
 const root = document.getElementById('root')!;
+const treeHeaderTitle = document.getElementById('tree-header-title')!;
 const treeHeaderBreadcrumb = document.getElementById('tree-header-breadcrumb')!;
 const sortBtn = document.getElementById('tab-sort')!;
 const toggleStickyBtn = document.getElementById('tab-toggle-sticky')!;
@@ -74,6 +75,7 @@ const tabUI = {
   truncationEnabled: true,
   isLocal: true,
   stickyEnabled: true,
+  isMultiRoot: false,
 };
 // Initialise chevron to match expanded state (chevron rotated 90° = expanded).
 searchChevronEl.style.transform = 'rotate(90deg)';
@@ -200,27 +202,29 @@ function updateRefreshBtn(autoRescanEnabled: boolean) {
 }
 
 function updateNavigation() {
+  // In single-root mode, show the workspace folder name (matching the editor tab title);
+  // in multi-root mode, show the generic "WORKSPACE" label since no single name applies.
+  const titleText = !tabUI.isMultiRoot && state.workspaceFolderName
+    ? state.workspaceFolderName
+    : 'WORKSPACE';
+  treeHeaderTitle.textContent = titleText;
+
   treeHeaderBreadcrumb.innerHTML = '';
+  // The title acts as the navigation root. The breadcrumb only shows the drill-down
+  // path (when dirPath is non-empty) — segments separated by " / ", each clickable
+  // to jump to that ancestor level.
+  if (!state.dirPath) { return; }
 
-  // Build breadcrumb segments — always visible (shows workspace name at root)
-  const segments = state.dirPath ? state.dirPath.split('/') : [];
-  const hasRootName = !!state.workspaceFolderName;
-  const allNames = state.dirPath
-    ? (hasRootName ? [state.workspaceFolderName, ...segments] : segments)
-    : [state.workspaceFolderName || 'Tree'];
-
-  for (let i = 0; i < allNames.length; i++) {
-    if (i > 0) {
-      treeHeaderBreadcrumb.appendChild(h('span', { className: 'path-sep', textContent: ' / ' }));
-    }
-    const offset = hasRootName ? i - 1 : i;
-    const segPath = !state.dirPath ? '' : (offset < 0 ? '' : segments.slice(0, offset + 1).join('/'));
-    const isLast = i === allNames.length - 1;
+  const segments = state.dirPath.split('/');
+  for (let i = 0; i < segments.length; i++) {
+    treeHeaderBreadcrumb.appendChild(h('span', { className: 'path-sep', textContent: ' / ' }));
+    const segPath = segments.slice(0, i + 1).join('/');
+    const isLast = i === segments.length - 1;
     const seg = h('span', {
       className: 'path-segment' + (isLast ? ' current' : ''),
-      textContent: allNames[i],
+      textContent: segments[i],
     });
-    if (!isLast || state.dirPath) {
+    if (!isLast) {
       seg.addEventListener('click', (e: MouseEvent) => {
         e.stopPropagation();
         navigateTo(segPath);
@@ -230,13 +234,11 @@ function updateNavigation() {
   }
 }
 
-/** Add one level of indentation so the tree appears nested under the header breadcrumb. */
-function addHeaderIndent(rows: FlatRow[]) {
-  for (const row of rows) {
-    (row as any).depth += 1;
-    row.ancestors = [null as any, ...row.ancestors];
-  }
-}
+// WORKSPACE title click → navigate to the all-roots view (drill back out to the top).
+treeHeaderTitle.addEventListener('click', () => navigateTo(''));
+treeHeaderTitle.addEventListener('keydown', (e: KeyboardEvent) => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigateTo(''); }
+});
 
 updateToggleIgnoredBtn();
 updateTruncationBtn();
@@ -249,7 +251,7 @@ updateNavigation();
 function renderFlatRow(r: Renderer, row: FlatRow): HTMLElement {
   switch (row.type) {
     case 'dir':
-      return r.renderDirRow(row.node, row.depth, row.maxMetric, row.ancestors, row.clientWidth);
+      return r.renderDirRow(row.node, row.depth, row.maxMetric, row.ancestors, row.clientWidth, row.isWorkspaceRoot);
     case 'file':
       return r.renderFileNode(row.file, row.depth, row.ancestors, row.hasMatches, row.maxFileMetric, row.clientWidth);
     case 'truncated':
@@ -317,8 +319,6 @@ function renderFlatRow(r: Renderer, row: FlatRow): HTMLElement {
     }
     case 'moreMatches':
       return r.renderMoreMatchesRow(row.count, row.depth, row.ancestors, row.filePath);
-    case 'workspaceHeader':
-      return h('li', { className: 'workspace-root-header', textContent: row.name });
   }
 }
 
@@ -560,7 +560,6 @@ function render(roots: DirNode[], autoRescanEnabled: boolean, sortMode: SortMode
   const { flatRows, totalHeight, totalVisibleFiles, totalVisibleMatches, filteredRoots, searchFilteredStats } = flattenTree(state, roots, {
     clientWidth: root.clientWidth || 600,
   });
-  addHeaderIndent(flatRows);
 
   // Restore threshold for future interactive renders.
   state.truncateThreshold = savedThreshold;
@@ -633,6 +632,7 @@ const sharedHandler = createMessageHandler(state, scanBar, root, {
       if (dirChanged && state.searchResults) { searchBar.triggerSearch(); }
     }
     if (typeof message.workspaceFolderName === 'string') { state.workspaceFolderName = message.workspaceFolderName; }
+    if (typeof message.isMultiRoot === 'boolean') { tabUI.isMultiRoot = message.isMultiRoot; }
     updateNavigation();
     if (typeof message.stickyHeadersEnabled === 'boolean') {
       tabUI.stickyEnabled = message.stickyHeadersEnabled;

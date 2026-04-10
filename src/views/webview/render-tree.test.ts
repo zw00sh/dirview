@@ -55,6 +55,70 @@ describe('renderTree root rendering', () => {
   });
 });
 
+// --- Workspace root rendering (multi-root) ---
+
+describe('renderDirRow workspace root marker', () => {
+  it('marks the row with dir-row-workspace-root class when isWorkspaceRoot is true', () => {
+    const state = createState();
+    const root = makeDir('frontend', 'frontend', {
+      children: [makeDir('frontend/src', 'src', { totalFiles: 1, stats: [] })],
+      totalFiles: 1, stats: [],
+    });
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderDirRow(root, 0, 1, [], 300, true);
+    const dirRow = li.querySelector('.dir-row');
+    expect(dirRow).not.toBeNull();
+    expect(dirRow.classList.contains('dir-row-workspace-root')).toBe(true);
+  });
+
+  it('renders a workspace icon for workspace root rows', () => {
+    const state = createState();
+    const root = makeDir('frontend', 'frontend', {
+      children: [makeDir('frontend/src', 'src', { totalFiles: 1, stats: [] })],
+      totalFiles: 1, stats: [],
+    });
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderDirRow(root, 0, 1, [], 300, true);
+    expect(li.querySelector('.workspace-root-icon')).not.toBeNull();
+  });
+
+  it('does NOT mark regular dir rows with workspace-root class or icon', () => {
+    const state = createState();
+    const dir = makeDir('frontend/src', 'src', { totalFiles: 1, stats: [] });
+    const renderer = makeRenderer(state);
+    renderer.beforeRender();
+    const li = renderer.renderDirRow(dir, 1, 1, [], 300, false);
+    const dirRow = li.querySelector('.dir-row');
+    expect(dirRow.classList.contains('dir-row-workspace-root')).toBe(false);
+    expect(li.querySelector('.workspace-root-icon')).toBeNull();
+  });
+
+  it('uses expanded folder glyph when workspace root is expanded, closed glyph when collapsed', () => {
+    const state = createState();
+    const child = makeDir('frontend/src', 'src', { totalFiles: 1, stats: [] });
+    const root = makeDir('frontend', 'frontend', { children: [child], totalFiles: 1, stats: [] });
+    const renderer = makeRenderer(state);
+
+    // Default (no explicit expand state) — workspace roots default to expanded.
+    renderer.beforeRender();
+    const liExpanded = renderer.renderDirRow(root, 0, 1, [], 300, true);
+    const iconExpanded = liExpanded.querySelector('.workspace-root-icon')!;
+    expect(iconExpanded.classList.contains('open')).toBe(true);
+
+    // Explicitly collapsed.
+    state.expanded.set('frontend', false);
+    renderer.beforeRender();
+    const liCollapsed = renderer.renderDirRow(root, 0, 1, [], 300, true);
+    const iconCollapsed = liCollapsed.querySelector('.workspace-root-icon')!;
+    expect(iconCollapsed.classList.contains('open')).toBe(false);
+
+    // The two SVG payloads must differ — different codicon glyphs for the two states.
+    expect(iconExpanded.innerHTML).not.toBe(iconCollapsed.innerHTML);
+  });
+});
+
 // --- Feature 3: single-dir root truncation disabled ---
 
 describe('single-dir root truncation disabled', () => {

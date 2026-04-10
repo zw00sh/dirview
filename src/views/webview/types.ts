@@ -26,7 +26,7 @@ export interface SearchMatch {
 export type BackendToWebviewMessage =
   | { type: 'scanning' }
   | { type: 'loading' }
-  | { type: 'update'; roots: DirNode[]; autoRescanEnabled: boolean; sortMode: SortMode; truncateThreshold: number; stickyHeadersEnabled: boolean; showIgnored?: boolean; isLocal?: boolean; dirPath?: string; workspaceFolderName?: string; activeFilters?: string[]; showPct?: boolean; hasRipgrep?: boolean }
+  | { type: 'update'; roots: DirNode[]; autoRescanEnabled: boolean; sortMode: SortMode; truncateThreshold: number; stickyHeadersEnabled: boolean; showIgnored?: boolean; isLocal?: boolean; dirPath?: string; workspaceFolderName?: string; isMultiRoot?: boolean; activeFilters?: string[]; showPct?: boolean; hasRipgrep?: boolean }
   | { type: 'updateTruncation'; truncateThreshold: number; truncationEnabled?: boolean }
   | { type: 'updateSortMode'; sortMode: SortMode }
   | { type: 'updateStickyHeaders'; enabled: boolean }
@@ -183,8 +183,8 @@ export interface Renderer {
   renderFileMatches(container: HTMLElement, file: FileNode, depth: number, ancestors: IndentAncestor[]): void;
   renderTruncatedRow(hiddenFiles: FileNode[], depth: number, ancestors: IndentAncestor[], dirPath: string, maxMetric: number, clientWidth: number): HTMLLIElement;
   renderEmptyGroupNode(nodes: DirNode[], depth: number, maxMetric: number, ancestors: IndentAncestor[]): HTMLLIElement;
-  renderDirRow(node: DirNode, depth: number, maxMetric: number, ancestors: IndentAncestor[], clientWidth: number): HTMLLIElement;
-  renderDirNode(node: DirNode, depth: number, maxMetric: number, ancestors: IndentAncestor[], clientWidth: number): HTMLLIElement;
+  renderDirRow(node: DirNode, depth: number, maxMetric: number, ancestors: IndentAncestor[], clientWidth: number, isWorkspaceRoot?: boolean): HTMLLIElement;
+  renderDirNode(node: DirNode, depth: number, maxMetric: number, ancestors: IndentAncestor[], clientWidth: number, isWorkspaceRoot?: boolean): HTMLLIElement;
 }
 
 // ── Lang stat (computed from roots for legend rendering) ──────────────────────

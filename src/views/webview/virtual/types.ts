@@ -11,7 +11,6 @@ export const ROW_HEIGHT_FILE = 22;
 export const ROW_HEIGHT_TRUNCATED = 22;
 export const ROW_HEIGHT_EMPTY_GROUP = 22;
 export const ROW_HEIGHT_MORE_MATCHES = 22;
-export const ROW_HEIGHT_WORKSPACE_HEADER = 30;
 export const ROW_HEIGHT_MATCH_LINE = 18;
 export const ROW_HEIGHT_CONTEXT_LINE = 18;
 export const ROW_HEIGHT_MATCH_SPACER = 6;
@@ -37,6 +36,9 @@ export interface DirFlatRow extends FlatRowBase {
   hasChildren: boolean;
   maxMetric: number;
   clientWidth: number;
+  /** True when this row represents a workspace folder root in a multi-root workspace.
+   *  Renderer uses this to display a workspace icon and (optionally) distinct styling. */
+  isWorkspaceRoot?: boolean;
 }
 
 export interface FileFlatRow extends FlatRowBase {
@@ -93,24 +95,13 @@ export interface MoreMatchesFlatRow {
   ancestors: IndentAncestor[];
 }
 
-export interface WorkspaceHeaderFlatRow {
-  type: 'workspaceHeader';
-  key: string;
-  depth: 0;
-  height: typeof ROW_HEIGHT_WORKSPACE_HEADER;
-  offsetY: number;
-  name: string;
-  ancestors: IndentAncestor[];
-}
-
 export type FlatRow =
   | DirFlatRow
   | FileFlatRow
   | TruncatedFlatRow
   | EmptyGroupFlatRow
   | MatchGroupFlatRow
-  | MoreMatchesFlatRow
-  | WorkspaceHeaderFlatRow;
+  | MoreMatchesFlatRow;
 
 // ── Flatten result ───────────────────────────────────────────────────────────
 

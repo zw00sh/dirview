@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { Config } from '../config';
 import { DirNode, ScanUpdatePayload } from '../scanner/types';
+import { splitRootPath } from '../scanner/multiRootPaths';
 import { buildWebviewHtml } from './buildWebviewHtml';
 import { skeletonTreeHtml, skeletonLegendHtml } from './skeletonHtml';
 import { handleCommonMessage, handleSearchMessage, post } from './providerUtils';
@@ -129,8 +130,18 @@ export class TabProvider {
     if (dirPath === '') {
       return vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath) ?? [];
     }
-    // Convert the workspace-relative dirPath to an absolute filesystem path.
     const folders = vscode.workspace.workspaceFolders ?? [];
+    // Multi-root mode: dirPath is prefixed with the root folder name
+    // (e.g. "frontend/src/utils"). Extract the root name to find the matching
+    // workspace folder, then join the remaining relative path.
+    if (folders.length > 1) {
+      const { rootName, relPath } = splitRootPath(dirPath);
+      const folder = folders.find(f => f.name === rootName);
+      if (folder) {
+        return [relPath === '' ? folder.uri.fsPath : vscode.Uri.joinPath(folder.uri, relPath).fsPath];
+      }
+    }
+    // Single-root: dirPath is workspace-folder-relative.
     if (folders.length > 0) {
       return [vscode.Uri.joinPath(folders[0].uri, dirPath).fsPath];
     }
@@ -144,6 +155,9 @@ export class TabProvider {
       roots,
       dirPath,
       workspaceFolderName: this.getWorkspaceFolderName(dirPath),
+      // Multi-root mode is determined by the original (untruncated) scan payload,
+      // so it remains accurate even when this tab is drilled into a single root subtree.
+      isMultiRoot: (this.lastPayload?.roots?.length ?? 0) > 1,
       autoRescanEnabled: overrides?.autoRescanEnabled ?? this.lastPayload?.autoRescanEnabled ?? true,
       sortMode: overrides?.sortMode ?? this.lastPayload?.sortMode ?? 'files',
       truncateThreshold: overrides?.truncateThreshold ?? this.lastPayload?.truncateThreshold ?? 4,
@@ -358,7 +372,8 @@ export class TabProvider {
   </div>
   <div id="tree-section" class="tab-tree-section">
   <div id="tree-header" class="tab-tree-header">
-    <span class="tab-tree-header-chevron"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M6.146 3.146a.5.5 0 0 0 0 .707l4.146 4.146-4.146 4.146a.5.5 0 0 0 .707.707l4.5-4.5a.5.5 0 0 0 0-.707l-4.5-4.5a.5.5 0 0 0-.707 0Z"/></svg></span>
+    <span class="tab-tree-header-icon"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2 3.5C2 3.22386 2.22386 3 2.5 3H13.5C13.7761 3 14 3.22386 14 3.5C14 3.77614 13.7761 4 13.5 4H6V6H13.5C13.7761 6 14 6.22386 14 6.5C14 6.77614 13.7761 7 13.5 7H6V9H13.5C13.7761 9 14 9.22386 14 9.5C14 9.77614 13.7761 10 13.5 10H6V12H13.5C13.7761 12 14 12.2239 14 12.5C14 12.7761 13.7761 13 13.5 13H5.5C5.22386 13 5 12.7761 5 12.5V4H2.5C2.22386 4 2 3.77614 2 3.5Z"/></svg></span>
+    <span id="tree-header-title" class="tab-tree-header-title" tabindex="0" role="button" title="Go to root">WORKSPACE</span>
     <span id="tree-header-breadcrumb" class="tab-tree-header-breadcrumb"></span>
     <div style="display:flex;align-items:center;gap:2px;margin-left:auto">
       <button class="tab-action tab-refresh-btn" id="tab-refresh" title="Refresh (auto-rescan disabled for large repo)" aria-label="Refresh" style="display:none"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M4.681 3.156a6 6 0 0 1 8.468 1.088l.47.616H11.5a.5.5 0 0 0 0 1h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-1 0v1.768l-.412-.54a7 7 0 1 0 1.374 5.107.5.5 0 1 0-.984.176A6 6 0 1 1 4.68 3.156z"/></svg></button>

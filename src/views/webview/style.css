@@ -496,19 +496,20 @@ body.vscode-high-contrast-light .truncated-row {
   flex-shrink: 0;
 }
 
-/* Multi-root workspace folder separator */
-.workspace-root-header {
-  list-style: none;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-foreground));
-  padding: 8px 8px 2px 4px;
-  opacity: 0.7;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* Workspace root rows: top-level dir-rows in multi-root workspaces. Treated as
+   regular sibling directories (collapsible, drillable, action buttons), but
+   distinguished by a workspace icon and slightly heavier weight. */
+/* Workspace root rows replace the chevron with the codicon root-folder /
+   root-folder-opened glyph. Override the .chevron rotation/visibility behaviors
+   since the icon itself conveys state and is always visible. */
+.chevron.workspace-root-icon {
+  color: var(--vscode-icon-foreground, var(--vscode-foreground));
+}
+.chevron.workspace-root-icon.open {
+  transform: none;
+}
+.chevron.workspace-root-icon.leaf {
+  visibility: visible;
 }
 
 /* ── Search bar ──────────────────────────────────────────────────────────── */

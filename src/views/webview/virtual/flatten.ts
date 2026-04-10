@@ -14,7 +14,7 @@ import type {
 import {
   ROW_HEIGHT_DIR, ROW_HEIGHT_FILE, ROW_HEIGHT_TRUNCATED, ROW_HEIGHT_EMPTY_GROUP,
   ROW_HEIGHT_MATCH_LINE, ROW_HEIGHT_CONTEXT_LINE, ROW_HEIGHT_MATCH_SPACER,
-  ROW_HEIGHT_MORE_MATCHES, ROW_HEIGHT_WORKSPACE_HEADER,
+  ROW_HEIGHT_MORE_MATCHES,
 } from './types';
 
 /**
@@ -51,20 +51,25 @@ export function flattenTree(
   // ── Step 3: Recursive walk ───────────────────────────────────────────────
   const flatRows: FlatRow[] = [];
   let totalVisibleFiles = 0;
-  // Key prefix for multi-root uniqueness — prevents virtual scroller key collisions
-  // when multiple workspace roots contain dirs with the same relative path (e.g. 'src').
-  let keyPrefix = '';
+  // Note: paths are now globally unique (prefixRootPaths is applied upstream in
+  // ScanCoordinator for multi-root workspaces), so we no longer need a keyPrefix.
 
   function flattenDirNode(
     node: DirNode,
     depth: number,
     ancestors: IndentAncestor[],
+    isWorkspaceRoot = false,
   ): void {
     // Folder compaction: collapse single-child-no-files chains.
-    const displayNode = compactedNode(node);
+    // Workspace root rows are NOT compacted — we always show the root as its own row,
+    // since it's the entry point for drilling down/collapsing the entire root.
+    const displayNode = isWorkspaceRoot ? node : compactedNode(node);
 
-    // Check expanded state — explicit entry, or implicitly expanded when filtered.
-    const shouldExpand = state.expanded.get(displayNode.path) ?? isFiltered;
+    // Workspace root rows default to expanded (treat undefined as true). Regular dirs
+    // default to collapsed unless filtered (existing behavior).
+    const shouldExpand = isWorkspaceRoot
+      ? (state.expanded.get(displayNode.path) ?? true)
+      : (state.expanded.get(displayNode.path) ?? isFiltered);
 
     const sortedChildren = sortDirs(displayNode.children, state.currentSortMode);
     const sortedFiles = sortFiles(displayNode.files || []);
@@ -73,7 +78,7 @@ export function flattenTree(
     // Emit DirFlatRow
     flatRows.push({
       type: 'dir',
-      key: keyPrefix + 'dir:' + displayNode.path,
+      key: 'dir:' + displayNode.path,
       depth,
       height: ROW_HEIGHT_DIR,
       offsetY: 0,
@@ -83,6 +88,7 @@ export function flattenTree(
       hasChildren,
       maxMetric,
       clientWidth,
+      isWorkspaceRoot,
     });
 
     if (!shouldExpand || !hasChildren) { return; }
@@ -102,7 +108,7 @@ export function flattenTree(
           } else {
             flatRows.push({
               type: 'emptyGroup',
-              key: keyPrefix + 'emptyGroup:' + group.nodes[0].path,
+              key: 'emptyGroup:' + group.nodes[0].path,
               depth: depth + 1,
               height: ROW_HEIGHT_EMPTY_GROUP,
               offsetY: 0,
@@ -134,7 +140,7 @@ export function flattenTree(
       const fileHasMatches = !!(state.searchResults?.has(file.path) && state.searchResults.get(file.path)!.length > 0);
       flatRows.push({
         type: 'file',
-        key: keyPrefix + 'file:' + file.path,
+        key: 'file:' + file.path,
         depth: depth + 1,
         height: ROW_HEIGHT_FILE,
         offsetY: 0,
@@ -153,7 +159,7 @@ export function flattenTree(
     if (hiddenFiles.length > 0) {
       flatRows.push({
         type: 'truncated',
-        key: keyPrefix + 'truncated:' + displayNode.path,
+        key: 'truncated:' + displayNode.path,
         depth: depth + 1,
         height: ROW_HEIGHT_TRUNCATED,
         offsetY: 0,
@@ -212,7 +218,7 @@ export function flattenTree(
 
       flatRows.push({
         type: 'matchGroup',
-        key: keyPrefix + 'group:' + file.path + ':' + firstMatch.matchGroup[0].line,
+        key: 'group:' + file.path + ':' + firstMatch.matchGroup[0].line,
         depth,
         height: groupHeight,
         offsetY: 0,
@@ -234,7 +240,7 @@ export function flattenTree(
     if (shouldTruncateMatches) {
       flatRows.push({
         type: 'moreMatches',
-        key: keyPrefix + 'more:' + file.path,
+        key: 'more:' + file.path,
         depth,
         height: ROW_HEIGHT_MORE_MATCHES,
         offsetY: 0,
@@ -246,24 +252,18 @@ export function flattenTree(
   }
 
   // ── Root handling ────────────────────────────────────────────────────────
-  // Mirrors renderRoots() logic.
+  // Multi-root: emit a top-level dir-row for each root (marked isWorkspaceRoot).
+  // Single-root: render the root's children directly at depth 0 (root invisible).
 
-  for (let ri = 0; ri < filteredRoots.length; ri++) {
-    const r = filteredRoots[ri];
-    // Set key prefix per root so multi-root workspaces don't collide on relative paths.
-    keyPrefix = filteredRoots.length > 1 ? ri + ':' : '';
-    if (filteredRoots.length > 1) {
-      flatRows.push({
-        type: 'workspaceHeader',
-        key: 'wsHeader:' + r.name,
-        depth: 0,
-        height: ROW_HEIGHT_WORKSPACE_HEADER,
-        offsetY: 0,
-        name: r.name,
-        ancestors: [],
-      });
+  if (filteredRoots.length > 1) {
+    // Each workspace folder becomes a first-class collapsible/drillable dir-row.
+    // Children render at depth 1 under the root row. Path-prefixing applied
+    // upstream in ScanCoordinator ensures globally-unique paths across roots.
+    for (const r of filteredRoots) {
+      flattenDirNode(r, 0, [], true);
     }
-
+  } else if (filteredRoots.length === 1) {
+    const r = filteredRoots[0];
     const sortedChildren = sortDirs(r.children, state.currentSortMode);
     const sortedFiles = sortFiles(r.files || []);
 
@@ -278,7 +278,7 @@ export function flattenTree(
           } else {
             flatRows.push({
               type: 'emptyGroup',
-              key: keyPrefix + 'emptyGroup:' + group.nodes[0].path,
+              key: 'emptyGroup:' + group.nodes[0].path,
               depth: 0,
               height: ROW_HEIGHT_EMPTY_GROUP,
               offsetY: 0,
@@ -309,7 +309,7 @@ export function flattenTree(
       const fileHasMatches = !!(state.searchResults?.has(file.path) && state.searchResults.get(file.path)!.length > 0);
       flatRows.push({
         type: 'file',
-        key: keyPrefix + 'file:' + file.path,
+        key: 'file:' + file.path,
         depth: 0,
         height: ROW_HEIGHT_FILE,
         offsetY: 0,
@@ -327,7 +327,7 @@ export function flattenTree(
     if (hiddenFiles.length > 0) {
       flatRows.push({
         type: 'truncated',
-        key: keyPrefix + 'truncated:' + r.path,
+        key: 'truncated:' + r.path,
         depth: 0,
         height: ROW_HEIGHT_TRUNCATED,
         offsetY: 0,

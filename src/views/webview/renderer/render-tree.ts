@@ -10,8 +10,11 @@ import { h } from '../h';
 
 import type { DirNode, WebviewState, Renderer } from '../types';
 
-// Renders the root-level tree rows into treeEl. Roots' children appear at depth 0.
-// For multi-root workspaces, a header row with the folder name appears above each root's children.
+// Renders the root-level tree rows into treeEl.
+// - Single-root workspace: the root itself is invisible; its children render at depth 0.
+// - Multi-root workspace: each root is rendered as a top-level dir-row (marked
+//   isWorkspaceRoot) with its children at depth 1. Path uniqueness is guaranteed by
+//   ScanCoordinator's prefixRootPaths transform applied upstream.
 export function renderRoots(
   renderer: Renderer,
   state: WebviewState,
@@ -25,11 +28,18 @@ export function renderRoots(
   const roots = state.lastRoots!;
   renderer.setFileMetricContext(maxFileMetric, clientWidth);
 
+  // Multi-root: render each workspace folder as a first-class dir-row.
+  if (roots.length > 1) {
+    for (const r of roots) {
+      state.currentRootName = r.name;
+      treeEl.appendChild(renderer.renderDirNode(r, 0, maxMetric, [], clientWidth, true));
+    }
+    return;
+  }
+
+  // Single-root: render children at depth 0 (existing behavior).
   for (const r of roots) {
     state.currentRootName = r.name;
-    if (roots.length > 1) {
-      treeEl.appendChild(h('li', { className: 'workspace-root-header', textContent: r.name }));
-    }
     const sortedChildren = sortDirs(r.children, state.currentSortMode);
     const sortedFiles = sortFiles(r.files || []);
 

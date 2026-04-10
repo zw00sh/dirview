@@ -7,7 +7,7 @@ import type { FlatRow, FlattenResult } from './types';
 import {
   ROW_HEIGHT_DIR, ROW_HEIGHT_FILE, ROW_HEIGHT_TRUNCATED, ROW_HEIGHT_EMPTY_GROUP,
   ROW_HEIGHT_MATCH_LINE, ROW_HEIGHT_MATCH_SPACER,
-  ROW_HEIGHT_MORE_MATCHES, ROW_HEIGHT_WORKSPACE_HEADER,
+  ROW_HEIGHT_MORE_MATCHES,
 } from './types';
 
 import '../test-helpers';
@@ -649,27 +649,100 @@ describe('flattenTree — filters', () => {
 });
 
 describe('flattenTree — multi-root workspace', () => {
-  it('2 workspace roots → WorkspaceHeaderFlatRow before each root', () => {
+  it('2 workspace roots → emits a dir row at depth 0 for each root, marked isWorkspaceRoot', () => {
+    // Path-prefixing has already been applied by scanCoordinator before flatten sees the roots:
+    // each root's path equals its name, and child paths are prefixed accordingly.
     const root1 = makeDir('project-a', {
+      path: 'project-a',
       files: [makeFile('a.ts', { path: '/ws/a/a.ts' })],
       totalFiles: 1,
     });
     const root2 = makeDir('project-b', {
+      path: 'project-b',
       files: [makeFile('b.ts', { path: '/ws/b/b.ts' })],
       totalFiles: 1,
     });
 
     const state = makeState();
+    // Expand both roots so their children render at depth 1.
+    state.expanded.set('project-a', true);
+    state.expanded.set('project-b', true);
     const result = flattenTree(state, [root1, root2]);
 
-    const headerRows = result.flatRows.filter(r => r.type === 'workspaceHeader');
-    expect(headerRows.length).toBe(2);
-    expect(headerRows[0].type === 'workspaceHeader' && headerRows[0].name).toBe('project-a');
-    expect(headerRows[1].type === 'workspaceHeader' && headerRows[1].name).toBe('project-b');
+    // No workspaceHeader rows — roots are real dir rows now.
+    expect(result.flatRows.find(r => (r as any).type === 'workspaceHeader')).toBeUndefined();
+
+    // Two top-level dir rows at depth 0, each marked isWorkspaceRoot.
+    const dirRows = result.flatRows.filter(r => r.type === 'dir');
+    expect(dirRows.length).toBeGreaterThanOrEqual(2);
+    const root1Row = dirRows.find(r => r.type === 'dir' && r.node.path === 'project-a');
+    const root2Row = dirRows.find(r => r.type === 'dir' && r.node.path === 'project-b');
+    expect(root1Row).toBeDefined();
+    expect(root2Row).toBeDefined();
+    if (root1Row && root1Row.type === 'dir') {
+      expect(root1Row.depth).toBe(0);
+      expect(root1Row.isWorkspaceRoot).toBe(true);
+      expect(root1Row.node.name).toBe('project-a');
+    }
+    if (root2Row && root2Row.type === 'dir') {
+      expect(root2Row.depth).toBe(0);
+      expect(root2Row.isWorkspaceRoot).toBe(true);
+    }
   });
 
-  it('single root → no WorkspaceHeaderFlatRow', () => {
+  it('multi-root: each root\'s files appear at depth 1 (under the root row)', () => {
+    const root1 = makeDir('a', {
+      path: 'a',
+      files: [makeFile('x.ts', { path: '/ws/a/x.ts' })],
+      totalFiles: 1,
+    });
+    const root2 = makeDir('b', {
+      path: 'b',
+      files: [makeFile('y.ts', { path: '/ws/b/y.ts' })],
+      totalFiles: 1,
+    });
+
+    const state = makeState();
+    state.expanded.set('a', true);
+    state.expanded.set('b', true);
+    const result = flattenTree(state, [root1, root2]);
+
+    const fileRows = result.flatRows.filter(r => r.type === 'file');
+    expect(fileRows.length).toBe(2);
+    for (const r of fileRows) {
+      expect(r.depth).toBe(1);
+    }
+  });
+
+  it('multi-root: collapsed root hides its children', () => {
+    const root1 = makeDir('a', {
+      path: 'a',
+      files: [makeFile('x.ts', { path: '/ws/a/x.ts' }), makeFile('y.ts', { path: '/ws/a/y.ts' })],
+      totalFiles: 2,
+    });
+    const root2 = makeDir('b', {
+      path: 'b',
+      files: [makeFile('z.ts', { path: '/ws/b/z.ts' })],
+      totalFiles: 1,
+    });
+
+    const state = makeState();
+    // Explicitly collapse root 'a'; leave 'b' expanded.
+    state.expanded.set('a', false);
+    state.expanded.set('b', true);
+    const result = flattenTree(state, [root1, root2]);
+
+    const fileRows = result.flatRows.filter(r => r.type === 'file');
+    // Only 'b' children visible.
+    expect(fileRows.length).toBe(1);
+    if (fileRows[0].type === 'file') {
+      expect(fileRows[0].file.name).toBe('z.ts');
+    }
+  });
+
+  it('single root → no workspace root marker; children at depth 0 (existing behavior)', () => {
     const root = makeDir('project', {
+      path: '',
       files: [makeFile('a.ts', { path: '/ws/a.ts' })],
       totalFiles: 1,
     });
@@ -677,8 +750,14 @@ describe('flattenTree — multi-root workspace', () => {
     const state = makeState();
     const result = flattenTree(state, [root]);
 
-    const headerRows = result.flatRows.filter(r => r.type === 'workspaceHeader');
-    expect(headerRows.length).toBe(0);
+    expect(result.flatRows.find(r => (r as any).type === 'workspaceHeader')).toBeUndefined();
+    // No isWorkspaceRoot dir row — the root itself is invisible.
+    const wsRoots = result.flatRows.filter(r => r.type === 'dir' && r.isWorkspaceRoot);
+    expect(wsRoots.length).toBe(0);
+    // Files appear at depth 0 (single-root behavior unchanged).
+    const fileRows = result.flatRows.filter(r => r.type === 'file');
+    expect(fileRows.length).toBe(1);
+    expect(fileRows[0].depth).toBe(0);
   });
 });
 
@@ -918,20 +997,6 @@ describe('flattenTree — search matches', () => {
   });
 });
 
-describe('flattenTree — workspace header heights', () => {
-  it('workspace headers have correct height (30px)', () => {
-    const root1 = makeDir('a', { files: [makeFile('x.ts', { path: '/ws/a/x.ts' })], totalFiles: 1 });
-    const root2 = makeDir('b', { files: [makeFile('y.ts', { path: '/ws/b/y.ts' })], totalFiles: 1 });
-
-    const state = makeState();
-    const result = flattenTree(state, [root1, root2]);
-
-    const headers = result.flatRows.filter(r => r.type === 'workspaceHeader');
-    expect(headers.length).toBe(2);
-    expect(headers[0].height).toBe(ROW_HEIGHT_WORKSPACE_HEADER);
-    expect(headers[0].height).toBe(30);
-  });
-});
 
 describe('flattenTree — root-level files', () => {
   it('renders root-level files at depth 0', () => {

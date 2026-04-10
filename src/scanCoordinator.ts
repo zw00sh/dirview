@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { scanWorkspace } from './scanner/fileScanner';
+import { prefixRootPaths } from './scanner/multiRootPaths';
 import { Config } from './config';
 import { ScanUpdatePayload } from './scanner/types';
 import { SidebarProvider } from './views/sidebarProvider';
@@ -50,8 +51,13 @@ export class ScanCoordinator {
       const autoRescanEnabled = this.watcher ? this.watcher.isAutoRescanEnabled : true;
       vscode.commands.executeCommand('setContext', 'dirview.autoRescanEnabled', autoRescanEnabled);
       const truncateThreshold = this.getTruncateThreshold();
+      // In multi-root workspaces, prefix every DirNode.path with its root's name so
+      // paths are globally unique. This eliminates collisions when two roots share
+      // subdirectory names (e.g. both have 'src') and lets the renderer treat each
+      // root as a regular collapsible/drillable dir-row keyed by its prefixed path.
+      const transformedRoots = prefixRootPaths(result.roots);
       const payload: ScanUpdatePayload = {
-        roots: result.roots,
+        roots: transformedRoots,
         autoRescanEnabled,
         sortMode: this.config.sortMode,
         truncateThreshold,

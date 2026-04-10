@@ -49,7 +49,7 @@ const renderer = createRenderer(state, {
 function renderFlatRow(r: Renderer, row: FlatRow): HTMLElement {
   switch (row.type) {
     case 'dir':
-      return r.renderDirRow(row.node, row.depth, row.maxMetric, row.ancestors, row.clientWidth);
+      return r.renderDirRow(row.node, row.depth, row.maxMetric, row.ancestors, row.clientWidth, row.isWorkspaceRoot);
     case 'file':
       return r.renderFileNode(row.file, row.depth, row.ancestors, undefined, row.maxFileMetric, row.clientWidth);
     case 'truncated':
@@ -113,8 +113,6 @@ function renderFlatRow(r: Renderer, row: FlatRow): HTMLElement {
     }
     case 'moreMatches':
       return r.renderMoreMatchesRow(row.count, row.depth, row.ancestors, row.filePath);
-    case 'workspaceHeader':
-      return h('li', { className: 'workspace-root-header', textContent: row.name });
   }
 }
 

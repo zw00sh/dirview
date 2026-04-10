@@ -99,15 +99,8 @@ export function computeStuckRows(
   while (stickyHeight < maxStickyHeight) {
     const effectiveTop = scrollTop + stickyHeight;
 
-    // Find first visible content row (skip workspaceHeaders)
     const visIdx = findFirstVisible(flatRows, effectiveTop);
-    let contentRow: FlatRow | undefined;
-    for (let i = visIdx; i < flatRows.length; i++) {
-      if (flatRows[i].type !== 'workspaceHeader') {
-        contentRow = flatRows[i];
-        break;
-      }
-    }
+    const contentRow: FlatRow | undefined = flatRows[visIdx];
     if (!contentRow) break;
 
     // Build candidate paths: ancestors (shallowest→deepest) + self if expanded dir

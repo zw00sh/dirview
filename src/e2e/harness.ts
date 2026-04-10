@@ -194,7 +194,7 @@ export async function createHarness(options: HarnessOptions): Promise<Harness> {
     for (const row of flatRows) {
       switch (row.type) {
         case 'dir':
-          ul.appendChild(renderer.renderDirRow(row.node, row.depth, row.maxMetric, row.ancestors, row.clientWidth));
+          ul.appendChild(renderer.renderDirRow(row.node, row.depth, row.maxMetric, row.ancestors, row.clientWidth, row.isWorkspaceRoot));
           break;
         case 'file':
           ul.appendChild(renderer.renderFileNode(row.file, row.depth, row.ancestors, row.hasMatches));
@@ -205,13 +205,6 @@ export async function createHarness(options: HarnessOptions): Promise<Harness> {
         case 'emptyGroup':
           ul.appendChild(renderer.renderEmptyGroupNode(row.nodes, row.depth, row.maxMetric, row.ancestors));
           break;
-        case 'workspaceHeader': {
-          const li = document.createElement('li');
-          li.className = 'workspace-root-header';
-          li.textContent = row.name;
-          ul.appendChild(li);
-          break;
-        }
       }
     }
     // Replace tree content
