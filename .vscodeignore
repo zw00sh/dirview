@@ -7,8 +7,11 @@ tsconfig.json
 !out/**
 node_modules/**
 test-repos/**
+bench/**
+test-results/**
 scripts/**
 todo.md
+requirements.md
 CLAUDE.md
 .claude/**
 **/*.js.map

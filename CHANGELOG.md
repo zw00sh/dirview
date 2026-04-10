@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.8.3] — 2026-04-10
+
+### Fixed
+- **Package size reduced from 52 MB to 10 MB** — excluded bench fixtures, test results, and internal docs from the published VSIX.
+
 ## [1.8.2] — 2026-04-10
 
 ### Changed
