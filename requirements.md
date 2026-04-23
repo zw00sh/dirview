@@ -75,12 +75,6 @@ Both the sidebar and tab views use virtual scrolling — only visible rows plus 
 - Single-child directory chains with no files are collapsed into a single row with a joined display name (e.g. `a / b / c`).
 - Each segment in a compacted path has its own context menu (right-click for copy path, reveal, etc.).
 
-### Empty Directory Grouping
-
-- Two or more consecutive empty sibling directories are grouped into a single "N empty directories" row.
-- Grouping is disabled when a language filter or search is active.
-- Clicking the row expands the group to show individual directory nodes.
-
 ### File Truncation
 
 - When enabled, directories with more files than `dirview.truncateThreshold` (default: 3) show only the first N files, followed by an "N more files" row.
@@ -154,7 +148,7 @@ Uses the same 3-tier logic as per-directory buttons, applied at the workspace ro
 2. Only top-level items expanded → collapse all top-level items
 3. Nothing expanded → no-op
 
-Collapse All also clears truncation-expanded and empty-group-expanded state. When search is active, Collapse All also collapses all file match groups. Expand All expands all file match groups.
+Collapse All also clears truncation-expanded state. When search is active, Collapse All also collapses all file match groups. Expand All expands all file match groups.
 
 ## Sidebar Drill-down
 

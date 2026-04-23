@@ -15,7 +15,7 @@
 /**
  * Patches oldEl's direct children to match newEl's, keyed by data-node-path.
  * Keyed nodes (dirs) are updated in-place via patchDirLi; unkeyed nodes (file
- * rows, truncated rows, empty-group rows, workspace headers) are replaced
+ * rows, truncated rows, workspace headers) are replaced
  * wholesale.  The reconciled list is built in a DocumentFragment and swapped
  * in one shot so only a single reflow occurs.
  */

@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.8.4] — 2026-04-24
+
+### Changed
+- **Empty directories render as regular directories** — empty directories are no longer grouped into "N empty directories" rows or dimmed. They render identically to non-empty directories with a visible chevron that can be toggled.
+
 ## [1.8.3] — 2026-04-10
 
 ### Fixed

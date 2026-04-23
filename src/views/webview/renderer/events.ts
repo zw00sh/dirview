@@ -138,15 +138,6 @@ export function setupDelegatedEvents(ctx: RendererContext): void {
         return;
       }
 
-      if (action === 'expandEmptyGroup') {
-        const gk = actionEl.dataset.groupKey;
-        if (gk != null) {
-          state.emptyGroupExpanded.add(gk);
-          state.rerender();
-        }
-        return;
-      }
-
       return;
     }
 
@@ -187,7 +178,7 @@ export function setupDelegatedEvents(ctx: RendererContext): void {
       if (e.detail >= 2) { return; }
       const path = dirRow.dataset.path!;
       const entry = nodeMap.get(path);
-      if (!entry || !entry.hasChildren) { return; }
+      if (!entry) { return; }
 
       // Account for filtered/search mode where dirs without an explicit expanded
       // entry are implicitly expanded (matching the renderer's isExpanded logic).

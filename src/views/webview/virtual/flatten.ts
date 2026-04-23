@@ -3,7 +3,7 @@
 // render path used by tab.ts. The non-virtual sidebar path uses render-tree.ts
 // → renderRoots() → renderer methods directly. Both paths must be kept in sync.
 
-import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, computeMaxFileMetric, compactedNode } from '../utils';
+import { sortDirs, sortFiles, computeMaxMetric, computeMaxFileMetric, compactedNode } from '../utils';
 
 import { filterTree } from '../filter';
 import { assembleMatchGroups } from '../match-grouping';
@@ -12,7 +12,7 @@ import type {
   FlatRow, FlattenResult, FlattenOptions,
 } from './types';
 import {
-  ROW_HEIGHT_DIR, ROW_HEIGHT_FILE, ROW_HEIGHT_TRUNCATED, ROW_HEIGHT_EMPTY_GROUP,
+  ROW_HEIGHT_DIR, ROW_HEIGHT_FILE, ROW_HEIGHT_TRUNCATED,
   ROW_HEIGHT_MATCH_LINE, ROW_HEIGHT_CONTEXT_LINE, ROW_HEIGHT_MATCH_SPACER,
   ROW_HEIGHT_MORE_MATCHES,
 } from './types';
@@ -23,7 +23,7 @@ import {
  * The algorithm mirrors renderTree() → renderRoots() → renderDirNode() exactly:
  * 1. filterTree() to prune non-matching nodes
  * 2. computeMaxMetric() for bar scaling
- * 3. Recursive walk with folder compaction, expand/collapse, empty-group grouping,
+ * 3. Recursive walk with folder compaction, expand/collapse,
  *    file truncation, and match flattening
  * 4. Post-pass to compute cumulative offsetY
  */
@@ -97,34 +97,8 @@ export function flattenTree(
     const nextAncestors: IndentAncestor[] = [...ancestors, { path: displayNode.path }];
 
     // ── Children (dirs) ──────────────────────────────────────────────────
-    if (!isFiltered && sortedChildren.length > 0) {
-      // Empty dir grouping — only when no filter is active
-      for (const group of groupEmptyDirs(sortedChildren)) {
-        if (group.type === 'emptyGroup') {
-          if (state.emptyGroupExpanded.has(group.nodes[0].path)) {
-            for (const n of group.nodes) {
-              flattenDirNode(n, depth + 1, nextAncestors);
-            }
-          } else {
-            flatRows.push({
-              type: 'emptyGroup',
-              key: 'emptyGroup:' + group.nodes[0].path,
-              depth: depth + 1,
-              height: ROW_HEIGHT_EMPTY_GROUP,
-              offsetY: 0,
-              ancestors: nextAncestors,
-              nodes: group.nodes,
-              maxMetric,
-            });
-          }
-        } else {
-          flattenDirNode(group.node, depth + 1, nextAncestors);
-        }
-      }
-    } else {
-      for (const child of sortedChildren) {
-        flattenDirNode(child, depth + 1, nextAncestors);
-      }
+    for (const child of sortedChildren) {
+      flattenDirNode(child, depth + 1, nextAncestors);
     }
 
     // ── Files ────────────────────────────────────────────────────────────
@@ -267,34 +241,8 @@ export function flattenTree(
     const sortedChildren = sortDirs(r.children, state.currentSortMode);
     const sortedFiles = sortFiles(r.files || []);
 
-    // Empty dir grouping — only when no filter is active
-    if (!isFiltered && sortedChildren.length > 0) {
-      for (const group of groupEmptyDirs(sortedChildren)) {
-        if (group.type === 'emptyGroup') {
-          if (state.emptyGroupExpanded.has(group.nodes[0].path)) {
-            for (const n of group.nodes) {
-              flattenDirNode(n, 0, []);
-            }
-          } else {
-            flatRows.push({
-              type: 'emptyGroup',
-              key: 'emptyGroup:' + group.nodes[0].path,
-              depth: 0,
-              height: ROW_HEIGHT_EMPTY_GROUP,
-              offsetY: 0,
-              ancestors: [],
-              nodes: group.nodes,
-              maxMetric,
-            });
-          }
-        } else {
-          flattenDirNode(group.node, 0, []);
-        }
-      }
-    } else {
-      for (const child of sortedChildren) {
-        flattenDirNode(child, 0, []);
-      }
+    for (const child of sortedChildren) {
+      flattenDirNode(child, 0, []);
     }
 
     // Root-level file truncation

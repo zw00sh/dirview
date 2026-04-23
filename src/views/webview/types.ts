@@ -10,6 +10,16 @@ import type { DirNode, FileNode, FileTypeStats } from '../../scanner/types';
 // Redefined here (can't import from config.ts which depends on vscode).
 export type SortMode = 'files' | 'name' | 'size' | 'lines';
 
+// ── Workspace root info for search ───────────────────────────────────────────
+
+/** Workspace folder identity for search ancestor path resolution.
+ *  In multi-root mode, buildAncestorPaths uses the name to prefix relative
+ *  paths so they match the DirNode.path values produced by prefixRootPaths. */
+export interface SearchRoot {
+  fsPath: string;
+  name: string;
+}
+
 // ── Search match ──────────────────────────────────────────────────────────────
 
 export interface SearchMatch {
@@ -34,7 +44,7 @@ export type BackendToWebviewMessage =
   | { type: 'expandAll' }
   | { type: 'collapseAll' }
   | { type: 'error'; message: string }
-  | { type: 'searchProgress'; rootPaths: string[] }
+  | { type: 'searchProgress'; rootPaths: SearchRoot[] }
   | { type: 'searchResultsBatch'; matches: Record<string, SearchMatch[]>; fileCount: number; matchCount: number }
   | { type: 'searchResultsHighlight'; patches: Array<{ path: string; idx: number; html: string }> }
   | { type: 'searchResultsDone'; fileCount: number; matchCount: number; truncated: boolean }
@@ -86,7 +96,6 @@ export interface CoreWebviewState {
   activeFilters: Set<string>;
   expanded: Map<string, boolean>;
   truncationExpanded: Set<string>;
-  emptyGroupExpanded: Set<string>;
   truncateThreshold: number;
   currentSortMode: SortMode;
   lastRoots: DirNode[] | null;
@@ -114,9 +123,11 @@ export interface WebviewState extends CoreWebviewState {
   /** Precomputed set of directory paths that are ancestors of search result files.
    *  Enables O(1) dirMatchesSearch checks instead of recursive tree walks. */
   searchAncestorPaths: Set<string> | null;
-  /** Workspace root paths (absolute) used to convert absolute file paths to
-   *  workspace-relative paths for ancestor index lookups against DirNode.path. */
-  searchRootPaths: string[];
+  /** Workspace root info used to convert absolute file paths to
+   *  workspace-relative paths for ancestor index lookups against DirNode.path.
+   *  In multi-root mode, the name field provides the prefix that matches
+   *  the DirNode.path scheme produced by prefixRootPaths. */
+  searchRootPaths: SearchRoot[];
   searchBar_updateStatus: (() => void) | null;
   _searchRenderTimer: ReturnType<typeof setTimeout> | null;
   /** Monotonic counter incremented on every search/filter state mutation.
@@ -182,7 +193,6 @@ export interface Renderer {
   renderMoreMatchesRow(count: number, depth: number, ancestors: IndentAncestor[], filePath: string): HTMLLIElement;
   renderFileMatches(container: HTMLElement, file: FileNode, depth: number, ancestors: IndentAncestor[]): void;
   renderTruncatedRow(hiddenFiles: FileNode[], depth: number, ancestors: IndentAncestor[], dirPath: string, maxMetric: number, clientWidth: number): HTMLLIElement;
-  renderEmptyGroupNode(nodes: DirNode[], depth: number, maxMetric: number, ancestors: IndentAncestor[]): HTMLLIElement;
   renderDirRow(node: DirNode, depth: number, maxMetric: number, ancestors: IndentAncestor[], clientWidth: number, isWorkspaceRoot?: boolean): HTMLLIElement;
   renderDirNode(node: DirNode, depth: number, maxMetric: number, ancestors: IndentAncestor[], clientWidth: number, isWorkspaceRoot?: boolean): HTMLLIElement;
 }
@@ -266,8 +276,3 @@ export type NodeMapEntry =
 
 // ── Action types (delegated click handler) ────────────────────────────────────
 
-// ── Grouped children types ────────────────────────────────────────────────────
-
-export type GroupedChild =
-  | { type: 'emptyGroup'; nodes: DirNode[] }
-  | { type: 'dir'; node: DirNode };

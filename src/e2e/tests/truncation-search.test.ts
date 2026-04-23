@@ -59,22 +59,4 @@ describe('truncation + search suppression', () => {
     h.dispose();
   }, 60000);
 
-  it('empty dir grouping suppressed during search', async () => {
-    const h = await createHarness({ workspace: 'test-repos/source', handlers, truncateThreshold: 3 });
-
-    const emptyGroupsBefore = h.root.querySelectorAll('.empty-group-row').length;
-    // This test is conditional — empty groups may or may not exist in the fixture.
-    // If they exist, they should be suppressed during search.
-    if (emptyGroupsBefore > 0) {
-      await h.search('concord');
-      const emptyGroupsDuring = h.root.querySelectorAll('.empty-group-row').length;
-      expect(emptyGroupsDuring).toBe(0);
-
-      await h.clearSearch();
-      const emptyGroupsAfter = h.root.querySelectorAll('.empty-group-row').length;
-      expect(emptyGroupsAfter).toBeGreaterThan(0);
-    }
-
-    h.dispose();
-  }, 60000);
 });

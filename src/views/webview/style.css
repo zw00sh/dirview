@@ -350,7 +350,7 @@ body {
 .tree.sidebar .dir-row,
 .tree.sidebar .file-row { padding-right: 8px; }
 
-/* In the sidebar, file-count is only used for empty-dir "—". Override width/padding so it
+/* In the sidebar, file-count width/padding overrides so it
    aligns with the right-side file dot (9px wide, abutting the 8px row padding-right). */
 .tree.sidebar .file-count {
   width: auto;
@@ -466,10 +466,8 @@ body.vscode-high-contrast-light .truncated-row {
   background: rgba(0, 0, 0, 0.04);
 }
 
-/* Truncated rows and empty group/dir rows — uniform dim color */
-.truncated-row .dir-name,
-.empty-group-row .dir-name,
-.empty-dir .dir-name {
+/* Truncated rows — dim color */
+.truncated-row .dir-name {
   color: var(--vscode-descriptionForeground);
   opacity: 0.5;
 }
@@ -484,8 +482,7 @@ body.vscode-high-contrast-light .truncated-row {
   min-width: max-content;
 }
 
-.truncated-row .chevron svg,
-.empty-group-row .chevron svg {
+.truncated-row .chevron svg {
   transform: scale(0.65);
 }
 

@@ -256,8 +256,6 @@ function renderFlatRow(r: Renderer, row: FlatRow): HTMLElement {
       return r.renderFileNode(row.file, row.depth, row.ancestors, row.hasMatches, row.maxFileMetric, row.clientWidth);
     case 'truncated':
       return r.renderTruncatedRow(row.hiddenFiles, row.depth, row.ancestors, row.dirPath, row.maxMetric, row.clientWidth);
-    case 'emptyGroup':
-      return r.renderEmptyGroupNode(row.nodes, row.depth, row.maxMetric, row.ancestors);
     case 'matchGroup': {
       // Build copy text for context menu
       const firstMatch = row.matches[0];
@@ -381,7 +379,6 @@ collapseAllBtn.addEventListener('click', () => {
   if (!state.lastRoots) { return; }
   tieredCollapseAll(state, state.lastRoots);
   state.truncationExpanded.clear();
-  state.emptyGroupExpanded.clear();
   // tieredCollapseAll populates matchesCollapsed when search is active.
   state.rerender();
 });
@@ -665,7 +662,6 @@ window.addEventListener('message', (event: MessageEvent) => {
     const newThreshold = message.truncateThreshold;
     if (typeof newThreshold === 'number' && newThreshold !== state.truncateThreshold) {
       state.truncationExpanded.clear();
-      state.emptyGroupExpanded.clear();
     }
     if (typeof newThreshold === 'number') { state.truncateThreshold = newThreshold; }
     if (typeof message.truncationEnabled === 'boolean') {

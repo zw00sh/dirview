@@ -1,6 +1,6 @@
 // Shared utility functions for dirview webviews.
 
-import type { DirNode, FileNode, FileTypeStats, SortMode, WebviewState, ScanBar, LangStat, GroupedChild, RendererOptions } from './types';
+import type { DirNode, FileNode, FileTypeStats, SortMode, WebviewState, ScanBar, LangStat, RendererOptions } from './types';
 import { h } from './h';
 import { SVG_SYNC, SVG_SEARCH, SVG_FOLDER_OPENED, SVG_INFO, SVG_WARNING } from './icons';
 
@@ -145,33 +145,6 @@ export function computeMaxMetric(roots: DirNode[], sortMode: SortMode, includeRo
   const value = max || 1;
   _maxMetricCache = { roots, sortMode, includeRoots: !!includeRoots, value };
   return value;
-}
-
-// WeakMap cache for groupEmptyDirs — keyed by children array reference.
-const _groupEmptyDirsCache = new WeakMap<DirNode[], GroupedChild[]>();
-
-// Groups consecutive empty-dir siblings (totalFiles === 0) into {type:'emptyGroup', nodes:[]}
-export function groupEmptyDirs(children: DirNode[]): GroupedChild[] {
-  if (_groupEmptyDirsCache.has(children)) { return _groupEmptyDirsCache.get(children)!; }
-  const result: GroupedChild[] = [];
-  let i = 0;
-  while (i < children.length) {
-    if (children[i].totalFiles === 0) {
-      const start = i;
-      while (i < children.length && children[i].totalFiles === 0) { i++; }
-      const emptyNodes = children.slice(start, i);
-      if (emptyNodes.length >= 2) {
-        result.push({ type: 'emptyGroup', nodes: emptyNodes });
-      } else {
-        result.push({ type: 'dir', node: emptyNodes[0] });
-      }
-    } else {
-      result.push({ type: 'dir', node: children[i] });
-      i++;
-    }
-  }
-  _groupEmptyDirsCache.set(children, result);
-  return result;
 }
 
 // Creates and inserts the scan progress bar element. Returns a controller.

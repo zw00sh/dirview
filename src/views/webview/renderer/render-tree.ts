@@ -3,7 +3,7 @@
 // the virtual-scroll path in flatten.ts → scroller.ts instead. Both paths must be
 // kept in sync for consistent behavior.
 
-import { sortDirs, sortFiles, groupEmptyDirs, computeMaxMetric, computeMaxFileMetric, emptyState } from '../utils';
+import { sortDirs, sortFiles, computeMaxMetric, computeMaxFileMetric, emptyState } from '../utils';
 import { filterTree } from '../filter';
 import { patchTreeChildren } from './dom-patch';
 import { h } from '../h';
@@ -43,23 +43,8 @@ export function renderRoots(
     const sortedChildren = sortDirs(r.children, state.currentSortMode);
     const sortedFiles = sortFiles(r.files || []);
 
-    // Empty dir grouping — only when no filter is active (filtered trees already pruned)
-    if (!isFiltered && sortedChildren.length > 0) {
-      for (const group of groupEmptyDirs(sortedChildren)) {
-        if (group.type === 'emptyGroup') {
-          if (state.emptyGroupExpanded.has(group.nodes[0].path)) {
-            for (const n of group.nodes) { treeEl.appendChild(renderer.renderDirNode(n, 0, maxMetric, [], clientWidth)); }
-          } else {
-            treeEl.appendChild(renderer.renderEmptyGroupNode(group.nodes, 0, maxMetric, []));
-          }
-        } else {
-          treeEl.appendChild(renderer.renderDirNode(group.node, 0, maxMetric, [], clientWidth));
-        }
-      }
-    } else {
-      for (const child of sortedChildren) {
-        treeEl.appendChild(renderer.renderDirNode(child, 0, maxMetric, [], clientWidth));
-      }
+    for (const child of sortedChildren) {
+      treeEl.appendChild(renderer.renderDirNode(child, 0, maxMetric, [], clientWidth));
     }
     // File truncation — disabled when search/filter is active.
     // Also disabled when the root has no directory children (single-dir root).

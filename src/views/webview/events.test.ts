@@ -26,16 +26,6 @@ describe('delegated click handler', () => {
       expect(row.dataset.dirPath).toBe('/d');
     });
 
-    it('renderEmptyGroupNode has data-action="expandEmptyGroup" and data-group-key', () => {
-      const state = createState();
-      const renderer = makeRenderer(state);
-      const nodes = [makeDir('/r/empty1', 'empty1'), makeDir('/r/empty2', 'empty2')];
-      const li = renderer.renderEmptyGroupNode(nodes, 0, 10, []);
-      const row = li.querySelector('.empty-group-row');
-      expect(row.dataset.action).toBe('expandEmptyGroup');
-      expect(row.dataset.groupKey).toBe('/r/empty1');
-    });
-
     it('renderFileNode has data-action="openFile" and data-path when no search matches', () => {
       const state = createState();
       const renderer = makeRenderer(state);
@@ -264,12 +254,11 @@ describe('delegated click handler', () => {
       expect(onExpandChanged).toHaveBeenCalled();
     });
 
-    it('does not toggle empty dirs (no children, no files)', () => {
+    it('toggles empty dirs (no children, no files)', () => {
       const state = createState();
       state.render = vi.fn();
       state.lastRoots = [];
       const renderer = makeRenderer(state);
-      // Truly empty dir: no files, no child dirs
       const root = makeDir('/r', 'r', {
         totalFiles: 0,
         stats: [],
@@ -281,8 +270,7 @@ describe('delegated click handler', () => {
 
       li.querySelector('.dir-row[data-path="/r"]').click();
 
-      // Should remain falsy — empty dirs can't expand
-      expect(state.expanded.get('/r')).toBeFalsy();
+      expect(state.expanded.get('/r')).toBe(true);
     });
 
     it('double-click on dir row does not toggle (e.detail >= 2)', () => {
@@ -489,96 +477,6 @@ describe('delegated click handler', () => {
       li.querySelector('.truncated-row').click();
 
       expect(state.truncationExpanded.has('')).toBe(true);
-      await awaitRerender();
-      expect(state.render).toHaveBeenCalled();
-    });
-  });
-
-  // -- Empty group row click --
-
-  describe('expandEmptyGroup action', () => {
-    it('clicking an empty group row updates state and rerenders', async () => {
-      const state = createState();
-      state.render = vi.fn();
-      state.lastRoots = [];
-      const renderer = makeRenderer(state);
-      const empty1 = makeDir('/r/empty1', 'empty1');
-      const empty2 = makeDir('/r/empty2', 'empty2');
-      const nonEmpty = makeDir('/r/full', 'full', { totalFiles: 3, stats: [{ name: 'JS', color: '#f1e05a', count: 3 }] });
-      const root = makeDir('/r', 'r', { children: [empty1, empty2, nonEmpty], totalFiles: 3, stats: [{ name: 'JS', color: '#f1e05a', count: 3 }] });
-      state.expanded.set('/r', true);
-
-      renderer.beforeRender();
-      const li = renderer.renderDirNode(root, 0, 3, [], 300);
-      renderer._rootEl.appendChild(li);
-
-      const groupRow = li.querySelector('.empty-group-row');
-      expect(groupRow).toBeTruthy();
-
-      groupRow.click();
-
-      expect(state.emptyGroupExpanded.has('/r/empty1')).toBe(true);
-      await awaitRerender();
-      expect(state.render).toHaveBeenCalled();
-    });
-
-    it('clicking an empty group row does not toggle the parent dir', async () => {
-      const state = createState();
-      state.render = vi.fn();
-      state.lastRoots = [];
-      const renderer = makeRenderer(state);
-      const empty1 = makeDir('/r/empty1', 'empty1');
-      const empty2 = makeDir('/r/empty2', 'empty2');
-      const nonEmpty = makeDir('/r/full', 'full', { totalFiles: 1, stats: [{ name: 'JS', color: '#f1e05a', count: 1 }] });
-      const root = makeDir('/r', 'r', { children: [empty1, empty2, nonEmpty], totalFiles: 1, stats: [{ name: 'JS', color: '#f1e05a', count: 1 }] });
-      state.expanded.set('/r', true);
-
-      renderer.beforeRender();
-      const li = renderer.renderDirNode(root, 0, 1, [], 300);
-      renderer._rootEl.appendChild(li);
-
-      li.querySelector('.empty-group-row').click();
-
-      expect(state.expanded.get('/r')).toBe(true);
-    });
-
-    it('rerender after expansion shows individual dirs instead of group row', () => {
-      const state = createState();
-      const renderer = makeRenderer(state);
-      const empty1 = makeDir('/r/empty1', 'empty1');
-      const empty2 = makeDir('/r/empty2', 'empty2');
-      const nonEmpty = makeDir('/r/full', 'full', { totalFiles: 3, stats: [{ name: 'JS', color: '#f1e05a', count: 3 }] });
-      const root = makeDir('/r', 'r', { children: [empty1, empty2, nonEmpty], totalFiles: 3, stats: [{ name: 'JS', color: '#f1e05a', count: 3 }] });
-      state.expanded.set('/r', true);
-
-      // First render — grouped
-      renderer.beforeRender();
-      const li1 = renderer.renderDirNode(root, 0, 3, [], 300);
-      expect(li1.querySelector('.empty-group-row')).toBeTruthy();
-      expect(li1.querySelector('[data-path="/r/empty1"]')).toBeNull();
-
-      // Expand, re-render
-      state.emptyGroupExpanded.add('/r/empty1');
-      renderer.beforeRender();
-      const li2 = renderer.renderDirNode(root, 0, 3, [], 300);
-      expect(li2.querySelector('.empty-group-row')).toBeNull();
-      expect(li2.querySelector('[data-path="/r/empty1"]')).toBeTruthy();
-      expect(li2.querySelector('[data-path="/r/empty2"]')).toBeTruthy();
-    });
-
-    it('works with empty-string groupKey (root-level empty group)', async () => {
-      const state = createState();
-      state.render = vi.fn();
-      state.lastRoots = [];
-      const renderer = makeRenderer(state);
-      // groupKey is nodes[0].path — use '' to match root-level nodes
-      const nodes = [makeDir('', 'root1'), makeDir('other', 'root2')];
-      const li = renderer.renderEmptyGroupNode(nodes, 0, 0, []);
-      renderer._rootEl.appendChild(li);
-
-      li.querySelector('.empty-group-row').click();
-
-      expect(state.emptyGroupExpanded.has('')).toBe(true);
       await awaitRerender();
       expect(state.render).toHaveBeenCalled();
     });

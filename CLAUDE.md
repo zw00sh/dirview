@@ -227,7 +227,6 @@ Note: `test-repos/` contains sample repositories used for visual testing of the 
 | Click indent guide | Collapses the ancestor directory that guide belongs to. Triggers re-render. |
 | Hover directory row | Shows tooltip below the bar with per-language breakdown (swatch, name, %, count). |
 | Click "N more files" row | Expands truncated files inline (no full re-render). Adds dir to `truncationExpanded`. |
-| Click "N empty directories" row | Expands empty dir group inline, rendering each empty dir node. |
 | Per-dir expand children button | 3-tier escalation: (1) target collapsed → expand target only; (2) target expanded, not all children expanded → expand all direct children; (3) all children expanded → recursively expand entire subtree. |
 | Per-dir collapse children button | 3-tier de-escalation (mirrors expand): (1) any descendant beyond direct children expanded → collapse those deeper descendants (direct children stay open); (2) direct children expanded but nothing deeper → collapse all direct children; (3) no children expanded → collapse target itself. |
 | Per-dir open-in-tab button | Posts `openDirInTab` message to host. Host calls `tabProvider.openForDir(path)`, which opens a new editor tab rooted at that directory. No re-render of the originating view. |
@@ -240,7 +239,7 @@ Note: `test-repos/` contains sample repositories used for visual testing of the 
 | Toggle Ignored (title bar) | `dirview.toggleIgnored[Off]` → `config.setShowIgnored()` → `doScan()` → all providers updated | Full rescan with/without ignored files. Tree re-renders with new data. |
 | Toggle Truncation (title bar) | `dirview.toggleTruncation[Off]` → `config.setTruncationEnabled()` → threshold sent to sidebar only | Re-renders sidebar tree with truncation enabled/disabled. Clears expanded truncation state if threshold changed. Tabs manage their own truncation state independently. |
 | Expand All (title bar) | `dirview.expandAll` → posts `expandAll` to sidebar webview | 3-tier expand (same as per-dir hover button, applied at workspace root level). Re-renders. |
-| Collapse All (title bar) | `dirview.collapseAll` → posts `collapseAll` to sidebar webview | 3-tier collapse (same as per-dir hover button, applied at workspace root level). Clears truncation/empty-group expanded state. Re-renders. |
+| Collapse All (title bar) | `dirview.collapseAll` → posts `collapseAll` to sidebar webview | 3-tier collapse (same as per-dir hover button, applied at workspace root level). Clears truncation expanded state. Re-renders. |
 | Refresh (warning banner) | Webview posts `refresh` → `onRefresh` → `doScan()` | Full rescan and update. |
 | Navigate Up (title bar) | `dirview.navigateUp` → `sidebarProvider.navigateUp()` → computes parent path → `sendUpdateForCurrentDir()` | Navigates to parent directory. Hidden at workspace root via `dirview.sidebarDrilledDown` context key. |
 | Click dir name | Webview posts `navigateToDir` → `sidebarProvider` updates `dirPath` → `sendUpdateForCurrentDir()` | Drills down into directory. Title bar updates to directory basename. |
@@ -254,7 +253,7 @@ Note: `test-repos/` contains sample repositories used for visual testing of the 
 | Sort button | Local only: cycles `files`→`name`→`size`, calls `render()` | Re-sorts tree. Updates tab title ("Tree (count/name/size)") and sort button tooltip. No message to host. |
 | Toggle Ignored button | Posts `toggleIgnored` → host dispatches `dirview.toggleIgnored[Off]` → `doScan()` | Full rescan. Tab updates eye icon on `update` response. |
 | Toggle Truncation button | Posts `toggleTruncation` → host computes threshold → posts `updateTruncation` back | Re-renders with new threshold. Updates fold/unfold icon. |
-| Expand/Collapse All button | Local only: `tieredExpandAll`/`tieredCollapseAll` + `render()` | 3-tier expand/collapse (same as per-dir hover buttons, applied at workspace root level). On collapse, clears truncation/empty-group state. |
+| Expand/Collapse All button | Local only: `tieredExpandAll`/`tieredCollapseAll` + `render()` | 3-tier expand/collapse (same as per-dir hover buttons, applied at workspace root level). On collapse, clears truncation state. |
 | Files to include/exclude | Glob filter fields (comma-separated patterns) sent to ripgrep. "files to exclude" hidden behind "..." toggle. Dynamic debounce based on tree size. | Filters tree to matching files. Status bar shows "N of M files". Clears expand state so matching dirs auto-expand. |
 | Legend language click | Toggles language in `activeFilters`, posts `filter` to host (no-op), re-renders locally | When filters activate: clears expand state (all dirs auto-expand to show matches). Only matching files/dirs shown. Legend items get active/inactive styling. |
 | Legend header click | Local toggle | Shows/hides the legend items, rotates chevron. |
@@ -279,7 +278,6 @@ Note: `test-repos/` contains sample repositories used for visual testing of the 
 - **Folder compaction**: Single-child directory chains (no files) are collapsed into `"a / b / c"` display names.
 - **Bar scaling**: Bars are proportional to `metric / maxMetric` where maxMetric is the largest value among non-root nodes. Tab uses `sqrt()` scaling; sidebar uses linear.
 - **Sort modes**: `files` = descending by file count, `name` = ascending alphabetical, `size` = descending by byte size. Files within a directory are always sorted alphabetically regardless of mode.
-- **Empty dir grouping**: 2+ consecutive empty sibling dirs are grouped into a single "N empty directories" row (only when no filter is active).
 - **Virtual scrolling**: Both tab and sidebar use virtual scrolling (renders only visible rows + buffer) via `flattenTree` → `createVirtualScroller`. Both use JS-driven sticky overlays (`createStickyOverlay`) instead of CSS `position: sticky`.
 - **Pre-render filtering**: `filter.ts` produces a shallow-cloned tree with only visible nodes before rendering, so the renderer has no filtering logic.
 - **Language filter behavior**: When filters activate, `expanded` map is cleared so all dirs auto-expand (any dir matching the filter shows its contents). `dirMatchesFilter` checks if any of a dir's stats match an active filter.

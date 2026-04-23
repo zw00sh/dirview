@@ -9,7 +9,6 @@ import type { DirNode, FileNode, SearchMatch, IndentAncestor } from '../types';
 export const ROW_HEIGHT_DIR = 22;
 export const ROW_HEIGHT_FILE = 22;
 export const ROW_HEIGHT_TRUNCATED = 22;
-export const ROW_HEIGHT_EMPTY_GROUP = 22;
 export const ROW_HEIGHT_MORE_MATCHES = 22;
 export const ROW_HEIGHT_MATCH_LINE = 18;
 export const ROW_HEIGHT_CONTEXT_LINE = 18;
@@ -61,13 +60,6 @@ export interface TruncatedFlatRow extends FlatRowBase {
   clientWidth: number;
 }
 
-export interface EmptyGroupFlatRow extends FlatRowBase {
-  type: 'emptyGroup';
-  height: typeof ROW_HEIGHT_EMPTY_GROUP;
-  nodes: DirNode[];
-  maxMetric: number;
-}
-
 /** A single merged match group — contains match lines + context lines rendered as one block. */
 export interface MatchGroupFlatRow extends FlatRowBase {
   type: 'matchGroup';
@@ -99,7 +91,6 @@ export type FlatRow =
   | DirFlatRow
   | FileFlatRow
   | TruncatedFlatRow
-  | EmptyGroupFlatRow
   | MatchGroupFlatRow
   | MoreMatchesFlatRow;
 

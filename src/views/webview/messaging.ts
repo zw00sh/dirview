@@ -59,7 +59,6 @@ export function createMessageHandler(
       if (state.lastRoots) {
         tieredCollapseAll(state, state.lastRoots);
         state.truncationExpanded.clear();
-        state.emptyGroupExpanded.clear();
         // tieredCollapseAll already populates matchesCollapsed when search is active.
         state.rerender();
         if (deps.onCollapseAll) { deps.onCollapseAll(); }
@@ -76,7 +75,6 @@ export function createMessageHandler(
       // avoids re-serializing the full tree when only the truncation threshold changed.
       if (typeof message.truncateThreshold === 'number' && message.truncateThreshold !== state.truncateThreshold) {
         state.truncationExpanded.clear();
-        state.emptyGroupExpanded.clear();
       }
       if (typeof message.truncateThreshold === 'number') { state.truncateThreshold = message.truncateThreshold; }
       if (state.lastRoots) { state.rerender(); }

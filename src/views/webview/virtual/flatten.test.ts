@@ -5,7 +5,7 @@ import { createState } from '../state';
 import type { DirNode, FileNode, FileTypeStats, WebviewState, SearchMatch } from '../types';
 import type { FlatRow, FlattenResult } from './types';
 import {
-  ROW_HEIGHT_DIR, ROW_HEIGHT_FILE, ROW_HEIGHT_TRUNCATED, ROW_HEIGHT_EMPTY_GROUP,
+  ROW_HEIGHT_DIR, ROW_HEIGHT_FILE, ROW_HEIGHT_TRUNCATED,
   ROW_HEIGHT_MATCH_LINE, ROW_HEIGHT_MATCH_SPACER,
   ROW_HEIGHT_MORE_MATCHES,
 } from './types';
@@ -413,8 +413,8 @@ describe('flattenTree — auto-disable truncation for small trees', () => {
   });
 });
 
-describe('flattenTree — empty dir grouping', () => {
-  it('3 consecutive empty dirs → 1 EmptyGroupFlatRow', () => {
+describe('flattenTree — empty dirs rendered as regular dirs', () => {
+  it('consecutive empty dirs are rendered as individual DirFlatRows', () => {
     const empties = [
       makeDir('e1', { path: 'root/e1', totalFiles: 0 }),
       makeDir('e2', { path: 'root/e2', totalFiles: 0 }),
@@ -426,72 +426,8 @@ describe('flattenTree — empty dir grouping', () => {
     state.expanded.set('root', true);
     const result = flattenTree(state, [root]);
 
-    const emptyGroupRows = result.flatRows.filter(r => r.type === 'emptyGroup');
-    expect(emptyGroupRows.length).toBe(1);
-    if (emptyGroupRows[0].type === 'emptyGroup') {
-      expect(emptyGroupRows[0].nodes.length).toBe(3);
-    }
-  });
-
-  it('single empty dir among non-empty → no grouping (normal DirFlatRow)', () => {
-    const children = [
-      makeDir('e1', { path: 'root/e1', totalFiles: 0 }),
-      makeDir('full', { path: 'root/full', files: [makeFile('a.ts')], totalFiles: 1 }),
-    ];
-    const root = makeDir('root', { children, totalFiles: 1 });
-
-    const state = makeState();
-    state.expanded.set('root', true);
-    const result = flattenTree(state, [root]);
-
-    const emptyGroupRows = result.flatRows.filter(r => r.type === 'emptyGroup');
-    expect(emptyGroupRows.length).toBe(0);
-    // Both should be normal dir rows (root invisible, so just e1 + full)
-    const dirRows = result.flatRows.filter(r => r.type === 'dir');
-    expect(dirRows.length).toBe(2);
-  });
-
-  it('emptyGroupExpanded set → individual DirFlatRows', () => {
-    const empties = [
-      makeDir('e1', { path: 'root/e1', totalFiles: 0 }),
-      makeDir('e2', { path: 'root/e2', totalFiles: 0 }),
-      makeDir('e3', { path: 'root/e3', totalFiles: 0 }),
-    ];
-    const root = makeDir('root', { children: empties, totalFiles: 0 });
-
-    const state = makeState();
-    state.expanded.set('root', true);
-    state.emptyGroupExpanded.add('root/e1');
-    const result = flattenTree(state, [root]);
-
-    const emptyGroupRows = result.flatRows.filter(r => r.type === 'emptyGroup');
-    expect(emptyGroupRows.length).toBe(0);
-    // 3 individual empty dirs (root invisible)
     const dirRows = result.flatRows.filter(r => r.type === 'dir');
     expect(dirRows.length).toBe(3);
-  });
-
-  it('empty group suppressed when filter active', () => {
-    const empties = [
-      makeDir('e1', { path: 'root/e1', totalFiles: 0 }),
-      makeDir('e2', { path: 'root/e2', totalFiles: 0 }),
-    ];
-    const nonEmpty = makeDir('full', {
-      path: 'root/full',
-      files: [makeFile('a.ts', { langName: 'TypeScript' })],
-      totalFiles: 1,
-    });
-    const root = makeDir('root', {
-      children: [...empties, nonEmpty],
-      totalFiles: 1,
-    });
-
-    const state = makeState();
-    state.activeFilters.add('TypeScript');
-    const result = flattenTree(state, [root]);
-
-    const emptyGroupRows = result.flatRows.filter(r => r.type === 'emptyGroup');
-    expect(emptyGroupRows.length).toBe(0);
   });
 });
 

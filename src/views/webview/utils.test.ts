@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import {
-  escHtml, formatBytes, formatLines, sortDirs, sortFiles, computeMaxMetric, groupEmptyDirs,
+  escHtml, formatBytes, formatLines, sortDirs, sortFiles, computeMaxMetric,
   computeStats, buildAncestorPaths, emptyState, skeletonState, skeletonLegendState,
 } from './index';
 
@@ -164,47 +164,6 @@ describe('computeMaxMetric', () => {
   });
 });
 
-// --- groupEmptyDirs ---
-describe('groupEmptyDirs', () => {
-  function dir(name: string, totalFiles: number) { return { name, totalFiles, children: [] }; }
-
-  it('passes through non-empty dirs unchanged', () => {
-    const input = [dir('a', 5), dir('b', 3)];
-    const result = groupEmptyDirs(input);
-    expect(result).toEqual([
-      { type: 'dir', node: input[0] },
-      { type: 'dir', node: input[1] },
-    ]);
-  });
-
-  it('groups 2+ consecutive empty dirs', () => {
-    const input = [dir('a', 0), dir('b', 0), dir('c', 5)];
-    const result = groupEmptyDirs(input);
-    expect(result[0].type).toBe('emptyGroup');
-    expect(result[0].nodes).toHaveLength(2);
-    expect(result[1]).toEqual({ type: 'dir', node: input[2] });
-  });
-
-  it('does not group a single empty dir', () => {
-    const input = [dir('a', 0), dir('b', 5)];
-    const result = groupEmptyDirs(input);
-    expect(result[0]).toEqual({ type: 'dir', node: input[0] });
-    expect(result[1]).toEqual({ type: 'dir', node: input[1] });
-  });
-
-  it('handles all empty dirs', () => {
-    const input = [dir('a', 0), dir('b', 0), dir('c', 0)];
-    const result = groupEmptyDirs(input);
-    expect(result).toHaveLength(1);
-    expect(result[0].type).toBe('emptyGroup');
-    expect(result[0].nodes).toHaveLength(3);
-  });
-
-  it('handles empty input', () => {
-    expect(groupEmptyDirs([])).toEqual([]);
-  });
-});
-
 // --- computeStats ---
 describe('computeStats', () => {
   function makeRoot(stats: any[], totalFiles: number) { return { stats, totalFiles }; }
@@ -298,6 +257,54 @@ describe('buildAncestorPaths', () => {
   it('returns empty set when no files are provided', () => {
     const result = buildAncestorPaths([], ['/ws']);
     expect(result).toEqual(new Set());
+  });
+
+  // --- multi-root SearchRoot[] input ---
+
+  it('produces prefixed ancestors in multi-root mode', () => {
+    const roots = [
+      { fsPath: '/ws/frontend', name: 'frontend' },
+      { fsPath: '/ws/backend', name: 'backend' },
+    ];
+    const result = buildAncestorPaths(
+      ['/ws/frontend/src/lib/foo.ts', '/ws/backend/utils/bar.ts'],
+      roots,
+    );
+    expect(result).toEqual(new Set([
+      '', 'frontend', 'frontend/src', 'frontend/src/lib',
+      'backend', 'backend/utils',
+    ]));
+  });
+
+  it('single-root SearchRoot input is not prefixed', () => {
+    const result = buildAncestorPaths(
+      ['/ws/src/lib/foo.ts'],
+      [{ fsPath: '/ws', name: 'ws' }],
+    );
+    expect(result).toEqual(new Set(['', 'src', 'src/lib']));
+  });
+
+  it('multi-root with file directly under workspace root', () => {
+    const roots = [
+      { fsPath: '/ws/frontend', name: 'frontend' },
+      { fsPath: '/ws/backend', name: 'backend' },
+    ];
+    const result = buildAncestorPaths(['/ws/frontend/api.ts'], roots);
+    expect(result).toEqual(new Set(['', 'frontend']));
+  });
+
+  it('multi-root deduplicates across sibling roots with overlapping subpaths', () => {
+    const roots = [
+      { fsPath: '/ws/frontend', name: 'frontend' },
+      { fsPath: '/ws/backend', name: 'backend' },
+    ];
+    const result = buildAncestorPaths(
+      ['/ws/frontend/src/a.ts', '/ws/backend/src/b.ts'],
+      roots,
+    );
+    expect(result).toEqual(new Set([
+      '', 'frontend', 'frontend/src', 'backend', 'backend/src',
+    ]));
   });
 });
 

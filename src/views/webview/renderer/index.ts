@@ -3,7 +3,7 @@
 
 import { SVG_CHEVRON, SVG_PLUS, SVG_EXPAND_ALL, SVG_COLLAPSE_ALL, SVG_OPEN_IN_TAB, SVG_ROOT_FOLDER, SVG_ROOT_FOLDER_OPENED } from '../icons';
 import {
-  escHtml, formatBytes, formatLines, sortDirs, sortFiles, groupEmptyDirs,
+  escHtml, formatBytes, formatLines, sortDirs, sortFiles,
   compactedNode, compactedPath, computeBarWidth,
 } from '../utils';
 import { setupDelegatedEvents } from './events';
@@ -241,24 +241,6 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     return h('li', row);
   }
 
-  function renderEmptyGroupNode(nodes: DirNode[], depth: number, maxMetric: number, ancestors: IndentAncestor[]): HTMLLIElement {
-    const groupKey = nodes[0].path;
-
-    const row = h('div', {
-      className: 'dir-row empty-group-row',
-      dataset: { action: 'expandEmptyGroup', groupKey },
-    },
-      renderIndentGuides(depth, ancestors),
-      h('span', { className: 'chevron', innerHTML: SVG_PLUS }),
-      h('span', { className: 'dir-name', textContent: `${nodes.length} empty director${nodes.length !== 1 ? 'ies' : 'y'}` }),
-      h('div', { className: 'bar-spacer' }),
-      // Always show "—" for empty group rows (visual alignment with other rows)
-      h('span', { className: 'file-count', textContent: '\u2014', style: { opacity: '0.5' } }),
-    );
-
-    return h('li', row);
-  }
-
   // Renders just the directory row (<li> with <div class="dir-row">) without children.
   // Used by the virtual scroller to render flat dir rows. Also called internally by
   // renderDirNode() which adds the children <ul> on top.
@@ -295,7 +277,6 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     // Dir row
     const row = h('div', {
       className: 'dir-row'
-        + (displayNode.totalFiles === 0 ? ' empty-dir' : '')
         + (isWorkspaceRoot ? ' dir-row-workspace-root' : ''),
       attr: {
         'data-path': displayNode.path,
@@ -330,7 +311,7 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
       }));
     } else {
       row.appendChild(h('span', {
-        className: 'chevron' + (hasChildren ? (shouldExpand ? ' open' : '') : ' leaf'),
+        className: 'chevron' + (shouldExpand ? ' open' : ''),
         innerHTML: SVG_CHEVRON,
       }));
     }
@@ -411,23 +392,17 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     }
 
     // Right column: file count, size, or lines depending on sort mode.
-    // Empty dirs always show "—" for visual alignment, even when hideCounts is set.
-    if (!opts.hideCounts || displayNode.totalFiles === 0) {
+    if (!opts.hideCounts) {
       const metaEl = h('span', { className: 'file-count' });
-      if (displayNode.totalFiles > 0) {
-        if (state.currentSortMode === 'size') {
-          metaEl.textContent = formatBytes(displayNode.sizeBytes);
-          metaEl.title = displayNode.totalFiles + ' files';
-        } else if (state.currentSortMode === 'lines') {
-          metaEl.textContent = formatLines(displayNode.totalLines);
-          metaEl.title = displayNode.totalFiles + ' files';
-        } else {
-          metaEl.textContent = String(displayNode.totalFiles);
-          metaEl.title = formatBytes(displayNode.sizeBytes);
-        }
+      if (state.currentSortMode === 'size') {
+        metaEl.textContent = formatBytes(displayNode.sizeBytes);
+        metaEl.title = displayNode.totalFiles + ' files';
+      } else if (state.currentSortMode === 'lines') {
+        metaEl.textContent = formatLines(displayNode.totalLines);
+        metaEl.title = displayNode.totalFiles + ' files';
       } else {
-        metaEl.textContent = '\u2014';
-        metaEl.style.opacity = '0.5';
+        metaEl.textContent = String(displayNode.totalFiles);
+        metaEl.title = formatBytes(displayNode.sizeBytes);
       }
       row.appendChild(metaEl);
     }
@@ -468,25 +443,8 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
       if (shouldExpand) {
         const nextAncestors: IndentAncestor[] = [...ancestors, { path: displayNode.path }];
 
-        // Empty dir grouping — only when no filter is active (filtered trees already pruned)
-        if (!state._isFiltered && sortedChildren.length > 0) {
-          for (const group of groupEmptyDirs(sortedChildren)) {
-            if (group.type === 'emptyGroup') {
-              if (state.emptyGroupExpanded.has(group.nodes[0].path)) {
-                for (const n of group.nodes) {
-                  childrenEl.appendChild(renderDirNode(n, depth + 1, maxMetric, nextAncestors, clientWidth));
-                }
-              } else {
-                childrenEl.appendChild(renderEmptyGroupNode(group.nodes, depth + 1, maxMetric, nextAncestors));
-              }
-            } else {
-              childrenEl.appendChild(renderDirNode(group.node, depth + 1, maxMetric, nextAncestors, clientWidth));
-            }
-          }
-        } else {
-          for (const child of sortedChildren) {
-            childrenEl.appendChild(renderDirNode(child, depth + 1, maxMetric, nextAncestors, clientWidth));
-          }
+        for (const child of sortedChildren) {
+          childrenEl.appendChild(renderDirNode(child, depth + 1, maxMetric, nextAncestors, clientWidth));
         }
 
         // File truncation — disabled when filter is active (all matched files must be shown).
@@ -534,7 +492,6 @@ export function createRenderer(state: WebviewState, deps: RendererDeps): Rendere
     renderFileMatches: (container, file, depth, ancestors) =>
       _renderFileMatches(ctx, container, file, depth, ancestors),
     renderTruncatedRow,
-    renderEmptyGroupNode,
     renderDirRow,
     renderDirNode,
   };

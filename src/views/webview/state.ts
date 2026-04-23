@@ -14,7 +14,6 @@ export function createState(): WebviewState {
     activeFilters: new Set(),
     expanded: new Map(),
     truncationExpanded: new Set(),
-    emptyGroupExpanded: new Set(),
     truncateThreshold: 4,
     currentSortMode: 'files',
     lastRoots: null,

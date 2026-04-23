@@ -54,8 +54,6 @@ function renderFlatRow(r: Renderer, row: FlatRow): HTMLElement {
       return r.renderFileNode(row.file, row.depth, row.ancestors, undefined, row.maxFileMetric, row.clientWidth);
     case 'truncated':
       return r.renderTruncatedRow(row.hiddenFiles, row.depth, row.ancestors, row.dirPath, row.maxMetric, row.clientWidth);
-    case 'emptyGroup':
-      return r.renderEmptyGroupNode(row.nodes, row.depth, row.maxMetric, row.ancestors);
     case 'matchGroup': {
       const firstMatch = row.matches[0];
       let copyText: string;
@@ -329,7 +327,6 @@ const sharedMsgHandler = createMessageHandler(state, scanBar, root, {
     if (typeof message.truncateThreshold === 'number') {
       if (message.truncateThreshold !== state.truncateThreshold) {
         state.truncationExpanded.clear();
-        state.emptyGroupExpanded.clear();
       }
       state.truncateThreshold = message.truncateThreshold;
     }

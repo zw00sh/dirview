@@ -111,7 +111,7 @@ export async function createHarness(options: HarnessOptions): Promise<Harness> {
     searchService,
     hasRipgrep,
     rootPaths: [workspacePath],
-    workspaceRootPaths: [workspacePath],
+    workspaceRoots: [{ fsPath: workspacePath, name: fixtureData.workspaceFolderName }],
     handleSearchMessage: options.handlers.handleSearchMessage,
     handleCommonMessage: options.handlers.handleCommonMessage,
   });
@@ -202,9 +202,6 @@ export async function createHarness(options: HarnessOptions): Promise<Harness> {
         case 'truncated':
           ul.appendChild(renderer.renderTruncatedRow(row.hiddenFiles, row.depth, row.ancestors, row.dirPath, row.maxMetric, row.clientWidth));
           break;
-        case 'emptyGroup':
-          ul.appendChild(renderer.renderEmptyGroupNode(row.nodes, row.depth, row.maxMetric, row.ancestors));
-          break;
       }
     }
     // Replace tree content
@@ -250,7 +247,6 @@ export async function createHarness(options: HarnessOptions): Promise<Harness> {
       const newThreshold = (message as any).truncateThreshold;
       if (typeof newThreshold === 'number' && newThreshold !== state.truncateThreshold) {
         state.truncationExpanded.clear();
-        state.emptyGroupExpanded.clear();
       }
       if (typeof newThreshold === 'number') { state.truncateThreshold = newThreshold; }
       if (state.lastRoots) { rerender(); }
