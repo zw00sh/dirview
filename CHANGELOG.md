@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.8.5] — 2026-06-18
+
+### Fixed
+- **Compacted single-child directories now display the full path** — folder chains like `@types / node` were rendering as just `node` in the tab and sidebar, while still being sorted by the parent's name. Under name sort this made the order appear scrambled. The row now shows the full compacted chain.
+- **Search ancestor highlighting in multi-root workspaces** — search results now correctly mark directory rows as ancestors of matches when more than one workspace folder is open. Previously the prefix mismatch meant matching files showed but their containing dirs didn't light up.
+
 ## [1.8.4] — 2026-04-24
 
 ### Changed
