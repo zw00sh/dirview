@@ -267,8 +267,48 @@ describe('handleSearchMessage — webview clears stale results', () => {
       service, (msg) => messages.push(msg), ['/ws']
     );
 
-    // searchProgress must be the very first message
-    expect(messages[0]).toEqual({ type: 'searchProgress', rootPaths: ['/ws'] });
+    // searchProgress must be the very first message (basename fallback since no workspaceRoots)
+    expect(messages[0]).toEqual({ type: 'searchProgress', rootPaths: [{ fsPath: '/ws', name: 'ws' }] });
+  });
+});
+
+describe('handleSearchMessage — multi-root searchProgress shape', () => {
+  it('searchProgress carries SearchRoot[] when workspaceRoots provided', () => {
+    const messages: any[] = [];
+    const service = createFakeSearchService();
+    const wsRoots = [
+      { fsPath: '/ws/frontend', name: 'frontend' },
+      { fsPath: '/ws/backend', name: 'backend' },
+    ];
+
+    handleSearchMessage(
+      { command: 'search', pattern: 'test' },
+      service, (msg) => messages.push(msg), ['/ws/frontend', '/ws/backend'],
+      true, wsRoots,
+    );
+
+    expect(messages[0]).toEqual({
+      type: 'searchProgress',
+      rootPaths: [
+        { fsPath: '/ws/frontend', name: 'frontend' },
+        { fsPath: '/ws/backend', name: 'backend' },
+      ],
+    });
+  });
+
+  it('searchProgress falls back to basename when workspaceRoots omitted', () => {
+    const messages: any[] = [];
+    const service = createFakeSearchService();
+
+    handleSearchMessage(
+      { command: 'search', pattern: 'test' },
+      service, (msg) => messages.push(msg), ['/ws'],
+    );
+
+    expect(messages[0]).toEqual({
+      type: 'searchProgress',
+      rootPaths: [{ fsPath: '/ws', name: 'ws' }],
+    });
   });
 });
 
@@ -285,13 +325,13 @@ describe('handleSearchMessage — searchFiles', () => {
   it('sends searchProgress before the file search', () => {
     const service = createFakeSearchService();
     handleSearchMessage({ command: 'searchFiles', glob: '*.ts' }, service, postMessage, ['/ws']);
-    expect(messages[0]).toEqual({ type: 'searchProgress', rootPaths: ['/ws'] });
+    expect(messages[0]).toEqual({ type: 'searchProgress', rootPaths: [{ fsPath: '/ws', name: 'ws' }] });
   });
 
-  it('searchProgress uses workspaceRootPaths when provided (subtree tab)', () => {
+  it('searchProgress uses workspaceRoots when provided (subtree tab)', () => {
     const service = createFakeSearchService();
-    handleSearchMessage({ command: 'searchFiles', glob: '*.ts' }, service, postMessage, ['/ws/v2'], true, ['/ws']);
-    expect(messages[0]).toEqual({ type: 'searchProgress', rootPaths: ['/ws'] });
+    handleSearchMessage({ command: 'searchFiles', glob: '*.ts' }, service, postMessage, ['/ws/v2'], true, [{ fsPath: '/ws', name: 'ws' }]);
+    expect(messages[0]).toEqual({ type: 'searchProgress', rootPaths: [{ fsPath: '/ws', name: 'ws' }] });
   });
 
   it('posts searchResults with file paths and empty match arrays on resolve', async () => {

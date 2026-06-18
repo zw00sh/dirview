@@ -4,7 +4,7 @@ import * as Icons from './icons';
 import { compactedPath } from './utils';
 import { h } from './h';
 
-import type { DirNode, FileNode, WebviewState, VsCodeApi, SearchBarOptions, SearchBarResult, SearchStatusData, SearchMatch } from './types';
+import type { DirNode, FileNode, WebviewState, VsCodeApi, SearchBarOptions, SearchBarResult, SearchStatusData, SearchMatch, SearchRoot } from './types';
 
 /**
  * Creates the search bar UI.
@@ -774,23 +774,40 @@ export function scheduleSearchRender(state: WebviewState): void {
 // When rootPaths is provided, strips the workspace root prefix so ancestor
 // paths are workspace-relative (matching DirNode.path format).
 // E.g. with rootPath '/ws', '/ws/src/lib/foo.ts' → adds 'src', 'src/lib'.
+// In multi-root mode (rootPaths.length > 1), each ancestor is prefixed with
+// the matching root's name to match the DirNode.path scheme produced by
+// prefixRootPaths. E.g. '/ws/frontend/src/foo.ts' → 'frontend', 'frontend/src'.
 // Without rootPaths, produces absolute ancestors (legacy behaviour).
 // Uses lastIndexOf chaining instead of split+join for performance.
-export function buildAncestorPaths(filePaths: Iterable<string>, rootPaths?: string[]): Set<string> {
+export function buildAncestorPaths(filePaths: Iterable<string>, rootPaths?: SearchRoot[] | string[]): Set<string> {
   const ancestors = new Set<string>();
-  // Normalize rootPaths to forward slashes so Windows backslash paths match.
-  const normalRoots = rootPaths?.map(r => r.replace(/\\/g, '/'));
+  // Normalize roots: accept both SearchRoot[] and legacy string[].
+  const isMultiRoot = rootPaths !== undefined && rootPaths.length > 1;
+  const normalRoots = rootPaths?.map(r => {
+    const fsPath = (typeof r === 'string' ? r : r.fsPath).replace(/\\/g, '/');
+    const name = typeof r === 'string' ? '' : r.name;
+    return { fsPath, name };
+  });
   for (let filePath of filePaths) {
     // Normalize backslashes so ancestor paths use '/' to match DirNode.path format.
     filePath = filePath.replace(/\\/g, '/');
     // Strip workspace root prefix to produce relative paths matching DirNode.path.
+    let rootName = '';
     if (normalRoots) {
       for (const root of normalRoots) {
-        if (filePath.startsWith(root + '/')) {
-          filePath = filePath.slice(root.length + 1);
+        if (filePath.startsWith(root.fsPath + '/')) {
+          filePath = filePath.slice(root.fsPath.length + 1);
+          rootName = root.name;
           break;
         }
       }
+    }
+    // In multi-root mode, prefix the relative path with the root name to match
+    // the DirNode.path values produced by prefixRootPaths.
+    if (isMultiRoot && rootName) {
+      filePath = rootName + '/' + filePath;
+      // Include the workspace root name itself as an ancestor (it's a DirNode).
+      ancestors.add(rootName);
     }
     // Walk up from the last '/' to the root, adding each directory prefix.
     let end = filePath.lastIndexOf('/');

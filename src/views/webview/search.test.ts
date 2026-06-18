@@ -142,6 +142,84 @@ describe('filterTree search', () => {
   });
 });
 
+// --- multi-root ancestor index ---
+
+describe('multi-root ancestor index', () => {
+  function ft(roots: any[], opts: Partial<Parameters<typeof filterTree>[1]> = {}) {
+    return filterTree(roots, {
+      activeFilters: opts.activeFilters ?? new Set(),
+      searchResults: opts.searchResults ?? null,
+      searchAncestorPaths: opts.searchAncestorPaths ?? null,
+      searchResultsVersion: opts.searchResultsVersion ?? Date.now(),
+    });
+  }
+
+  const multiRoots = [
+    { fsPath: '/ws/frontend', name: 'frontend' },
+    { fsPath: '/ws/backend', name: 'backend' },
+  ];
+
+  it('filterTree keeps prefixed root when search hits one root', () => {
+    // Tree shaped like prefixRootPaths output
+    const frontendSrc = makeDir('frontend/src', 'src', {
+      files: [{ path: '/ws/frontend/src/api.ts', name: 'api.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }],
+    });
+    const frontend = makeDir('frontend', 'frontend', { children: [frontendSrc] });
+    const backend = makeDir('backend', 'backend', { children: [] });
+
+    const searchResults = new Map([['/ws/frontend/src/api.ts', []]]);
+    const searchAncestorPaths = buildAncestorPaths(searchResults.keys(), multiRoots);
+
+    const result = ft([frontend, backend], { searchResults, searchAncestorPaths });
+    expect(result.roots.length).toBe(1);
+    expect(result.roots[0].path).toBe('frontend');
+    expect(result.roots[0].children.length).toBe(1);
+    expect(result.roots[0].children[0].files.length).toBe(1);
+  });
+
+  it('filterTree keeps both prefixed roots when matches span both', () => {
+    const frontendSrc = makeDir('frontend/src', 'src', {
+      files: [{ path: '/ws/frontend/src/a.ts', name: 'a.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }],
+    });
+    const frontend = makeDir('frontend', 'frontend', { children: [frontendSrc] });
+    const backendSrc = makeDir('backend/src', 'src', {
+      files: [{ path: '/ws/backend/src/b.ts', name: 'b.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }],
+    });
+    const backend = makeDir('backend', 'backend', { children: [backendSrc] });
+
+    const searchResults = new Map([
+      ['/ws/frontend/src/a.ts', []],
+      ['/ws/backend/src/b.ts', []],
+    ]);
+    const searchAncestorPaths = buildAncestorPaths(searchResults.keys(), multiRoots);
+
+    const result = ft([frontend, backend], { searchResults, searchAncestorPaths });
+    expect(result.roots.length).toBe(2);
+    // Verify identically-named subdirs stay distinct
+    expect(result.roots[0].path).toBe('frontend');
+    expect(result.roots[0].children[0].files[0].name).toBe('a.ts');
+    expect(result.roots[1].path).toBe('backend');
+    expect(result.roots[1].children[0].files[0].name).toBe('b.ts');
+  });
+
+  it('regression: ancestor set without rootName prefix prunes multi-root tree', () => {
+    // Demonstrates the bug: if buildAncestorPaths produced unprefixed ancestors,
+    // filterTree would prune the entire tree.
+    const frontendSrc = makeDir('frontend/src', 'src', {
+      files: [{ path: '/ws/frontend/src/api.ts', name: 'api.ts', langName: 'TypeScript', langColor: '#3178c6', sizeBytes: 0 }],
+    });
+    const frontend = makeDir('frontend', 'frontend', { children: [frontendSrc] });
+
+    const searchResults = new Map([['/ws/frontend/src/api.ts', []]]);
+    // Manually build an INCORRECT ancestor set (no rootName prefix, as old code would produce)
+    const badAncestors = new Set(['', 'src']);
+
+    const result = ft([frontend], { searchResults, searchAncestorPaths: badAncestors });
+    // 'frontend' is not in badAncestors, and has no direct files → pruned
+    expect(result.roots.length).toBe(0);
+  });
+});
+
 // --- renderMatchLine ---
 
 describe('renderMatchLine', () => {

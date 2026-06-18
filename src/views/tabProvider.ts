@@ -7,7 +7,7 @@ import { buildWebviewHtml } from './buildWebviewHtml';
 import { skeletonTreeHtml, skeletonLegendHtml } from './skeletonHtml';
 import { handleCommonMessage, handleSearchMessage, post } from './providerUtils';
 import { SearchService } from '../search/searchService';
-import type { WebviewToBackendMessage } from './webview/types';
+import type { WebviewToBackendMessage, SearchRoot } from './webview/types';
 
 export class TabProvider {
   // Map from numeric panel ID → { panel, dirPath }.  Keyed by ID (not dirPath) so
@@ -148,6 +148,13 @@ export class TabProvider {
     return [dirPath];
   }
 
+  /** Returns SearchRoot[] for all workspace folders (name + fsPath).
+   *  Used to pass workspace folder identity to the webview so buildAncestorPaths
+   *  can produce prefixed ancestor paths matching multi-root DirNode.path values. */
+  private getWorkspaceRoots(): SearchRoot[] {
+    return vscode.workspace.workspaceFolders?.map(f => ({ fsPath: f.uri.fsPath, name: f.name })) ?? [];
+  }
+
   /** Builds a typed update message for a given dirPath, consolidating field defaults. */
   private buildUpdateMessage(dirPath: string, roots: DirNode[], overrides?: Partial<ScanUpdatePayload>): import('./webview/types').BackendToWebviewMessage & { type: 'update' } {
     return {
@@ -216,7 +223,7 @@ export class TabProvider {
       const panelId = this.findPanelId(panel);
       const currentPath = panelId !== undefined ? this.panels.get(panelId)!.dirPath : undefined;
       const rootPaths = this.getRootPaths(currentPath ?? '');
-      const wsRootPaths = this.getRootPaths('');
+      const wsRoots = this.getWorkspaceRoots();
       const svc = panelId !== undefined ? (this.searchServices.get(panelId) ?? searchService) : searchService;
       // When auto-rescan is disabled (large repos), trigger a background rescan after
       // search completes so the tree catches up with filesystem changes ripgrep discovered.
@@ -224,7 +231,7 @@ export class TabProvider {
       // Pass scanner context so ripgrep flags match the scanner's file discovery.
       const showIgnored = this.lastPayload?.showIgnored ?? false;
       const filesExclude = showIgnored ? [] : this.getFilesExcludePatterns();
-      if (handleSearchMessage(message, svc, (msg) => post(panel.webview, msg), rootPaths, this.rgAvailable, wsRootPaths, rescanAfterSearch, { showIgnored, filesExclude })) { return; }
+      if (handleSearchMessage(message, svc, (msg) => post(panel.webview, msg), rootPaths, this.rgAvailable, wsRoots, rescanAfterSearch, { showIgnored, filesExclude })) { return; }
 
       if (handleCommonMessage(message, {
         onRefresh: this.onRefresh,

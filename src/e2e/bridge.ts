@@ -4,8 +4,9 @@
 // Host -> Webview: dispatchMessage() fires a MessageEvent on window so the
 //   webview's createMessageHandler listener receives it.
 
+import * as path from 'path';
 import type { SearchService } from '../search/searchService';
-import type { BackendToWebviewMessage, WebviewToBackendMessage } from '../views/webview/types';
+import type { BackendToWebviewMessage, WebviewToBackendMessage, SearchRoot } from '../views/webview/types';
 
 // handleSearchMessage and handleCommonMessage are injected by the caller
 // to avoid importing providerUtils (which depends on 'vscode') at module level.
@@ -18,7 +19,7 @@ export type HandleSearchMessageFn = (
   postMessage: (msg: BackendToWebviewMessage) => void,
   rootPaths: string[],
   hasRipgrep?: boolean,
-  workspaceRootPaths?: string[],
+  workspaceRoots?: SearchRoot[],
 ) => boolean;
 
 export type HandleCommonMessageFn = (
@@ -30,7 +31,7 @@ export interface BridgeOptions {
   searchService: SearchService;
   hasRipgrep: boolean;
   rootPaths: string[];
-  workspaceRootPaths?: string[];
+  workspaceRoots?: SearchRoot[];
   handleSearchMessage: HandleSearchMessageFn;
   handleCommonMessage: HandleCommonMessageFn;
 }
@@ -52,7 +53,7 @@ export interface Bridge {
 }
 
 export function createBridge(options: BridgeOptions): Bridge {
-  const { searchService, hasRipgrep, rootPaths, workspaceRootPaths } = options;
+  const { searchService, hasRipgrep, rootPaths, workspaceRoots } = options;
   const handleSearchMsg = options.handleSearchMessage;
   const handleCommonMsg = options.handleCommonMessage;
   const sentMessages: BackendToWebviewMessage[] = [];
@@ -94,7 +95,7 @@ export function createBridge(options: BridgeOptions): Bridge {
       postToWebview,
       rootPaths,
       hasRipgrep,
-      workspaceRootPaths ?? rootPaths,
+      workspaceRoots ?? rootPaths.map(p => ({ fsPath: p, name: path.basename(p) })),
     );
     if (searchHandled) return;
 

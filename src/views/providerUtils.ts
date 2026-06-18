@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { SearchService, SearchMatch } from '../search/searchService';
 import { getLangInfo, getGlobsForLanguages } from '../language/languageMap';
 import { highlightGroup } from '../highlight/highlighter';
-import type { WebviewToBackendMessage, BackendToWebviewMessage } from './webview/types';
+import type { WebviewToBackendMessage, BackendToWebviewMessage, SearchRoot } from './webview/types';
 
 /** Optional hook for the bench WebSocket bridge — receives a copy of every outgoing message. */
 let bridgeBroadcast: ((msg: BackendToWebviewMessage) => void) | null = null;
@@ -58,14 +58,15 @@ export function handleSearchMessage(
   postMessage: (msg: BackendToWebviewMessage) => void,
   rootPaths: string[],
   hasRipgrep = true,
-  workspaceRootPaths?: string[],
+  workspaceRoots?: SearchRoot[],
   onSearchComplete?: () => void,
   scannerContext?: { showIgnored?: boolean; filesExclude?: string[] },
 ): boolean {
   // rootPaths scopes the ripgrep search (may be a subdirectory for subtree tabs).
-  // workspaceRootPaths is used by the webview to convert absolute file paths to
-  // workspace-relative DirNode paths. Defaults to rootPaths for workspace-root tabs.
-  const wsRoots = workspaceRootPaths ?? rootPaths;
+  // workspaceRoots carries name+fsPath so the webview can produce ancestor paths
+  // matching the prefixed DirNode.path format in multi-root workspaces.
+  // Falls back to deriving names from path basenames when not provided.
+  const wsRoots: SearchRoot[] = workspaceRoots ?? rootPaths.map(p => ({ fsPath: p, name: path.basename(p) }));
   if (message.command === 'search' && message.pattern !== undefined) {
     if (!hasRipgrep) {
       // No ripgrep — content search is not available. UI should prevent this,
