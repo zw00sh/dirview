@@ -6,4 +6,5 @@ test-repos/
 bench/fixtures/
 bench/results.json
 .claude/
-CLAUDE.mdtest-repos
+CLAUDE.md
+test-results/
