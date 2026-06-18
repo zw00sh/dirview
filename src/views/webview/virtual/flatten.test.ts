@@ -179,6 +179,26 @@ describe('flattenTree — folder compaction', () => {
     expect(dirRow.key).toBe('dir:a/b/c');
     if (dirRow.type === 'dir') {
       expect(dirRow.node.path).toBe('a/b/c');
+      // originalNode preserves the pre-compaction input so the renderer can
+      // rebuild "b / c"; without this, the row would display only "c" while
+      // still sorting by the parent's name — making name sort look broken.
+      expect(dirRow.originalNode?.path).toBe('a/b');
+    }
+  });
+
+  it('non-compacted dir rows have no originalNode', () => {
+    const childA = makeDir('a', { path: 'root/a', totalFiles: 1, files: [makeFile('x.ts', { path: '/ws/root/a/x.ts' })] });
+    const childB = makeDir('b', { path: 'root/b', totalFiles: 1, files: [makeFile('y.ts', { path: '/ws/root/b/y.ts' })] });
+    const root = makeDir('root', { path: 'root', children: [childA, childB], totalFiles: 2 });
+
+    const state = makeState();
+    const result = flattenTree(state, [root]);
+
+    const dirRows = result.flatRows.filter(r => r.type === 'dir');
+    for (const row of dirRows) {
+      if (row.type === 'dir') {
+        expect(row.originalNode).toBeUndefined();
+      }
     }
   });
 

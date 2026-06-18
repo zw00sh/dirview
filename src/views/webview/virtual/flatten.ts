@@ -75,7 +75,10 @@ export function flattenTree(
     const sortedFiles = sortFiles(displayNode.files || []);
     const hasChildren = sortedChildren.length > 0 || sortedFiles.length > 0;
 
-    // Emit DirFlatRow
+    // Emit DirFlatRow.
+    // `node` carries the compacted leaf (used by keys/sticky/expand-state).
+    // `originalNode` carries the pre-compaction input so the renderer can rebuild
+    // the full "parent / child" path; omitted when no compaction happened.
     flatRows.push({
       type: 'dir',
       key: 'dir:' + displayNode.path,
@@ -84,6 +87,7 @@ export function flattenTree(
       offsetY: 0,
       ancestors,
       node: displayNode,
+      originalNode: displayNode === node ? undefined : node,
       isExpanded: shouldExpand,
       hasChildren,
       maxMetric,

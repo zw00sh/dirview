@@ -29,8 +29,14 @@ interface FlatRowBase {
 export interface DirFlatRow extends FlatRowBase {
   type: 'dir';
   height: typeof ROW_HEIGHT_DIR;
-  /** The display node after folder compaction. */
+  /** The display node after folder compaction. Used for keys, sticky-overlay indexing,
+   *  and expand-state lookups — all of which key on the leaf of a compacted chain. */
   node: DirNode;
+  /** The pre-compaction node, when compaction collapsed a single-child chain. The
+   *  renderer needs this so it can rebuild the full "parent / child" segment chain
+   *  for display; using only `node` would drop the parent name and make sorts look
+   *  broken (sort key is the parent's name, but display would show only the leaf). */
+  originalNode?: DirNode;
   isExpanded: boolean;
   hasChildren: boolean;
   maxMetric: number;

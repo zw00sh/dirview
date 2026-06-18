@@ -49,7 +49,9 @@ const renderer = createRenderer(state, {
 function renderFlatRow(r: Renderer, row: FlatRow): HTMLElement {
   switch (row.type) {
     case 'dir':
-      return r.renderDirRow(row.node, row.depth, row.maxMetric, row.ancestors, row.clientWidth, row.isWorkspaceRoot);
+      // Pass originalNode (pre-compaction) so renderDirRow can rebuild the full
+      // "parent / child" display chain; fall back to row.node when compaction didn't apply.
+      return r.renderDirRow(row.originalNode ?? row.node, row.depth, row.maxMetric, row.ancestors, row.clientWidth, row.isWorkspaceRoot);
     case 'file':
       return r.renderFileNode(row.file, row.depth, row.ancestors, undefined, row.maxFileMetric, row.clientWidth);
     case 'truncated':
