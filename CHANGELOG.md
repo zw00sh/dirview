@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.8.6] — 2026-09-10
+
+### Fixed
+- **Tab content search no longer disappears when ripgrep isn't on PATH** — the bundled-ripgrep lookup was pointing at a path that no longer exists in current VS Code (which packs `node_modules` into `node_modules.asar` and renamed the dependency to `@vscode/ripgrep-universal` with a platform-nested binary). Resolution now probes the correct unpacked location (plus legacy and PATH fallbacks), so text search works out of the box without a system `rg`.
+
+### Changed
+- **Graceful search degradation** — when ripgrep genuinely can't be found, the tab search bar stays visible with the text-search controls disabled and an explanatory placeholder, instead of hiding the whole search UI. The "files to include" filter keeps working regardless.
+
 ## [1.8.5] — 2026-06-18
 
 ### Fixed
