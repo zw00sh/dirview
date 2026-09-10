@@ -1,6 +1,6 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as child_process from 'child_process';
-import { SearchService } from './searchService';
+import { SearchService, ripgrepCandidates } from './searchService';
 
 // We can't directly test normalizeGlob and commonRgFlags since they're not exported,
 // but we can verify their effects by inspecting the spawn arguments.
@@ -160,6 +160,103 @@ describe('commonRgFlags — ripgrep flag construction', () => {
       if (args[i] === '--glob') { globPairs.push(args[i + 1]); }
     }
     expect(globPairs).toContain('!dist');
+  });
+});
+
+describe('ripgrepCandidates — bundled binary resolution', () => {
+  const APPROOT = '/fake/vscode/resources/app';
+  const platArch = `${process.platform}-${process.arch}`;
+  const exe = process.platform === 'win32' ? 'rg.exe' : 'rg';
+
+  it('includes the modern @vscode/ripgrep-universal unpacked platform path', () => {
+    const candidates = ripgrepCandidates(APPROOT);
+    // Modern VSCode: node_modules.asar.unpacked/@vscode/ripgrep-universal/bin/<plat>-<arch>/rg
+    const expected = `${APPROOT}/node_modules.asar.unpacked/@vscode/ripgrep-universal/bin/${platArch}/${exe}`;
+    expect(candidates).toContain(expected);
+  });
+
+  it('includes the legacy @vscode/ripgrep flat path for older VSCode', () => {
+    const candidates = ripgrepCandidates(APPROOT);
+    expect(candidates).toContain(`${APPROOT}/node_modules/@vscode/ripgrep/bin/${exe}`);
+  });
+
+  it('prefers the unpacked location over the plain node_modules path', () => {
+    const candidates = ripgrepCandidates(APPROOT);
+    const unpacked = candidates.findIndex(c => c.includes('node_modules.asar.unpacked'));
+    const plain = candidates.findIndex(c => c.includes('/node_modules/@vscode/ripgrep-universal'));
+    expect(unpacked).toBeGreaterThan(-1);
+    expect(plain).toBeGreaterThan(unpacked);
+  });
+
+  it('always ends with the bare PATH fallback, and only once', () => {
+    const candidates = ripgrepCandidates(APPROOT);
+    expect(candidates[candidates.length - 1]).toBe(exe);
+    expect(candidates.filter(c => c === exe).length).toBe(1);
+  });
+
+  it('still yields a PATH fallback when no appRoot is given', () => {
+    const candidates = ripgrepCandidates(undefined);
+    expect(candidates[candidates.length - 1]).toBe(exe);
+  });
+});
+
+describe('SearchService.probe — picks the first working candidate', () => {
+  const APPROOT = '/fake/vscode/resources/app';
+
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  /** Make spawn(cmd, ['--version']) exit 0 only for `workingPath`, else exit 1. */
+  function mockRgAt(workingPath: string | null) {
+    (child_process.spawn as ReturnType<typeof vi.fn>).mockImplementation((cmd: string) => ({
+      stdout: { on: vi.fn() },
+      stderr: { on: vi.fn() },
+      kill: vi.fn(),
+      on: (event: string, cb: (code: number) => void) => {
+        if (event === 'close') { cb(cmd === workingPath ? 0 : 1); }
+      },
+    }));
+  }
+
+  it('resolves true and selects the bundled path when it runs', async () => {
+    const candidates = ripgrepCandidates(APPROOT);
+    const universal = candidates.find(c => c.includes('ripgrep-universal'))!;
+    mockRgAt(universal);
+    const svc = new SearchService(APPROOT);
+    const ok = await svc.probe();
+    expect(ok).toBe(true);
+    expect(svc.hasRipgrep).toBe(true);
+    expect((svc as any).rgPath).toBe(universal);
+  });
+
+  it('falls through to the next candidate when earlier ones fail', async () => {
+    const exe = process.platform === 'win32' ? 'rg.exe' : 'rg';
+    mockRgAt(exe); // only the bare PATH fallback works
+    const svc = new SearchService(APPROOT);
+    const ok = await svc.probe();
+    expect(ok).toBe(true);
+    expect((svc as any).rgPath).toBe(exe);
+  });
+
+  it('resolves false and sets hasRipgrep=false when nothing runs', async () => {
+    mockRgAt(null);
+    const svc = new SearchService(APPROOT);
+    const ok = await svc.probe();
+    expect(ok).toBe(false);
+    expect(svc.hasRipgrep).toBe(false);
+  });
+
+  it('treats a spawn error (missing binary) as a failed candidate', async () => {
+    (child_process.spawn as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      stdout: { on: vi.fn() },
+      stderr: { on: vi.fn() },
+      kill: vi.fn(),
+      on: (event: string, cb: (arg?: unknown) => void) => {
+        if (event === 'error') { cb(new Error('ENOENT')); }
+      },
+    }));
+    const svc = new SearchService(APPROOT);
+    const ok = await svc.probe();
+    expect(ok).toBe(false);
   });
 });
 

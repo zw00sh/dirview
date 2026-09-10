@@ -721,12 +721,24 @@ export function createSearchBar(state: WebviewState, vscode: VsCodeApi, options?
   }
 
   function setHasRipgrep(available: boolean): void {
-    // When ripgrep is unavailable, hide content search controls (main input, case/regex
-    // toggles, context lines) but keep the file include filter functional.
-    const hidden = !available;
-    inputContainer.style.display = hidden ? 'none' : '';
-    contextInputWrap.style.display = hidden ? 'none' : '';
-    contextBtn.style.display = hidden ? 'none' : '';
+    // When ripgrep is unavailable, content (text) search can't run. Rather than hide
+    // the search UI — which reads as "the search bar is gone" — keep it visible but
+    // disable the text-search controls (main input, case/regex/context toggles) and
+    // explain why via placeholder + tooltip. The file-glob "files to include" filter
+    // is unaffected: it still works through the findFiles fallback.
+    const disabled = !available;
+    mainInput.disabled = disabled;
+    caseBtn.disabled = disabled;
+    regexBtn.disabled = disabled;
+    contextBtn.disabled = disabled;
+    contextInput.disabled = disabled;
+    inputContainer.classList.toggle('is-disabled', disabled);
+    contextInputWrap.classList.toggle('is-disabled', disabled);
+    contextBtn.classList.toggle('is-disabled', disabled);
+    mainInput.placeholder = disabled ? 'Text search unavailable (ripgrep not found)' : 'Search Text';
+    mainInput.title = disabled
+      ? 'Content search requires ripgrep, which could not be found in this VS Code installation. File name filtering below still works.'
+      : '';
   }
 
   // Directly updates status with post-render filtered counts. Unlike updateStatus(),

@@ -1268,32 +1268,49 @@ describe('createSearchBar setHasRipgrep', () => {
     return { bar, state };
   }
 
-  it('hides content search controls when ripgrep is unavailable', () => {
+  it('keeps content search controls visible but disabled when ripgrep is unavailable', () => {
     const { bar } = makeSearchBar();
     bar.setHasRipgrep(false);
     const inputContainer = bar.el.querySelector('.search-input-container') as HTMLElement;
     const contextWrap = bar.el.querySelector('.search-context-input-wrap') as HTMLElement;
-    const contextBtn = bar.el.querySelector('.search-context-toggle') as HTMLElement;
-    expect(inputContainer.style.display).toBe('none');
-    expect(contextWrap.style.display).toBe('none');
-    expect(contextBtn.style.display).toBe('none');
+    const mainInput = bar.el.querySelector('.search-main-input') as HTMLInputElement;
+    const caseBtn = bar.el.querySelector('[aria-label="Case Sensitive"]') as HTMLButtonElement;
+    const regexBtn = bar.el.querySelector('[aria-label="Use Regular Expression"]') as HTMLButtonElement;
+    const contextBtn = bar.el.querySelector('.search-context-toggle') as HTMLButtonElement;
+    // Bar stays in the DOM and laid out — never display:none (the "missing search bar" bug).
+    expect(inputContainer.style.display).not.toBe('none');
+    expect(contextWrap.style.display).not.toBe('none');
+    expect(contextBtn.style.display).not.toBe('none');
+    // Text-search controls are disabled instead.
+    expect(mainInput.disabled).toBe(true);
+    expect(caseBtn.disabled).toBe(true);
+    expect(regexBtn.disabled).toBe(true);
+    expect(contextBtn.disabled).toBe(true);
+    expect(inputContainer.classList.contains('is-disabled')).toBe(true);
+    // The placeholder explains why.
+    expect(mainInput.placeholder).toMatch(/ripgrep not found/i);
   });
 
-  it('keeps file include filter visible when ripgrep is unavailable', () => {
+  it('keeps file include filter functional when ripgrep is unavailable', () => {
     const { bar } = makeSearchBar();
     bar.setHasRipgrep(false);
     const filterRow = bar.el.querySelector('.search-filter-input-row') as HTMLElement;
     expect(filterRow).toBeTruthy();
     expect(filterRow.style.display).not.toBe('none');
+    const includeInput = bar.el.querySelector('[aria-label="files to include"]') as HTMLInputElement;
+    expect(includeInput.disabled).toBe(false);
   });
 
-  it('restores content search controls when ripgrep becomes available', () => {
+  it('re-enables content search controls when ripgrep becomes available', () => {
     const { bar } = makeSearchBar();
     bar.setHasRipgrep(false);
     bar.setHasRipgrep(true);
     const inputContainer = bar.el.querySelector('.search-input-container') as HTMLElement;
-    const contextWrap = bar.el.querySelector('.search-context-input-wrap') as HTMLElement;
-    expect(inputContainer.style.display).toBe('');
-    expect(contextWrap.style.display).toBe('');
+    const mainInput = bar.el.querySelector('.search-main-input') as HTMLInputElement;
+    const contextBtn = bar.el.querySelector('.search-context-toggle') as HTMLButtonElement;
+    expect(mainInput.disabled).toBe(false);
+    expect(contextBtn.disabled).toBe(false);
+    expect(inputContainer.classList.contains('is-disabled')).toBe(false);
+    expect(mainInput.placeholder).toBe('Search Text');
   });
 });

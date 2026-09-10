@@ -613,6 +613,26 @@ body.vscode-high-contrast-light .truncated-row {
   border: 1px solid var(--vscode-inputOption-activeBorder, transparent);
 }
 
+/* Disabled state — shown when ripgrep is unavailable, so content search can't run.
+   The container/controls dim but stay in place (the search bar is never removed). */
+.search-input-container.is-disabled,
+.search-context-input-wrap.is-disabled {
+  opacity: 0.55;
+}
+.search-toggle:disabled,
+.search-toggle.is-disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.search-toggle:disabled:hover,
+.search-toggle.is-disabled:hover {
+  color: var(--vscode-descriptionForeground);
+  background: transparent;
+}
+.search-main-input:disabled {
+  cursor: default;
+}
+
 .search-filter-section {
   display: flex;
   flex-direction: column;

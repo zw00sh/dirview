@@ -66,9 +66,56 @@ function normalizeGlob(g: string): string {
   return t;
 }
 
+/**
+ * Build an ordered list of candidate ripgrep binary paths to probe.
+ *
+ * Content search relies on VSCode's own bundled ripgrep so it works out of the
+ * box — a system-wide `rg` on PATH is only the last resort. Locating the bundled
+ * binary is fiddly because VSCode's layout has drifted:
+ *   - Dev (extensionDevelopmentPath): the `@vscode/ripgrep` npm package is present
+ *     and resolves its own (correctly unpacked) binary via `rgPath`.
+ *   - Modern VSCode: `node_modules` is packed into `node_modules.asar`, so the
+ *     real binary lives under `node_modules.asar.unpacked`, and the dependency was
+ *     renamed `@vscode/ripgrep` → `@vscode/ripgrep-universal` with the binary
+ *     nested by `<platform>-<arch>` (e.g. `bin/darwin-arm64/rg`, `bin/win32-x64/rg.exe`).
+ *   - Older VSCode: `@vscode/ripgrep` with a flat `bin/rg`.
+ * We return every plausible path in priority order and let probe() pick the first
+ * that actually runs, rather than hard-coding one stale path.
+ */
+export function ripgrepCandidates(appRoot?: string): string[] {
+  const candidates: string[] = [];
+
+  // 1. Dev builds: the npm package computes its own unpacked binary path.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const rg = require('@vscode/ripgrep');
+    if (rg && rg.rgPath) { candidates.push(rg.rgPath); }
+  } catch { /* excluded from the published VSIX — expected */ }
+
+  if (appRoot) {
+    const exe = process.platform === 'win32' ? 'rg.exe' : 'rg';
+    const platArch = `${process.platform}-${process.arch}`;
+    // Prefer the unpacked location (asar-packed installs), then the plain path.
+    for (const nm of ['node_modules.asar.unpacked', 'node_modules']) {
+      // Modern: @vscode/ripgrep-universal, binary nested by <platform>-<arch>.
+      candidates.push(path.join(appRoot, nm, '@vscode', 'ripgrep-universal', 'bin', platArch, exe));
+      // Legacy: @vscode/ripgrep, flat bin/rg.
+      candidates.push(path.join(appRoot, nm, '@vscode', 'ripgrep', 'bin', exe));
+    }
+  }
+
+  // 2. Last resort: whatever `rg` is on PATH.
+  candidates.push(process.platform === 'win32' ? 'rg.exe' : 'rg');
+
+  // De-dupe while preserving priority order.
+  return [...new Set(candidates)];
+}
+
 export class SearchService {
   private currentProcess: child_process.ChildProcess | null = null;
   private rgPath: string;
+  /** Ordered ripgrep binary candidates; probe() picks the first that runs. */
+  private rgCandidates: string[];
   // Monotonically increasing counter: incremented on each new search so stale
   // promise callbacks from a cancelled search can detect they're outdated.
   private generation = 0;
@@ -76,28 +123,34 @@ export class SearchService {
   hasRipgrep = false;
 
   constructor(appRoot?: string) {
-    // Resolve ripgrep binary: try the npm package first (available during development),
-    // then VSCode's own bundled ripgrep (works in published extensions where node_modules
-    // is excluded from the VSIX), then fall back to system rg.
-    let resolved = '';
-    try {
-      const rg = require('@vscode/ripgrep');
-      resolved = rg.rgPath;
-    } catch { /* not available — expected in published extension */ }
-    if (!resolved && appRoot) {
-      resolved = path.join(appRoot, 'node_modules', '@vscode', 'ripgrep', 'bin', 'rg');
-    }
-    this.rgPath = resolved || 'rg';
+    this.rgCandidates = ripgrepCandidates(appRoot);
+    // Default to the highest-priority candidate so searches issued before probe()
+    // resolves still have a path to spawn (probe() then narrows to a working one).
+    this.rgPath = this.rgCandidates[0];
   }
 
-  /** Verify the resolved rg binary actually works. Call once after construction. */
-  probe(): Promise<boolean> {
+  /** Probe each candidate ripgrep binary in priority order, keeping the first that
+   *  runs (`rg --version` exits 0). Sets this.rgPath to the winner and this.hasRipgrep. */
+  async probe(): Promise<boolean> {
+    for (const candidate of this.rgCandidates) {
+      if (await SearchService.rgRuns(candidate)) {
+        this.rgPath = candidate;
+        this.hasRipgrep = true;
+        return true;
+      }
+    }
+    this.hasRipgrep = false;
+    return false;
+  }
+
+  /** Resolve true if `<rgPath> --version` exits 0 (a working ripgrep binary). */
+  private static rgRuns(rgPath: string): Promise<boolean> {
     return new Promise((resolve) => {
       try {
-        const proc = child_process.spawn(this.rgPath, ['--version']);
-        proc.on('close', (code) => { this.hasRipgrep = code === 0; resolve(this.hasRipgrep); });
-        proc.on('error', () => { this.hasRipgrep = false; resolve(false); });
-      } catch { this.hasRipgrep = false; resolve(false); }
+        const proc = child_process.spawn(rgPath, ['--version']);
+        proc.on('close', (code) => resolve(code === 0));
+        proc.on('error', () => resolve(false));
+      } catch { resolve(false); }
     });
   }
 
