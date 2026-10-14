@@ -1,0 +1,80 @@
+name: Release VSIX
+
+# Builds, tests and packages the extension on every push to main, then
+# attaches the .vsix to a GitHub release.
+#
+# - Ordinary commits produce a prerelease tagged v<version>-<sha7>.
+# - Version-bump commits (message is exactly the package.json version, e.g.
+#   "1.8.7" — the convention described in CLAUDE.md) produce a full release
+#   tagged v<version>, which becomes the repo's "Latest" release.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Package VSIX
+        run: npm run package
+
+      - name: Determine release tag
+        id: meta
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          SHORT_SHA=$(git rev-parse --short=7 HEAD)
+          FIRST_LINE=$(printf '%s' "$COMMIT_MSG" | head -n1)
+          if [ "$FIRST_LINE" = "$VERSION" ]; then
+            echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=v$VERSION-$SHORT_SHA" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "vsix=$(ls *.vsix)" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          VSIX: ${{ steps.meta.outputs.vsix }}
+          PRERELEASE: ${{ steps.meta.outputs.prerelease }}
+        run: |
+          FLAGS=""
+          if [ "$PRERELEASE" = "true" ]; then FLAGS="--prerelease --latest=false"; fi
+          # Re-runs of the same commit replace the asset instead of failing.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$VSIX" --clobber
+          else
+            gh release create "$TAG" "$VSIX" \
+              --target "$GITHUB_SHA" \
+              --title "$TAG" \
+              --generate-notes \
+              $FLAGS
+          fi

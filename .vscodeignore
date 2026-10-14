@@ -20,3 +20,9 @@ CLAUDE.md
 vitest.config.*
 esbuild.mjs
 .github/**
+.devcontainer/**
+.pi/**
+.qwen/**
+.shellhistory/**
+playwright.config.*
+*.vsix
